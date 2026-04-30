@@ -37,6 +37,8 @@
   "status.processingCanceled": "Обработка отменена",
   "status.processingComplete": "Обработка завершена",
   "status.creatingZipFile": "Создание zip-архива...",
+  "status.filesSavedToFolder": "{count} файл(ов) сохранено в {folder}",
+  "status.filesSaved": "{count} файл(ов) сохранено в выбранную папку",
 
   // Элементы интерфейса
   "ui.resetButton": "Сбросить аудио",
@@ -94,6 +96,7 @@
   "ui.dropAudioFiles": "Перетащите аудиофайлы сюда для обработки текущими эффектами",
   "ui.orText": "или",
   "ui.selectFiles": "укажите аудиофайлы для обработки",
+  "ui.selectOutputFolder": "Выбрать папку вывода",
   "ui.specifyAudioFiles": "Укажите аудиофайлы для обработки текущими эффектами.",
   "ui.processing": "Обработка...",
   "ui.cancelButton": "Отмена",

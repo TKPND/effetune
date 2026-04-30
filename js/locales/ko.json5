@@ -37,6 +37,8 @@
   "status.processingCanceled": "처리 취소됨",
   "status.processingComplete": "처리 완료",
   "status.creatingZipFile": "ZIP 파일 생성 중...",
+  "status.filesSavedToFolder": "{count}개 파일이 {folder}에 저장되었습니다",
+  "status.filesSaved": "{count}개 파일이 선택한 폴더에 저장되었습니다",
 
   // UI 요소
   "ui.resetButton": "오디오 재설정",
@@ -94,6 +96,7 @@
   "ui.dropAudioFiles": "현재 효과로 처리할 오디오 파일을 여기에 드롭하세요",
   "ui.orText": "또는",
   "ui.selectFiles": "처리할 오디오 파일 선택",
+  "ui.selectOutputFolder": "출력 폴더 선택",
   "ui.specifyAudioFiles": "현재 효과로 처리할 오디오 파일을 지정하세요.",
   "ui.processing": "처리 중...",
   "ui.cancelButton": "취소",

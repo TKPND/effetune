@@ -37,6 +37,8 @@
   "status.processingCanceled": "تم إلغاء المعالجة",
   "status.processingComplete": "اكتملت المعالجة",
   "status.creatingZipFile": "جاري إنشاء ملف مضغوط...",
+  "status.filesSavedToFolder": "تم حفظ {count} ملف(ات) في {folder}",
+  "status.filesSaved": "تم حفظ {count} ملف(ات) في المجلد المحدد",
 
   // عناصر واجهة المستخدم
   "ui.resetButton": "إعادة تعيين الصوت",
@@ -94,6 +96,7 @@
   "ui.dropAudioFiles": "أسقط ملفات الصوت هنا لمعالجتها بالتأثيرات الحالية",
   "ui.orText": "أو",
   "ui.selectFiles": "حدد ملفات الصوت للمعالجة",
+  "ui.selectOutputFolder": "اختر مجلد الإخراج",
   "ui.specifyAudioFiles": "حدد ملفات الصوت التي ستُعالج باستخدام التأثيرات الحالية.",
   "ui.processing": "جاري المعالجة...",
   "ui.cancelButton": "إلغاء",

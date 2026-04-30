@@ -37,6 +37,8 @@
   "status.processingCanceled": "Traitement annulé",
   "status.processingComplete": "Traitement terminé",
   "status.creatingZipFile": "Création du fichier zip...",
+  "status.filesSavedToFolder": "{count} fichier(s) enregistré(s) dans {folder}",
+  "status.filesSaved": "{count} fichier(s) enregistré(s) dans le dossier sélectionné",
 
   // Éléments de l'interface
   "ui.resetButton": "Réinitialiser l'audio",
@@ -94,6 +96,7 @@
   "ui.dropAudioFiles": "Déposez les fichiers audio ici pour les traiter avec les effets actuels",
   "ui.orText": "ou",
   "ui.selectFiles": "spécifiez les fichiers audio à traiter",
+  "ui.selectOutputFolder": "Sélectionner le dossier de sortie",
   "ui.specifyAudioFiles": "Spécifiez les fichiers audio à traiter avec les effets actuels.",
   "ui.processing": "Traitement en cours...",
   "ui.cancelButton": "Annuler",

@@ -37,6 +37,8 @@
   "status.processingCanceled": "Processing canceled",
   "status.processingComplete": "Processing complete",
   "status.creatingZipFile": "Creating zip file...",
+  "status.filesSavedToFolder": "{count} file(s) saved to {folder}",
+  "status.filesSaved": "{count} file(s) saved to selected folder",
 
   // UI elements
   "ui.resetButton": "Reset Audio",
@@ -94,6 +96,7 @@
   "ui.dropAudioFiles": "Drop audio files here to process with current effects",
   "ui.orText": "or",
   "ui.selectFiles": "specify audio files to process",
+  "ui.selectOutputFolder": "Select Output Folder",
   "ui.specifyAudioFiles": "Specify the audio files to process using the current effects.", // The text to be displayed in the drag area
   "ui.processing": "Processing...",
   "ui.cancelButton": "Cancel",

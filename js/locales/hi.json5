@@ -37,6 +37,8 @@
   "status.processingCanceled": "संसाधन रद्द किया गया",
   "status.processingComplete": "संसाधन पूर्ण",
   "status.creatingZipFile": "ज़िप फ़ाइल बना रहे हैं...",
+  "status.filesSavedToFolder": "{count} फ़ाइल(ें) {folder} में सहेजी गईं",
+  "status.filesSaved": "{count} फ़ाइल(ें) चयनित फ़ोल्डर में सहेजी गईं",
 
   // यूआई तत्व
   "ui.resetButton": "ऑडियो रीसेट करें",
@@ -94,6 +96,7 @@
   "ui.dropAudioFiles": "वर्तमान प्रभावों के साथ संसाधित करने हेतु ऑडियो फ़ाइलें यहाँ छोड़ें",
   "ui.orText": "या",
   "ui.selectFiles": "संसाधन के लिए ऑडियो फ़ाइलें चुनें",
+  "ui.selectOutputFolder": "आउटपुट फ़ोल्डर चुनें",
   "ui.specifyAudioFiles": "वर्तमान प्रभावों के साथ संसाधित करने हेतु ऑडियो फ़ाइलें चुनें।",
   "ui.processing": "संसाधन हो रहा है...",
   "ui.cancelButton": "रद्द करें",

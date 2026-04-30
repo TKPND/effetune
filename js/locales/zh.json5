@@ -37,6 +37,8 @@
   "status.processingCanceled": "处理已取消",
   "status.processingComplete": "处理完成",
   "status.creatingZipFile": "创建压缩文件中……",
+  "status.filesSavedToFolder": "{count} 个文件已保存到 {folder}",
+  "status.filesSaved": "{count} 个文件已保存到所选文件夹",
 
   // 界面元素
   "ui.resetButton": "重置音频",
@@ -94,6 +96,7 @@
   "ui.dropAudioFiles": "将音频文件拖至此处，以使用当前效果处理",
   "ui.orText": "或",
   "ui.selectFiles": "选择要处理的音频文件",
+  "ui.selectOutputFolder": "选择输出文件夹",
   "ui.specifyAudioFiles": "请选择要使用当前效果处理的音频文件",
   "ui.processing": "处理中……",
   "ui.cancelButton": "取消",

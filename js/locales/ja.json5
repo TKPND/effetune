@@ -36,6 +36,8 @@
   "status.processingCanceled": "処理がキャンセルされました",
   "status.processingComplete": "処理が完了しました",
   "status.creatingZipFile": "ZIPファイルを作成中...",
+  "status.filesSavedToFolder": "{count} ファイルを {folder} に保存しました",
+  "status.filesSaved": "{count} ファイルを選択したフォルダに保存しました",
 
   // UI要素
   "ui.resetButton": "オーディオをリセット",
@@ -93,6 +95,7 @@
   "ui.dropAudioFiles": "オーディオファイルをここにドロップして、現在のエフェクトで処理",
   "ui.orText": "または",
   "ui.selectFiles": "処理するオーディオファイルを指定",
+  "ui.selectOutputFolder": "出力フォルダを選択",
   "ui.specifyAudioFiles": "オーディオファイルを指定して、現在のエフェクトで処理",
   "ui.processing": "処理中...",
   "ui.cancelButton": "キャンセル",
