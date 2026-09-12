@@ -1,6 +1,6 @@
 {
   "name": "effetune",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "private": true,
   "description": "Desktop Audio Effect Processor",
   "main": "electron/main.js",
@@ -275,8 +275,8 @@
     "npmRebuild": false
   },
   "dependencies": {
-    "@mediabunny/flac-encoder": "1.56.1",
-    "mediabunny": "1.56.1",
+    "@mediabunny/flac-encoder": "1.56.2",
+    "mediabunny": "1.56.2",
     "music-metadata": "^11.15.0"
   }
 }

@@ -97,6 +97,7 @@ if(NOT EMSCRIPTEN)
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/bluetooth_sbc_simulator/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/cassette_artifacts/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/tape_artifacts/kernel.cpp"
+           "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/tv_audio_simulator/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/vinyl_artifacts/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/restoration/click_remover/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/restoration/clip_restorer/kernel.cpp"
@@ -432,6 +433,11 @@ if((BUILD_TESTING AND NOT EMSCRIPTEN) OR ET_NATIVE_TEST_WARNING_CHECK)
   et_add_dsp_test(
     effetune_dsp_tape_artifacts_tests
     SOURCES plugins/lofi/tape_artifacts/native_test.cpp
+    INCLUDE_DIRS core generated/cpp
+    WRAP_MALLOC)
+  et_add_dsp_test(
+    effetune_dsp_tv_audio_simulator_tests
+    SOURCES plugins/lofi/tv_audio_simulator/native_test.cpp
     INCLUDE_DIRS core generated/cpp
     WRAP_MALLOC)
   et_add_dsp_test(

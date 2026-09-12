@@ -26,6 +26,7 @@ lang: ko
 - [Simple Jitter](#simple-jitter) - 미세한 클록 변동을 비교하거나 큰 설정값으로 창작적인 흔들림 추가
 - [SW Radio Simulator](#sw-radio-simulator) - 음악을 모델링한 단파 송출·전리층 전파·수신 체인으로 변환
 - [Tape Artifacts](#tape-artifacts) - 음악을 모델링한 릴 테이프에 녹음하고 재생
+- [TV Audio Simulator](#tv-audio-simulator) - 아날로그 및 NICAM 텔레비전 음성 수신을 재현
 - [Vinyl Artifacts](#vinyl-artifacts) - 레코드풍 팝, 크래클, 히스, 럼블, 스테레오 노이즈 블리드를 추가
 - [Vinyl Simulator](#vinyl-simulator) - 입력을 모델링한 홈에 커팅한 뒤 물리적 스타일러스 모델로 재생
 
@@ -892,6 +893,44 @@ Tape Artifacts는 음악을 아날로그 오픈릴 테이프 머신을 거친 �
    - Speed: 7.5 ips, Tape: Standard, Bias: -2.0 dB, Record Level: +15.0 dB
    - Wow/Flutter: 0.480%, Hiss: -56.5 dB re 320 nWb/m, Output: +1.0 dB, Mix: 100%
    - 강한 피치 움직임, 거친 질감, 압축, 히스를 갖춘 의도적으로 열화된 사운드입니다.
+
+## TV Audio Simulator
+
+TV Audio Simulator는 음악을 아날로그 텔레비전 방송 또는 NICAM 디지털 텔레비전의 음성 경로에 통과시킵니다. 지역별 방식을 비교하거나 수신 악화에 따른 스테레오의 모노 전환, 잡음, 멀티패스 왜곡, 오래된 TV의 영상 버즈를 재현할 때 사용합니다. NICAM에서는 디지털 수신이 불안정해지면 함께 송출되는 아날로그 FM 모노 음성으로 전환됩니다.
+
+### 사운드 조정 가이드
+
+- 원하는 Standard를 선택하고 Signal 35 dBµV, Tuning 0 kHz, Multipath와 Fading 0, Mix 100%에서 시작합니다.
+- 수신이 좋은 시대별 TV 소리에는 Signal을 높이고 Tuning을 중앙에 둡니다. Processing은 아날로그 경로의 밀도를 높이지만 NICAM 디지털 주 경로에는 적용되지 않습니다.
+- 불량한 아날로그 수신은 먼저 Signal을 낮춘 뒤 Multipath나 작은 Tuning 오프셋을 더합니다. Path Delay로 왜곡의 성격이 달라집니다.
+- B/G NICAM 또는 I NICAM에서 Signal을 천천히 낮추면 디지털 손상과 FM 모노 fallback을 들을 수 있습니다. Video Buzz는 50/60 Hz 성분을 더하며 -80 dB에서 꺼집니다.
+
+### 시스템 프리셋
+
+9개 프리셋은 일본 M/EIA-J, 북미 M/BTSC, 한국 M/A2, 유럽·호주 A2, 영국·북유럽 NICAM, 동유럽 D/K 모노, 프랑스 L/AM을 다룹니다.
+
+### 파라미터
+
+- **Broadcast**: 모델의 송출을 켜거나 끕니다. 끄면 바이패스가 아니라 빈 채널을 수신합니다.
+- **Standard**: TV 방식과 그에 따른 변조, 엠퍼시스, 50/60 Hz 주사 계열을 선택합니다.
+- **Tx Mode**: Stereo, Mono, Dual을 선택합니다. 지원되지 않는 조합은 주 음성 모노로 돌아갑니다.
+- **Processing**: 아날로그 압축과 밀도를 0~18 dB로 높입니다. NICAM 디지털 경로에는 영향을 주지 않습니다.
+- **Signal**: 수신 강도를 0~70 dBµV로 설정합니다. 낮추면 잡음이나 오류가 증가하고 fallback이 일어날 수 있습니다.
+- **Tuning**: 동조를 -200~+200 kHz 이동합니다. 0에서 멀어질수록 대역이 좁아지고 왜곡됩니다.
+- **IF Band**: 수신 대역을 80~240 kHz로 설정합니다. 좁히면 동조 밖 신호를 더 막지만 프로그램 대역도 잘릴 수 있습니다.
+- **Multipath**: 지연된 반사파를 더합니다. 높일수록 음색 변화와 스테레오 불안정성이 커집니다.
+- **Path Delay**: 반사파 지연을 0.5~50 µs로 설정해 피크와 딥의 간격을 바꿉니다.
+- **Fading**: 수신 레벨 변화 속도를 0~20 Hz로 설정합니다.
+- **Receive Mode**: `Auto`는 가능한 경로를 따르고 `Stereo`, `Main`, `Sub`는 특정 프로그램을 요청합니다.
+- **Video Buzz**: 50/60 Hz 버즈를 -80~-20 dB로 설정합니다. -80 dB에서 꺼집니다.
+- **Output Gain**: 최종 레벨을 -24~+24 dB로 조정합니다.
+- **Mix**: 원음과 TV 음성을 0~100%로 혼합합니다.
+
+### HUD 읽는 법
+
+HUD는 Standard와 현재 경로(`STEREO`, `MAIN`, `SUB`, `NICAM`, `FALLBACK`, `AM`)를 표시합니다. Carrier와 CNR은 레벨과 품질을 나타냅니다. Health는 선택한 스테레오 또는 디지털 경로의 사용 가능 여부, Multipath는 반사 신호의 깊이, Errors는 초당 수신 오류율을 나타냅니다. 스펙트럼은 아날로그 FM의 복원된 다중 음성, L AM의 검파 후 음성, NICAM의 선택 출력을 보여 줍니다.
+
+이 모델은 TV 음성의 가청 특성을 재현하며 영상과 RF를 포함한 전체 채널이나 방송 시험 신호를 만들지는 않습니다.
 
 ## Vinyl Artifacts
 

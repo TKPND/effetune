@@ -11,6 +11,7 @@ const {
   SIDECAR_RETRY_BASE_MS,
   SIDECAR_RETRY_MAX_MS,
   createDefaultFriendlyName,
+  extractDidlAlbumArtUri,
   registerOpenHomeIpc
 } = require('../../electron/openhome-control-host.cjs');
 
@@ -359,7 +360,7 @@ test('OpenHome host safely restarts advertisement after a network change', async
   await harness.host.dispose();
 });
 
-test('OpenHome host gateways only sidecar-provided Insert URIs and releases tokens with queue actions', async () => {
+test('OpenHome host gateways Insert media and DIDL artwork and releases both with queue actions', async () => {
   const harness = createHarness({
     openHomeRemoteControl: true,
     openHomeDeviceId: '11111111-2222-4333-8444-555555555555'
@@ -370,20 +371,29 @@ test('OpenHome host gateways only sidecar-provided Insert URIs and releases toke
     requestId: 'insert-1',
     service: 'Playlist',
     action: 'Insert',
-    args: { afterId: 0, uri: 'http://media.test/song.flac', metadata: '<DIDL-Lite />' }
+    args: {
+      afterId: 0,
+      uri: 'http://media.test/song.flac',
+      metadata: '<DIDL-Lite><item><upnp:albumArtURI>http://art.test/cover.jpg?x=1&amp;y=2</upnp:albumArtURI></item></DIDL-Lite>'
+    }
   });
   await delay();
 
-  assert.deepEqual(harness.gateway.registerCalls, ['http://media.test/song.flac']);
+  assert.deepEqual(harness.gateway.registerCalls, [
+    'http://media.test/song.flac',
+    'http://art.test/cover.jpg?x=1&y=2'
+  ]);
   const actionSend = harness.sends.find(([channel]) => channel === CHANNELS.action);
   assert.equal(actionSend[1].deadlineEpochMs, 1234 + ACTION_TIMEOUT_MS);
   assert.equal(actionSend[1].args.uri, 'http://media.test/song.flac');
   assert.equal(actionSend[1].args.playbackUrl, 'http://127.0.0.1:43123/openhome-media/token');
+  assert.equal(actionSend[1].args.artworkUrl, 'http://127.0.0.1:43123/openhome-media/token');
 
   assert.equal(harness.host.handleRendererResponse({
     requestId: 'insert-1', ok: true, result: { newId: 17 }
   }), true);
   assert.deepEqual(harness.sidecar.responses, [{ requestId: 'insert-1', result: { newId: 17 } }]);
+  assert.deepEqual([...harness.host.artworkTokensByTrackId], [[17, 'token-2']]);
 
   harness.sidecar.emit('action', {
     requestId: 'delete-1',
@@ -393,8 +403,16 @@ test('OpenHome host gateways only sidecar-provided Insert URIs and releases toke
   });
   await delay();
   harness.host.handleRendererResponse({ requestId: 'delete-1', ok: true, result: {} });
-  assert.deepEqual(harness.gateway.releaseCalls, ['token-1']);
+  assert.deepEqual(harness.gateway.releaseCalls, ['token-1', 'token-2']);
   await harness.host.dispose();
+});
+
+test('OpenHome DIDL artwork extraction ignores absent elements and decodes XML character references', () => {
+  assert.equal(extractDidlAlbumArtUri('<DIDL-Lite />'), '');
+  assert.equal(
+    extractDidlAlbumArtUri('<albumArtURI>https://art.test/a&#x2f;b?x=&#49;&amp;y=2</albumArtURI>'),
+    'https://art.test/a/b?x=1&y=2'
+  );
 });
 
 test('OpenHome host commits gateway tokens only after the sidecar accepts queue mutations', async () => {

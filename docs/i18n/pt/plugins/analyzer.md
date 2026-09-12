@@ -134,6 +134,7 @@ O gráfico se desloca da direita para a esquerda a uma velocidade constante, com
   - Números maiores: Mais detalhe de frequência, mas atualização temporal mais lenta
   - Números menores: Movimento mais rápido, mas menos detalhe de frequência
 - **Frequency Scale** - **Log** reserva mais espaço de exibição para as frequências baixas; **Linear** distribui larguras de frequência iguais em intervalos iguais.
+- **Keyboard** - Mostra à direita do gráfico um guia estático de teclado que relaciona as notas musicais às frequências. Não altera a análise nem o áudio. A disposição das teclas acompanha **Log** ou **Linear**; em **Linear**, as teclas das frequências baixas parecem mais estreitas.
 - O analisador usa a média dos canais esquerdo e direito. A entrada mono é analisada diretamente.
 
 ## Spectrum Analyzer
@@ -147,6 +148,8 @@ Cria uma exibição visual em tempo real das frequências da sua música, dos gr
 - Picos mais altos significam presença mais forte dessas frequências
 - A linha verde mais escura mostra o som atual
 - A linha verde mais clara acompanha os picos recentes e desce suavemente à medida que desaparecem
+- Na visualização **Bar**, cada barra mostra o nível mais alto em uma parte de largura igual da tela. **Log** usa larguras de oitava iguais; **Linear** usa larguras de frequência iguais.
+- A marca fina acima de uma barra mostra seu pico recente e desce suavemente.
 - Observe como diferentes instrumentos criam padrões diferentes
 
 ### O Que Você Pode Ver
@@ -163,6 +166,10 @@ Cria uma exibição visual em tempo real das frequências da sua música, dos gr
   - Números maiores: Mais detalhe de frequência, com atualizações mais lentas
   - Números menores: Atualizações mais rápidas, com menos detalhe de frequência
 - **Frequency Scale** - **Log** reserva mais espaço de exibição para as frequências baixas; **Linear** distribui larguras de frequência iguais em intervalos iguais.
+- **Display** - Altera apenas a aparência do espectro; não altera a análise nem o áudio.
+  - **Line** (padrão): Mostra o espectro como linhas contínuas.
+  - **Bar**: Mostra como barra o nível mais alto de cada faixa exibida.
+- **Keyboard** - Mostra abaixo do gráfico um guia estático de teclado que relaciona as notas musicais às frequências. Não altera a análise nem o áudio. A disposição das teclas acompanha **Log** ou **Linear**; em **Linear**, as teclas das frequências baixas parecem mais estreitas.
 - O analisador usa a média dos canais esquerdo e direito. A entrada mono é analisada diretamente.
 
 ### Formas Divertidas de Usar Essas Ferramentas

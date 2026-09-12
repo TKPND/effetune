@@ -4607,6 +4607,33 @@ test('direct CUE metadata presents its sibling artwork in the player', async () 
   });
 });
 
+test('OpenHome metadata presents its gateway artwork in the player', async () => {
+  await withAudioContextGlobals({}, async ({ calls, mediaSession }) => {
+    const artworkUrl = `http://127.0.0.1:43123/openhome-media/${'a'.repeat(32)}`;
+    const track = {
+      name: 'Remote Track',
+      sourceKind: 'openhome',
+      meta: {
+        title: 'Remote Title',
+        artist: 'Remote Artist',
+        album: 'Remote Album',
+        artworkUrl
+      }
+    };
+    const { manager, state } = createHarness({
+      calls,
+      playlist: [track],
+      state: { currentTrack: track }
+    });
+
+    manager.loadMetadata(track);
+
+    assert.equal(state.artworkUrl, artworkUrl);
+    assert.equal(state.isTrackPresentationPending, false);
+    assert.equal(mediaSession.metadata.metadata.artwork[0].src, artworkUrl);
+  });
+});
+
 test('stale ID3 metadata callbacks do not update the current track state', async () => {
   const tagHandlers = new Map();
   await withAudioContextGlobals({

@@ -60,6 +60,7 @@ class OpenHomeControlHost {
     this.pendingActions = new Map();
     this.actionDispatch = Promise.resolve();
     this.tokensByTrackId = new Map();
+    this.artworkTokensByTrackId = new Map();
     this.deferredRegistrationTokens = new Set();
     this.pendingReset = null;
     this.resetSequence = 0;
@@ -277,6 +278,7 @@ class OpenHomeControlHost {
       actionEpoch: this.actionEpoch,
       deadlineEpochMs,
       registration: null,
+      artworkRegistration: null,
       timer: null
     };
     this.pendingActions.set(action.requestId, pending);
@@ -304,9 +306,27 @@ class OpenHomeControlHost {
           return;
         }
         pending.registration = registration;
+        const artworkUri = extractDidlAlbumArtUri(action.args.metadata);
+        if (artworkUri) {
+          try {
+            pending.artworkRegistration = await this.gateway.register(artworkUri);
+          } catch (_) {
+            pending.artworkRegistration = null;
+          }
+        }
+        if (!this.isCurrentAction(pending)) {
+          this.releasePendingRegistration(pending);
+          return;
+        }
         rendererAction = Object.freeze({
           ...rendererAction,
-          args: Object.freeze({ ...action.args, playbackUrl: registration.playbackUrl })
+          args: Object.freeze({
+            ...action.args,
+            playbackUrl: registration.playbackUrl,
+            ...(pending.artworkRegistration
+              ? { artworkUrl: pending.artworkRegistration.playbackUrl }
+              : {})
+          })
         });
       }
       requireBoundedObject(rendererAction, 'invalid-action');
@@ -396,8 +416,11 @@ class OpenHomeControlHost {
       const newId = Number(result?.newId);
       if (Number.isSafeInteger(newId) && newId > 0 && newId <= 0xffffffff) {
         this.tokensByTrackId.set(newId, pending.registration.token);
+        if (pending.artworkRegistration) {
+          this.artworkTokensByTrackId.set(newId, pending.artworkRegistration.token);
+        }
       } else {
-        this.gateway.release(pending.registration.token);
+        this.releasePendingRegistration(pending);
       }
       return;
     }
@@ -405,7 +428,10 @@ class OpenHomeControlHost {
       const id = Number(action.args.id);
       const token = this.tokensByTrackId.get(id);
       if (token) this.gateway.release(token);
+      const artworkToken = this.artworkTokensByTrackId.get(id);
+      if (artworkToken) this.gateway.release(artworkToken);
       this.tokensByTrackId.delete(id);
+      this.artworkTokensByTrackId.delete(id);
       return;
     }
     if (action.action === 'DeleteAll') this.releaseAllRegistrations();
@@ -413,6 +439,7 @@ class OpenHomeControlHost {
 
   releasePendingRegistration(pending) {
     if (pending.registration) this.gateway.release(pending.registration.token);
+    if (pending.artworkRegistration) this.gateway.release(pending.artworkRegistration.token);
   }
 
   rejectPendingActions(code, deferRegistrationRelease = false) {
@@ -420,6 +447,9 @@ class OpenHomeControlHost {
       this.clearTimer(pending.timer);
       if (deferRegistrationRelease && pending.registration) {
         this.deferredRegistrationTokens.add(pending.registration.token);
+        if (pending.artworkRegistration) {
+          this.deferredRegistrationTokens.add(pending.artworkRegistration.token);
+        }
       } else {
         this.releasePendingRegistration(pending);
       }
@@ -431,8 +461,10 @@ class OpenHomeControlHost {
 
   releaseAllRegistrations() {
     for (const token of this.tokensByTrackId.values()) this.gateway.release(token);
+    for (const token of this.artworkTokensByTrackId.values()) this.gateway.release(token);
     for (const token of this.deferredRegistrationTokens) this.gateway.release(token);
     this.tokensByTrackId.clear();
+    this.artworkTokensByTrackId.clear();
     this.deferredRegistrationTokens.clear();
   }
 
@@ -682,6 +714,66 @@ function normalizeFriendlyName(value, fallback, strict = false) {
   return normalized;
 }
 
+function extractDidlAlbumArtUri(metadata) {
+  if (typeof metadata !== 'string' || metadata.length === 0) return '';
+  const lowerMetadata = metadata.toLowerCase();
+  let searchFrom = 0;
+  while (searchFrom < metadata.length) {
+    const tagStart = lowerMetadata.indexOf('<', searchFrom);
+    if (tagStart < 0) return '';
+    let nameEnd = tagStart + 1;
+    while (nameEnd < metadata.length && isXmlNameCharacter(metadata.charCodeAt(nameEnd))) {
+      nameEnd += 1;
+    }
+    const qualifiedName = lowerMetadata.slice(tagStart + 1, nameEnd);
+    const localName = qualifiedName.slice(qualifiedName.lastIndexOf(':') + 1);
+    if (localName !== 'albumarturi') {
+      searchFrom = nameEnd > tagStart + 1 ? nameEnd : tagStart + 1;
+      continue;
+    }
+    const contentStart = lowerMetadata.indexOf('>', nameEnd);
+    if (contentStart < 0) return '';
+    const closingPrefix = `</${qualifiedName}`;
+    let closingStart = lowerMetadata.indexOf(closingPrefix, contentStart + 1);
+    while (closingStart >= 0) {
+      const boundary = metadata.charCodeAt(closingStart + closingPrefix.length);
+      if (boundary === 62 || boundary === 9 || boundary === 10 || boundary === 13 || boundary === 32) {
+        const closingEnd = lowerMetadata.indexOf('>', closingStart + closingPrefix.length);
+        if (closingEnd < 0) return '';
+        const value = decodeXmlText(metadata.slice(contentStart + 1, closingStart)).trim();
+        return value.length <= 8192 ? value : '';
+      }
+      closingStart = lowerMetadata.indexOf(closingPrefix, closingStart + closingPrefix.length);
+    }
+    return '';
+  }
+  return '';
+}
+
+function isXmlNameCharacter(codePoint) {
+  return (codePoint >= 48 && codePoint <= 57) ||
+    (codePoint >= 65 && codePoint <= 90) ||
+    (codePoint >= 97 && codePoint <= 122) ||
+    codePoint === 45 || codePoint === 46 || codePoint === 58 || codePoint === 95;
+}
+
+function decodeXmlText(value) {
+  return String(value).replace(/&(?:#(\d+)|#x([0-9a-f]+)|amp|lt|gt|quot|apos);/gi, entity => {
+    const lower = entity.toLowerCase();
+    if (lower === '&amp;') return '&';
+    if (lower === '&lt;') return '<';
+    if (lower === '&gt;') return '>';
+    if (lower === '&quot;') return '"';
+    if (lower === '&apos;') return "'";
+    const numeric = lower.startsWith('&#x')
+      ? Number.parseInt(lower.slice(3, -1), 16)
+      : Number.parseInt(lower.slice(2, -1), 10);
+    if (!Number.isSafeInteger(numeric) || numeric <= 0 || numeric > 0x10ffff ||
+        (numeric >= 0xd800 && numeric <= 0xdfff)) return '';
+    return String.fromCodePoint(numeric);
+  });
+}
+
 function requireBoundedObject(value, code) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw createHostError(code);
@@ -714,5 +806,6 @@ module.exports = {
   OpenHomeControlHost,
   createDefaultFriendlyName,
   createOpenHomeControlHost,
+  extractDidlAlbumArtUri,
   registerOpenHomeIpc
 };

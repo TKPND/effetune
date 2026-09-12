@@ -63,7 +63,7 @@ export class OpenHomePlaybackAdapter {
     this.audioPlayer?.stateManager?.addListener?.('*', this.stateListener);
     this.removeRepeatModeNormalizer = this.audioPlayer?.playbackManager
       ?.setRepeatModeNormalizer?.(repeatMode => (
-        repeatMode === 'ONE' && this.playerOwnsRemoteQueue() ? 'ALL' : repeatMode
+        repeatMode === 'ONE' && this.playerOwnsRemoteQueue() ? 'OFF' : repeatMode
       )) ?? null;
     void Promise.resolve(bridge.rendererReady())
       .then(() => this.publishState())
@@ -385,11 +385,14 @@ export class OpenHomePlaybackAdapter {
     if (this.queue.length >= MAX_QUEUE_LENGTH) throw createActionError('queue-full');
     const uri = normalizeRemoteUri(args.uri);
     const playbackUrl = normalizePlaybackUrl(args.playbackUrl);
+    const artworkUrl = args.artworkUrl === undefined
+      ? ''
+      : normalizePlaybackUrl(args.artworkUrl);
     const metadata = normalizeMetadata(args.metadata);
     const afterId = requireUint32(args.afterId ?? 0, true);
     let insertIndex = 0;
     if (afterId !== 0) insertIndex = this.findQueueIndex(afterId) + 1;
-    const meta = parseDidlLite(metadata, uri, this.DomParserCtor);
+    const meta = parseDidlLite(metadata, uri, this.DomParserCtor, artworkUrl);
     const currentId = this.getCurrentOpenHomeId();
     const hadRemoteOwnership = this.playerOwnsRemoteQueue();
     const wasPlaying = this.getPlayerState().isPlaying === true;
@@ -826,9 +829,10 @@ function normalizeMetadata(metadata) {
   return metadata;
 }
 
-function parseDidlLite(metadata, uri, DomParserCtor) {
+function parseDidlLite(metadata, uri, DomParserCtor, artworkUrl = '') {
   const fallbackTitle = titleFromUri(uri);
-  if (!metadata || !DomParserCtor) return Object.freeze({ title: fallbackTitle, artist: '', album: '' });
+  const fallback = { title: fallbackTitle, artist: '', album: '', artworkUrl };
+  if (!metadata || !DomParserCtor) return Object.freeze(fallback);
   try {
     const document = new DomParserCtor().parseFromString(metadata, 'application/xml');
     if (document.querySelector?.('parsererror')) throw new Error('Invalid XML');
@@ -842,10 +846,11 @@ function parseDidlLite(metadata, uri, DomParserCtor) {
     return Object.freeze({
       title: textByLocalName('title') || fallbackTitle,
       artist: textByLocalName('artist'),
-      album: textByLocalName('album')
+      album: textByLocalName('album'),
+      artworkUrl
     });
   } catch (_) {
-    return Object.freeze({ title: fallbackTitle, artist: '', album: '' });
+    return Object.freeze(fallback);
   }
 }
 

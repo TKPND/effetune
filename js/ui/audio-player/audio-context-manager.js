@@ -2318,11 +2318,13 @@ export class AudioContextManager {
       const artworkId = libraryManager?.runtime
         ? track.libraryTrackId
         : track.meta.artworkId;
-      const cueArtworkUrl = this.createArtworkURL(track.meta.picture);
-      const shouldLoadArtwork = !cueArtworkUrl && !!artworkId && !!libraryManager?.getArtworkThumbURL;
+      const metadataArtworkUrl = typeof track.meta.artworkUrl === 'string' && track.meta.artworkUrl
+        ? track.meta.artworkUrl
+        : this.createArtworkURL(track.meta.picture);
+      const shouldLoadArtwork = !metadataArtworkUrl && !!artworkId && !!libraryManager?.getArtworkThumbURL;
       this.updateState({
         currentTrackName: displayText,
-        artworkUrl: cueArtworkUrl,
+        artworkUrl: metadataArtworkUrl,
         isTrackPresentationPending: shouldLoadArtwork
       }, 'Catalog metadata loaded');
       this.updateTrackNameDisplayText(displayText);
@@ -2369,7 +2371,7 @@ export class AudioContextManager {
         track.meta.title,
         track.meta.artist || '',
         track.meta.album || '',
-        cueArtworkUrl
+        metadataArtworkUrl
       );
       return;
     }

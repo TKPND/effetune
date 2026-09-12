@@ -1274,3 +1274,30 @@ that the environment produced isolated wall-clock spikes, but the Noise Reductio
 maximum still failed its unchanged 12% hard limit on the only permitted remeasurement.
 The final cost model remains frozen; no threshold, measurement-tool, or golden-policy
 change and no additional retry is permitted.
+
+### TV Audio Simulator
+
+Measured on 2026-09-12 from commit `71a48971` plus the working-tree TV Audio
+Simulator implementation, with Node v24.13.0 on a 13th Gen Intel Core i9-13900KF
+and Windows NT 10.0.26200.0. The production Emscripten 6.0.2 scalar and SIMD
+artifacts used `-O3 -flto`, with `-msimd128` added for SIMD. Each measurement used
+one second of 96 kHz stereo audio in 128-frame blocks, two warmups, and 20 measured
+repetitions. The local benchmark presets contained the complete TV Audio Simulator
+parameter set and selected the listed transmission scheme; the NICAM preset also
+enabled -40 dB buzz.
+
+```text
+node tools/dsp-parity/bench.mjs --preset tmp/dev/tv-audio-plan-20260911/bench-<scheme>.effetune_preset --modes wasm,simd --sample-rates 96000 --channels 2 --block-size 128 --duration 1 --warmup 2 --repetitions 20 --json tmp/dev/tv-audio-plan-20260911/bench-<scheme>.json
+```
+
+| Transmission scheme | WASM realtime | WASM median | WASM SIMD realtime | WASM SIMD median |
+| --- | ---: | ---: | ---: | ---: |
+| EIA-J | 10.41x | 0.0961 s | 9.88x | 0.1012 s |
+| BTSC | 11.03x | 0.0906 s | 10.72x | 0.0933 s |
+| A2 | 10.40x | 0.0962 s | 9.93x | 0.1007 s |
+| NICAM with buzz | 10.84x | 0.0923 s | 10.75x | 0.0930 s |
+| L AM | 12.83x | 0.0779 s | 12.81x | 0.0781 s |
+
+All five representative paths remain above 9.8x realtime. SIMD differences are
+within the variation expected for these short, scalar-heavy paths, so no additional
+scheme-specific SIMD implementation is warranted.

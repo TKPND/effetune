@@ -7,7 +7,7 @@ permalink: /dsp/reference/verification/
 ---
 # Verification
 
-The frozen wrapper reference origin is 80 JavaScript-derived effect suites,
+The frozen wrapper reference origin is 81 JavaScript-derived effect suites,
 6 native direct-double suites, and 14 production-native-promoted suites. Maintainers run:
 
 ```console

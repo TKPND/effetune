@@ -13,6 +13,8 @@ Combines tonal, mechanical, and surface-noise behavior associated with vinyl pla
 
 This type has catalog telemetry metadata but no public observation API in v0.1. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).
 
+This type can intentionally generate output from zero input at an active setting. See [Processing model](/dsp/concepts/processing-model/#source-generating-effects).
+
 ## Contract
 
 - Seeded: **yes**

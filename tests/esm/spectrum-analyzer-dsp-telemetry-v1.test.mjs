@@ -31,7 +31,12 @@ function createHub() {
   };
 }
 
-function loadSpectrumAnalyzer({ hub = null, now = () => performance.now() } = {}) {
+function loadSpectrumAnalyzer({
+  hub = null,
+  now = () => performance.now(),
+  documentRef = null,
+  IntersectionObserverRef = null
+} = {}) {
   const source = fs.readFileSync(
     new URL('../../plugins/analyzer/spectrum_analyzer.js', import.meta.url),
     'utf8'
@@ -55,6 +60,8 @@ function loadSpectrumAnalyzer({ hub = null, now = () => performance.now() } = {}
   vm.runInNewContext(source, {
     window: windowRef,
     PluginBase,
+    document: documentRef,
+    IntersectionObserver: IntersectionObserverRef,
     performance: { now },
     cancelAnimationFrame() {},
     console,
@@ -96,6 +103,88 @@ function subscribedPlugin(runtime, id = 37) {
   return plugin;
 }
 
+function createUiElement(tagName) {
+  const listeners = new Map();
+  return {
+    tagName: tagName.toUpperCase(),
+    children: [],
+    className: '',
+    textContent: '',
+    appendChild(child) { this.children.push(child); return child; },
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type) { listeners.delete(type); },
+    dispatch(type) { listeners.get(type)?.({ target: this }); },
+    querySelector() { return null; }
+  };
+}
+
+test('Spectrum Analyzer places Keyboard after every other setting and keeps its helper binding', () => {
+  const documentRef = { createElement: createUiElement };
+  class FakeIntersectionObserver {
+    observe() {}
+    disconnect() {}
+  }
+  const runtime = loadSpectrumAnalyzer({ documentRef, IntersectionObserverRef: FakeIntersectionObserver });
+  const plugin = new runtime.SpectrumAnalyzerPlugin();
+  const helperCalls = [];
+  const createRow = (label, input = null) => {
+    const row = createUiElement('div');
+    row.className = 'parameter-row';
+    const labelElement = createUiElement('label');
+    labelElement.textContent = `${label}:`;
+    row.appendChild(labelElement);
+    if (input) row.appendChild(input);
+    return row;
+  };
+  plugin.createParameterControl = (label, minimum, maximum, step, value, setter, unit, key) => {
+    helperCalls.push({ kind: 'parameter', label, value, key });
+    return createRow(`${label} (${unit})`);
+  };
+  plugin.createRadioGroup = (label, options, value, setter, key) => {
+    helperCalls.push({ kind: 'radio', label, value, key });
+    return createRow(label);
+  };
+  plugin.createCheckboxControl = (label, checked, setter, key) => {
+    helperCalls.push({ kind: 'checkbox', label, value: checked, key });
+    const checkbox = createUiElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = checked;
+    checkbox.addEventListener('change', event => setter(event.target.checked));
+    return createRow(label, checkbox);
+  };
+  plugin.createResponsiveGraph = () => ({
+    container: createUiElement('div'),
+    canvas: createUiElement('canvas'),
+    dispose() {}
+  });
+  plugin.registerUIRefresh = () => {};
+  plugin.isHeldByUser = () => false;
+
+  const ui = plugin.createUI();
+  const rows = ui.children.filter(child => child.className.includes('parameter-row'));
+  assert.deepEqual(rows.map(row => row.children[0].textContent), [
+    'DB Range (dB):',
+    'Points:',
+    'Frequency Scale:',
+    'Display:',
+    'Keyboard:'
+  ]);
+  assert.equal(ui.children.at(-2), rows.at(-1));
+  assert.deepEqual(helperCalls.map(({ kind, label, key }) => ({ kind, label, key })), [
+    { kind: 'parameter', label: 'DB Range', key: 'dr' },
+    { kind: 'radio', label: 'Frequency Scale', key: 'sc' },
+    { kind: 'radio', label: 'Display', key: 'dm' },
+    { kind: 'checkbox', label: 'Keyboard', key: 'kb' }
+  ]);
+  assert.equal(helperCalls.at(-1).value, false);
+
+  const keyboardCheckbox = rows.at(-1).children[1];
+  plugin.canvas = null;
+  keyboardCheckbox.checked = true;
+  keyboardCheckbox.dispatch('change');
+  assert.equal(plugin.getParameters().kb, true);
+});
+
 test('Spectrum Analyzer persists the selected frequency scale and maps linear x positions', () => {
   const runtime = loadSpectrumAnalyzer();
   const plugin = new runtime.SpectrumAnalyzerPlugin();
@@ -113,6 +202,20 @@ test('Spectrum Analyzer persists the selected frequency scale and maps linear x 
   plugin.setFrequencyScale('linear');
   plugin.reset();
   assert.equal(plugin.getParameters().sc, 'log');
+});
+
+test('Spectrum Analyzer persists and resets the selected display mode', () => {
+  const runtime = loadSpectrumAnalyzer();
+  const plugin = new runtime.SpectrumAnalyzerPlugin();
+
+  assert.equal(plugin.getParameters().dm, 'line');
+  plugin.setParameters({ dm: 'bar' });
+  assert.equal(plugin.getParameters().dm, 'bar');
+  plugin.setParameters({ dm: 'unsupported' });
+  assert.equal(plugin.getParameters().dm, 'line');
+  plugin.setDisplayMode('bar');
+  plugin.reset();
+  assert.equal(plugin.getParameters().dm, 'line');
 });
 
 test('Spectrum Analyzer synchronously copies v1 telemetry without running a main-thread FFT', () => {
@@ -258,6 +361,175 @@ test('Spectrum Analyzer deduplicates, rebinds, and cleans up telemetry subscript
   assert.ok(runtime.calls.some(call => call[0] === 'baseCleanup'));
 });
 
+test('Spectrum Analyzer aggregates maxima, fills interior gaps, and bounds the valid bands', () => {
+  const { SpectrumAnalyzerPlugin } = loadSpectrumAnalyzer();
+  const bands = SpectrumAnalyzerPlugin.aggregateBands([
+    [20, [-40, -30]],
+    [25, [-25, -15]],
+    [60, [-35, -20]],
+    [100, [-10, -5]]
+  ], 100, 5);
+
+  assert.deepEqual(Array.from(bands.spectrum), [
+    Number.NEGATIVE_INFINITY, -25, -25, -35, -10
+  ]);
+  assert.deepEqual(Array.from(bands.peaks), [
+    Number.NEGATIVE_INFINITY, -15, -15, -20, -5
+  ]);
+  assert.equal(bands.firstFilled, 1);
+  assert.equal(bands.lastFilled, 4);
+
+  const empty = SpectrumAnalyzerPlugin.aggregateBands([], 100, 5);
+  assert.deepEqual(Array.from(empty.spectrum), Array(5).fill(Number.NEGATIVE_INFINITY));
+  assert.deepEqual(Array.from(empty.peaks), Array(5).fill(Number.NEGATIVE_INFINITY));
+  assert.equal(empty.firstFilled, 5);
+  assert.equal(empty.lastFilled, -1);
+});
+
+function createSpectrumDrawRecorder() {
+  const operations = [];
+  const record = (type, details = {}) => operations.push({ type, ...details });
+  const ctx = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+    textAlign: 'start',
+    fillRect(x, y, width, height) {
+      record('fillRect', { style: this.fillStyle, x, y, width, height });
+    },
+    fillText(text, x, y) {
+      record('fillText', { style: this.fillStyle, text, x, y });
+    },
+    strokeText(text, x, y) {
+      record('strokeText', { style: this.strokeStyle, text, x, y });
+    },
+    beginPath() { record('beginPath'); },
+    closePath() { record('closePath'); },
+    moveTo(x, y) { record('moveTo', { x, y }); },
+    lineTo(x, y) { record('lineTo', { x, y }); },
+    rect(x, y, width, height) { record('rect', { x, y, width, height }); },
+    stroke() { record('stroke', { style: this.strokeStyle, lineWidth: this.lineWidth }); },
+    measureText(text) { return { width: text.length * parseFloat(this.font) * 0.65 }; },
+    clip() { record('clip'); },
+    save() { record('save'); },
+    restore() { record('restore'); },
+    translate(x, y) { record('translate', { x, y }); },
+    rotate(angle) { record('rotate', { angle }); }
+  };
+  return { ctx, operations };
+}
+
+function collectStrokedLines(operations) {
+  const lines = [];
+  let start = null;
+  let end = null;
+  for (const operation of operations) {
+    if (operation.type === 'beginPath') {
+      start = null;
+      end = null;
+    } else if (operation.type === 'moveTo') {
+      start = { x: operation.x, y: operation.y };
+    } else if (operation.type === 'lineTo') {
+      end = { x: operation.x, y: operation.y };
+    } else if (operation.type === 'stroke' && start && end) {
+      lines.push({ start, end, style: operation.style, lineWidth: operation.lineWidth });
+    }
+  }
+  return lines;
+}
+
+test('Spectrum Analyzer draws bounded bars at the aggregated levels', () => {
+  const { SpectrumAnalyzerPlugin } = loadSpectrumAnalyzer();
+  const plugin = new SpectrumAnalyzerPlugin();
+  plugin.dr = -100;
+  const { ctx, operations } = createSpectrumDrawRecorder();
+  const bands = {
+    spectrum: new Float32Array([Number.NEGATIVE_INFINITY, -50, -25, Number.NEGATIVE_INFINITY]),
+    peaks: new Float32Array([Number.NEGATIVE_INFINITY, -40, -10, Number.NEGATIVE_INFINITY]),
+    firstFilled: 1,
+    lastFilled: 2
+  };
+
+  plugin.drawSpectrumBars(ctx, bands, 400, 200, 2);
+
+  const bars = operations.filter(operation =>
+    operation.type === 'fillRect' && operation.style === 'stub:graph-trace-fill');
+  const peaks = operations.filter(operation =>
+    operation.type === 'fillRect' && operation.style === 'stub:graph-trace');
+  assert.equal(bars.length, 2);
+  assert.equal(peaks.length, 2);
+  assert.deepEqual(bars.map(({ y }) => y), [100, 50]);
+  for (let index = 0; index < bars.length; index++) {
+    const bar = bars[index];
+    assert.ok(bar.width >= 1);
+    assert.ok(bar.x >= 0 && bar.x + bar.width <= 400);
+    if (index > 0) assert.ok(bars[index - 1].x + bars[index - 1].width <= bar.x);
+  }
+});
+
+test('Spectrum Analyzer keeps Line free of bars and paints Bar labels last', () => {
+  const { SpectrumAnalyzerPlugin, windowRef } = loadSpectrumAnalyzer();
+  const plugin = new SpectrumAnalyzerPlugin();
+  plugin.setPoints(8);
+  plugin.sampleRate = 48000;
+  plugin.spectrum.fill(-48);
+  plugin.peaks.fill(-24);
+  plugin.graphDpr = 1;
+  const width = 480;
+  const height = 240;
+  const now = 1000;
+
+  const lineRecorder = createSpectrumDrawRecorder();
+  plugin.canvas = { width, height, getContext: () => lineRecorder.ctx };
+  plugin.drawGraph(now);
+  assert.equal(lineRecorder.operations.some(operation =>
+    operation.type === 'fillRect' &&
+    (operation.style === 'stub:graph-trace-fill' || operation.style === 'stub:graph-trace')), false);
+
+  plugin.setDisplayMode('bar');
+  for (const { cssWidth, bandCount, background } of [
+    { cssWidth: 600, bandCount: 48, background: 'rgb(16, 16, 16)' },
+    { cssWidth: 400, bandCount: 24, background: 'rgb(240, 240, 240)' }
+  ]) {
+    windowRef.ThemePalette.get = name =>
+      name === 'graph-bg-deep' ? background : `stub:${name}`;
+    plugin.graphCssWidth = cssWidth;
+    const barRecorder = createSpectrumDrawRecorder();
+    plugin.canvas = { width, height, getContext: () => barRecorder.ctx };
+    const levels = plugin.collectSpectrumLevels(width, now);
+    const bands = SpectrumAnalyzerPlugin.aggregateBands(levels, width, bandCount);
+    plugin.drawGraph(now);
+
+    const bodyBars = barRecorder.operations.filter(operation =>
+      operation.type === 'fillRect' && operation.style === 'stub:graph-trace-fill');
+    assert.equal(bodyBars.length, bands.lastFilled - bands.firstFilled + 1);
+    const backgroundFill = barRecorder.operations.find(operation =>
+      operation.type === 'fillRect' && operation.x === 0 && operation.y === 0 &&
+      operation.width === width && operation.height === height);
+    assert.equal(backgroundFill.style, background);
+    const lastBarIndex = barRecorder.operations.findLastIndex(operation =>
+      operation.type === 'fillRect' &&
+      (operation.style === 'stub:graph-trace-fill' || operation.style === 'stub:graph-trace'));
+    const labels = barRecorder.operations
+      .map((operation, index) => ({ operation, index }))
+      .filter(({ operation }) => operation.type === 'fillText');
+    assert.ok(labels.length > 2);
+    assert.ok(labels.some(({ operation }) => operation.text === 'Frequency (Hz)'));
+    assert.ok(labels.some(({ operation }) => operation.text === 'Level (dB)'));
+    assert.ok(labels.every(({ index }) => index > lastBarIndex));
+    for (const { operation, index } of labels) {
+      assert.deepEqual(barRecorder.operations[index - 1], {
+        type: 'strokeText',
+        style: backgroundFill.style,
+        text: operation.text,
+        x: operation.x,
+        y: operation.y
+      });
+    }
+  }
+});
+
 function captureSpectrum(plugin) {
   let points;
   const paths = [];
@@ -339,4 +611,192 @@ test('Spectrum Analyzer freezes peak position and accepts fresh peaks after repe
     assert.ok(Math.abs(draw(now + 7).peak[0][1] - 51.4) < 1e-9);
   }
   plugin.cleanup();
+});
+
+
+test('Spectrum Analyzer round-trips Keyboard and normalizes it to true-only', () => {
+  const runtime = loadSpectrumAnalyzer();
+  const plugin = new runtime.SpectrumAnalyzerPlugin();
+  assert.equal(plugin.getParameters().kb, false);
+  plugin.setParameters({ kb: true });
+  const restored = new runtime.SpectrumAnalyzerPlugin();
+  restored.setParameters(plugin.getParameters());
+  assert.equal(restored.kb, true);
+  const count = runtime.calls.length;
+  restored.setKeyboardVisible(true);
+  assert.equal(runtime.calls.length, count);
+  restored.setParameters({ kb: 'true' });
+  assert.equal(restored.kb, false);
+  restored.setKeyboardVisible(true);
+  restored.reset();
+  assert.equal(restored.getParameters().kb, false);
+});
+
+test('Spectrum Analyzer keyboard cells follow both frequency scales and clip the full display range', () => {
+  const { SpectrumAnalyzerPlugin } = loadSpectrumAnalyzer();
+  const plugin = new SpectrumAnalyzerPlugin();
+  for (const scale of ['log', 'linear']) {
+    plugin.sc = scale;
+    const keys = plugin.getKeyboardGeometry(1024);
+    assert.equal(keys[0].midi, 15);
+    assert.equal(keys.at(-1).midi, 147);
+    assert.equal(keys[0].start, 0);
+    assert.equal(keys.at(-1).end, 1024);
+    assert.equal(keys.find(key => key.midi === 69).center, plugin.frequencyToX(440, 1024));
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      for (const coordinate of [key.start, key.center, key.end]) {
+        assert.ok(Number.isFinite(coordinate) && coordinate >= 0 && coordinate <= 1024);
+      }
+      assert.ok(key.start <= key.center && key.center <= key.end);
+      if (i) assert.equal(keys[i - 1].end, key.start);
+    }
+    const black = keys.find(key => key.midi === 70);
+    assert.equal(black.black, true);
+    assert.equal(black.start, plugin.frequencyToX(440 * 2 ** (0.5 / 12), 1024));
+    assert.equal(black.end, plugin.frequencyToX(440 * 2 ** (1.5 / 12), 1024));
+    if (scale === 'linear') assert.ok(keys[1].end - keys[1].start < 1);
+  }
+});
+
+test('Spectrum Analyzer Keyboard uses Note Spectrogram key colors in Paper and Midnight', () => {
+  for (const { theme, background, soft, white } of [
+    { theme: 'Paper', background: 'rgb(255, 255, 255)', soft: 'rgb(241, 241, 241)', white: 255 },
+    { theme: 'Midnight', background: 'rgb(7, 11, 20)', soft: 'rgb(24, 31, 42)', white: 221 }
+  ]) {
+    const runtime = loadSpectrumAnalyzer();
+    const requestedColors = [];
+    runtime.windowRef.ThemePalette.get = name => {
+      requestedColors.push(name);
+      if (name === 'graph-bg-deep') return background;
+      if (name === 'graph-base-soft') return soft;
+      return `stub:${name}`;
+    };
+    const plugin = new runtime.SpectrumAnalyzerPlugin();
+    const { ctx, operations } = createSpectrumDrawRecorder();
+    const width = 1024;
+    const height = 100;
+    const gutter = 44.8;
+    plugin.drawKeyboard(ctx, width, height, gutter, 1);
+
+    const fills = operations.filter(operation => operation.type === 'fillRect');
+    assert.deepEqual(fills[0], {
+      type: 'fillRect',
+      style: `rgb(${white}, ${white}, ${white})`,
+      x: 0,
+      y: height - gutter,
+      width,
+      height: gutter
+    }, theme);
+    const blackKeys = plugin.getKeyboardGeometry(width).filter(key => key.black);
+    assert.equal(fills.length, blackKeys.length + 1, theme);
+    assert.ok(fills.slice(1).every(operation =>
+      operation.style === 'rgb(34, 34, 34)' &&
+      operation.y === height - gutter &&
+      Math.abs(operation.height - 28) < 1e-9
+    ), theme);
+    assert.equal(requestedColors.includes('graph-base-soft'), false, theme);
+  }
+});
+
+test('Spectrum Analyzer Keyboard reserves a DPR-scaled gutter for Line and Bar without altering levels', () => {
+  const runtime = loadSpectrumAnalyzer();
+  runtime.windowRef.ThemePalette.get = name => name === 'graph-bg-deep' ? 'rgb(16, 16, 16)' :
+    'stub:' + name;
+  for (const dpr of [1, 2]) {
+    for (const sc of ['log', 'linear']) {
+      for (const dm of ['line', 'bar']) {
+        const plugin = new runtime.SpectrumAnalyzerPlugin();
+        plugin.sc = sc;
+        plugin.dm = dm;
+        plugin.graphDpr = dpr;
+        plugin.spectrum.fill(-48);
+        plugin.peaks.fill(-24);
+        const spectrum = Array.from(plugin.spectrum);
+        const peaks = Array.from(plugin.peaks);
+        const { ctx, operations } = createSpectrumDrawRecorder();
+        const width = 1024 * dpr;
+        const height = 480 * dpr;
+        const plotHeight = height - 44.8 * dpr;
+        plugin.canvas = { width, height, getContext: () => ctx };
+
+        plugin.drawGraph(0);
+        const standardFrequencyLines = collectStrokedLines(operations).filter(line =>
+          line.start.x === line.end.x && line.start.y === 0 && line.end.y === height &&
+          line.style === 'stub:graph-grid-subtle');
+        assert.equal(standardFrequencyLines.length, sc === 'log' ? 11 : 9);
+        assert.ok(operations.some(operation =>
+          operation.type === 'fillText' && operation.text === 'Frequency (Hz)'));
+        assert.ok(operations.some(operation =>
+          operation.type === 'fillText' &&
+          (typeof operation.text === 'number' || /^\d+(?:\.\d+)?k$/.test(operation.text))));
+
+        operations.length = 0;
+        plugin.kb = true;
+        plugin.drawGraph(0);
+        const plotClip = operations.find(operation => operation.type === 'rect');
+        assert.deepEqual(plotClip, { type: 'rect', x: 0, y: 0, width, height: plotHeight });
+        const base = operations.find(operation => operation.type === 'fillRect' && operation.y === plotHeight);
+        assert.deepEqual(base, { type: 'fillRect', style: base.style, x: 0, y: plotHeight, width, height: 44.8 * dpr });
+        const cLabels = operations.filter(operation => operation.type === 'fillText' && /^C\d+$/.test(operation.text));
+        assert.ok(cLabels.length > 0);
+        for (const label of cLabels) {
+          assert.ok(label.x >= 0 && label.x <= width && label.y > plotHeight && label.y < height);
+        }
+        assert.equal(operations.some(operation =>
+          (operation.type === 'fillText' || operation.type === 'strokeText') &&
+          operation.text === 'Frequency (Hz)'), false);
+        assert.equal(operations.some(operation =>
+          operation.type === 'fillText' &&
+          (typeof operation.text === 'number' || /^\d+(?:\.\d+)?k$/.test(operation.text))), false);
+        assert.ok(operations.some(operation =>
+          operation.type === 'fillText' && operation.text === 'Level (dB)'));
+        assert.ok(operations.some(operation =>
+          operation.type === 'fillText' && /^-\d+dB$/.test(operation.text)));
+        const expectedBoundaryKeys = plugin.getKeyboardGeometry(width)
+          .filter(key => {
+            const pitchClass = (key.midi % 12 + 12) % 12;
+            return (pitchClass === 0 || pitchClass === 5) &&
+              key.start > 0 && key.start < width;
+          });
+        const expectedBoundaries = Array.from(expectedBoundaryKeys, key => ({
+            x: key.start,
+            style: (key.midi % 12 + 12) % 12 === 0
+              ? 'stub:graph-grid-strong'
+              : 'stub:graph-grid-subtle',
+            lineWidth: dpr
+          }));
+        const musicalBoundaries = collectStrokedLines(operations)
+          .filter(line => line.start.x === line.end.x &&
+            line.start.y === 0 && line.end.y === plotHeight)
+          .map(line => ({ x: line.start.x, style: line.style, lineWidth: line.lineWidth }));
+        assert.deepEqual(musicalBoundaries, expectedBoundaries);
+        const bars = operations.filter(operation => operation.type === 'fillRect' && operation.style === 'stub:graph-trace-fill');
+        assert.equal(bars.length > 0, dm === 'bar');
+        assert.ok(bars.every(bar => Math.abs(bar.y + bar.height - plotHeight) < 1e-9));
+        const blackKeys = plugin.getKeyboardGeometry(width).filter(key => key.black);
+        const blackFills = operations.filter(operation => operation.type === 'fillRect' &&
+          operation.style === 'rgb(34, 34, 34)');
+        assert.deepEqual(blackFills.map(({ x, width: keyWidth }) => ({ x, width: keyWidth })),
+          Array.from(blackKeys, key => ({ x: key.start, width: key.end - key.start })));
+        assert.ok(blackFills.every(operation => operation.y === plotHeight &&
+          Math.abs(operation.height - 28 * dpr) < 1e-9));
+        const whiteBaseIndex = operations.findIndex(operation => operation.type === 'fillRect' &&
+          operation.y === plotHeight && operation.width === width && operation.height === 44.8 * dpr);
+        const firstBlackIndex = operations.findIndex(operation => operation.type === 'fillRect' &&
+          operation.style === 'rgb(34, 34, 34)');
+        assert.ok(whiteBaseIndex >= 0 && whiteBaseIndex < firstBlackIndex);
+        assert.ok(operations.some(operation => operation.type === 'stroke' &&
+          operation.style === 'stub:graph-label' && operation.lineWidth === dpr));
+        assert.deepEqual(Array.from(plugin.spectrum), spectrum);
+        assert.deepEqual(Array.from(plugin.peaks), peaks);
+
+        operations.length = 0;
+        plugin.canvas.height = 40 * dpr;
+        plugin.drawGraph(0);
+        assert.equal(operations.some(operation => operation.type === 'fillText' && /^C\d+$/.test(operation.text)), false);
+        assert.equal(operations.find(operation => operation.type === 'fillText' && operation.text === 'Frequency (Hz)').y, 32 * dpr);
+      }
+    }
+  }
 });

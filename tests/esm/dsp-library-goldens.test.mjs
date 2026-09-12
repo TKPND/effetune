@@ -18,10 +18,10 @@ import {
 } from '../../tools/verify-dsp-library-goldens.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const GOLDEN_CASE_COUNT = 940;
-const EFFECT_COUNT = 100;
-const WORKLET_GOLDEN_CASE_COUNT = 102;
-const NON_IDENTITY_EFFECT_COUNT = 94;
+const GOLDEN_CASE_COUNT = 946;
+const EFFECT_COUNT = 101;
+const WORKLET_GOLDEN_CASE_COUNT = 103;
+const NON_IDENTITY_EFFECT_COUNT = 95;
 
 test('MCP acceptance preserves eight-channel aggregates and defaults only their extended slots', async () => {
   const { cases } = await discoverFrozenGoldenCases(repoRoot);
@@ -461,8 +461,8 @@ test('frozen DSP library acceptance inventory stays complete', async () => {
   // events for its recording-mode switches. Phase Select EQ Balance selection adds three
   // cases, including one event case with two boundary changes.
   // Multiband crossover normalization regression cases add sixteen parameter events.
-  assert.equal(inventory.eventCases, 152);
-  assert.equal(inventory.eventCount, 531);
+  assert.equal(inventory.eventCases, 153);
+  assert.equal(inventory.eventCount, 534);
   assert.deepEqual(inventory.sampleRates, [
     32000,
     44100,

@@ -30,6 +30,10 @@ const SPECTROGRAM_COLOR_STOPS = [
     { pos: 1.000, r: 255, g: 255, b: 255 }
 ];
 const SPECTROGRAM_COLOR_BRIGHTNESS = 0.75;
+const SPECTROGRAM_GRID_COLOR = '#888'; // theme-allow: Fixed overlay on the Spectrogram colormap.
+const SPECTROGRAM_KEYBOARD_GRID_COLOR = '#444'; // theme-allow: Fixed keyboard overlay on the Spectrogram colormap.
+const SPECTROGRAM_LABEL_COLOR = '#ccc'; // theme-allow: Fixed label on the Spectrogram colormap.
+const SPECTROGRAM_AXIS_COLOR = '#fff'; // theme-allow: Fixed axis title on the Spectrogram colormap.
 
 class SpectrogramPlugin extends PluginBase {
     constructor() {
@@ -39,6 +43,7 @@ class SpectrogramPlugin extends PluginBase {
         this.dr = -96;
         this.pt = 12;  // exponent for FFT size (2^pt)
         this.sc = 'log';
+        this.kb = false;
         const fftSize = 1 << this.pt; // using bit shift for power of 2
         this.spectrum = new Float32Array(fftSize >> 1).fill(-144);
         this.lastProcessTime = performance.now() / 1000;
@@ -271,6 +276,14 @@ class SpectrogramPlugin extends PluginBase {
         this.updateParameters();
     }
 
+    setKeyboardVisible(value) {
+        const visible = value === true;
+        if (visible === this.kb) return;
+        this.kb = visible;
+        this.updateParameters();
+        this.drawGraph();
+    }
+
     setFrequencyScale(value) {
         const scale = value === 'linear' ? 'linear' : 'log';
         if (scale === this.sc) return;
@@ -296,6 +309,7 @@ class SpectrogramPlugin extends PluginBase {
         this.spectrogramBuffer.fill(-144);
         this.resetDspSpectrogramHistory();
         this.setFrequencyScale('log');
+        this.setKeyboardVisible(false);
         this.clearSpectrogramImage();
         this.prevTime = null;
         this.updateParameters();
@@ -308,6 +322,7 @@ class SpectrogramPlugin extends PluginBase {
             enabled: this.enabled,
             dr: this.dr,
             pt: this.pt,
+            kb: this.kb,
             sc: this.sc
         };
     }
@@ -316,6 +331,7 @@ class SpectrogramPlugin extends PluginBase {
         if (params.enabled !== undefined) this.enabled = params.enabled;
         if (params.dr !== undefined) this.setDBRange(params.dr);
         if (params.pt !== undefined) this.setPoints(params.pt);
+        if (params.kb !== undefined) this.setKeyboardVisible(params.kb);
         if (params.sc !== undefined) this.setFrequencyScale(params.sc);
         this.updateParameters();
     }
@@ -676,6 +692,9 @@ class SpectrogramPlugin extends PluginBase {
             this.sc,
             value => this.setFrequencyScale(value), 'sc'
         ));
+        container.appendChild(this.createCheckboxControl(
+            'Keyboard', this.kb, value => this.setKeyboardVisible(value), 'kb'
+        ));
 
         const { container: graphContainer, canvas, dispose } = this.createResponsiveGraph({
             maxWidth: 1024,
@@ -926,6 +945,106 @@ class SpectrogramPlugin extends PluginBase {
         );
     }
 
+    getKeyboardGeometry(length) {
+        const minMidi = 69 + 12 * Math.log2(SPECTROGRAM_MIN_DISPLAY_FREQ / 440);
+        const maxMidi = 69 + 12 * Math.log2(SPECTROGRAM_MAX_DISPLAY_FREQ / 440);
+        const blackClasses = [1, 3, 6, 8, 10];
+        const isBlack = midi => blackClasses.includes((midi % 12 + 12) % 12);
+        const position = midi => {
+            const frequency = 440 * 2 ** ((midi - 69) / 12);
+            return Math.max(0, Math.min(length, this.freqToY(frequency) / 255 * length));
+        };
+        const keys = [];
+        for (let midi = Math.ceil(minMidi - 0.5); midi <= Math.floor(maxMidi + 0.5); midi++) {
+            const black = isBlack(midi);
+            const lower = position(midi - 0.5);
+            const upper = position(midi + 0.5);
+            const previousWhite = midi - (isBlack(midi - 1) ? 2 : 1);
+            const nextWhite = midi + (isBlack(midi + 1) ? 2 : 1);
+            const whiteLower = position((previousWhite + midi) / 2);
+            const whiteUpper = position((midi + nextWhite) / 2);
+            keys.push({
+                midi, black, center: position(midi),
+                start: Math.min(lower, upper), end: Math.max(lower, upper),
+                whiteStart: Math.min(whiteLower, whiteUpper),
+                whiteEnd: Math.max(whiteLower, whiteUpper)
+            });
+        }
+        return keys;
+    }
+
+    drawKeyboard(ctx, width, height, gutter, dpr, labelFontSize) {
+        const background = (window.ThemePalette?.get('graph-bg-deep') ?? '')
+            .match(/[\d.]+/g)?.slice(0, 3).map(Number);
+        if (!background || background.length !== 3) return;
+        const light = background.every(channel => channel > 127);
+        const white = light ? 255 : 221;
+        const whiteColor = 'rgb(' + white + ', ' + white + ', ' + white + ')'; // theme-allow: Theme-dependent keyboard color.
+        const black = 34;
+        const keys = this.getKeyboardGeometry(height);
+        const edge = width - gutter;
+        const blackDepth = gutter / 1.6;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(edge, 0, gutter, height);
+        ctx.clip();
+        // A continuous white base keeps subpixel keys aligned without gaps.
+        ctx.fillStyle = whiteColor;
+        ctx.fillRect(edge, 0, gutter, height);
+        ctx.strokeStyle = (window.ThemePalette?.get('graph-label') ?? '');
+        ctx.lineWidth = dpr;
+        for (const key of keys) {
+            if (key.black || key.whiteStart <= 0 || key.whiteStart >= height) continue;
+            ctx.beginPath();
+            ctx.moveTo(edge, key.whiteStart);
+            ctx.lineTo(width, key.whiteStart);
+            ctx.stroke();
+        }
+        ctx.fillStyle = 'rgb(' + black + ', ' + black + ', ' + black + ')'; // theme-allow: Fixed self-painted black key color.
+        for (const key of keys) {
+            if (!key.black) continue;
+            ctx.fillRect(edge, key.start, blackDepth, key.end - key.start);
+        }
+        ctx.beginPath();
+        ctx.moveTo(edge, 0);
+        ctx.lineTo(edge, height);
+        ctx.stroke();
+        ctx.fillStyle = '#111'; // theme-allow: Text on the self-painted white keys.
+        ctx.strokeStyle = whiteColor;
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.lineJoin = 'round';
+        ctx.font = labelFontSize + 'px Arial';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        const labelCenter = edge + blackDepth + (gutter - blackDepth) / 2;
+        const labelRight = Math.min(
+            labelCenter + ctx.measureText('8').width / 2,
+            width - ctx.lineWidth / 2 - dpr
+        );
+        for (const key of keys) {
+            if (key.midi % 12 !== 0) continue;
+            const label = String(key.midi / 12 - 1);
+            const center = (key.whiteStart + key.whiteEnd) / 2;
+            if (center <= 0 || center >= height) continue;
+            ctx.strokeText(label, labelRight, center);
+            ctx.fillText(label, labelRight, center);
+        }
+        ctx.restore();
+    }
+
+    drawKeyboardGrid(ctx, plotWidth, height, dpr) {
+        ctx.lineWidth = dpr;
+        for (const key of this.getKeyboardGeometry(height)) {
+            const pitchClass = (key.midi % 12 + 12) % 12;
+            if (pitchClass !== 0) continue;
+            ctx.strokeStyle = SPECTROGRAM_KEYBOARD_GRID_COLOR;
+            ctx.beginPath();
+            ctx.moveTo(0, key.end);
+            ctx.lineTo(plotWidth, key.end);
+            ctx.stroke();
+        }
+    }
+
     drawGraph(now = performance.now()) {
         if (!this.canvasCtx || !this.imageDataCache || !this.tempCtx || !this.tempCanvas) return;
 
@@ -934,14 +1053,24 @@ class SpectrogramPlugin extends PluginBase {
         const targetHeight = this.canvas.height; // Display canvas height
         const dpr = this.graphDpr || 1;
         const isNarrow = this.graphCssWidth < 500;
+        const frequencyLabelFontSize = (isNarrow ? 11 : 12) * dpr;
+        const keyboardGutter = this.kb && targetWidth > 28 * dpr ? 28 * dpr : 0;
+        const plotWidth = targetWidth - keyboardGutter;
         
-        ctx.fillStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
-        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        const background = this.spectrogramColorLut;
+        ctx.fillStyle = `rgb(${background[0]}, ${background[1]}, ${background[2]})`; // theme-allow: Spectrogram colormap background.
+        ctx.fillRect(0, 0, plotWidth, targetHeight);
         
+        if (keyboardGutter) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, plotWidth, targetHeight);
+            ctx.clip();
+        }
         const displayTime = this.getSpectrogramDisplayTime(now);
         this.scrollAnchorPending = false;
         const period = this.spectrogramColumnPeriod;
-        const pixelsPerSecond = period > 0 ? targetWidth / (SPECTROGRAM_HISTORY_WIDTH * period) : 0;
+        const pixelsPerSecond = period > 0 ? plotWidth / (SPECTROGRAM_HISTORY_WIDTH * period) : 0;
         if (displayTime !== null && period > 0) {
             if (!this.dspSpectrogramActive) this.tempCtx.putImageData(this.imageDataCache, 0, 0);
             const count = this.spectrogramColumnCount;
@@ -960,9 +1089,9 @@ class SpectrogramPlugin extends PluginBase {
                     Math.abs(this.spectrogramColumnTimes[column + run] - time - run * period) <= tolerance) {
                     run++;
                 }
-                const x = targetWidth + (time - period - displayTime) * pixelsPerSecond;
+                const x = plotWidth + (time - period - displayTime) * pixelsPerSecond;
                 const width = run * period * pixelsPerSecond;
-                if (x < targetWidth && x + width > 0) {
+                if (x < plotWidth && x + width > 0) {
                     ctx.drawImage(this.tempCanvas, column, 0, run, SPECTROGRAM_CELL_COUNT,
                         x, 0, width, targetHeight);
                 }
@@ -977,64 +1106,68 @@ class SpectrogramPlugin extends PluginBase {
                 const width = (period + displayTime - this.prevTime) * pixelsPerSecond;
                 ctx.imageSmoothingEnabled = false;
                 ctx.drawImage(this.tempCanvas, latestColumn, 0, 1, SPECTROGRAM_CELL_COUNT,
-                    targetWidth - width, 0, width, targetHeight);
+                    plotWidth - width, 0, width, targetHeight);
                 ctx.imageSmoothingEnabled = true;
             }
         }
 
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-tone-50') ?? '');
-        ctx.lineWidth = dpr; // Thinner than spectrum analyzer grid for less prominence
+        if (keyboardGutter) {
+            this.drawKeyboardGrid(ctx, plotWidth, targetHeight, dpr);
+        } else {
+            ctx.strokeStyle = SPECTROGRAM_GRID_COLOR;
+            ctx.lineWidth = dpr; // Thinner than spectrum analyzer grid for less prominence
 
-        // --- Dynamic Frequency Grid for Spectrogram Y-Axis ---
-        const minDisplayFreq = SPECTROGRAM_MIN_DISPLAY_FREQ;
-        const nyquistFreq = this.sampleRate / 2;
-        const maxDisplayFreq = SPECTROGRAM_MAX_DISPLAY_FREQ;
+            // --- Dynamic Frequency Grid for Spectrogram Y-Axis ---
+            const minDisplayFreq = SPECTROGRAM_MIN_DISPLAY_FREQ;
+            const nyquistFreq = this.sampleRate / 2;
+            const maxDisplayFreq = SPECTROGRAM_MAX_DISPLAY_FREQ;
 
-        if (this.sampleRate > 0 && nyquistFreq > minDisplayFreq) {
-            // Base frequencies for labels, filter/adjust based on dynamic range
-            let baseGridFreqs = this.sc === 'linear'
-                ? (isNarrow
-                    ? [20, 10000, 20000, 30000, 40000]
-                    : [20, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000])
-                : (isNarrow
-                    ? [20, 100, 1000, 10000, 20000]
-                    : [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]);
-            let gridFreqsToDraw = baseGridFreqs.filter(f => f >= minDisplayFreq && f <= maxDisplayFreq);
-            // Ensure min/max are candidates if not present, then sort.
-            if (!gridFreqsToDraw.includes(minDisplayFreq) && minDisplayFreq > 0) gridFreqsToDraw.push(minDisplayFreq);
-            if (!gridFreqsToDraw.includes(maxDisplayFreq)) gridFreqsToDraw.push(maxDisplayFreq);
-            gridFreqsToDraw = [...new Set(gridFreqsToDraw)].sort((a,b) => a-b);
+            if (this.sampleRate > 0 && nyquistFreq > minDisplayFreq) {
+                // Base frequencies for labels, filter/adjust based on dynamic range
+                let baseGridFreqs = this.sc === 'linear'
+                    ? (isNarrow
+                        ? [20, 10000, 20000, 30000, 40000]
+                        : [20, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000])
+                    : (isNarrow
+                        ? [20, 100, 1000, 10000, 20000]
+                        : [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]);
+                let gridFreqsToDraw = baseGridFreqs.filter(f => f >= minDisplayFreq && f <= maxDisplayFreq);
+                // Ensure min/max are candidates if not present, then sort.
+                if (!gridFreqsToDraw.includes(minDisplayFreq) && minDisplayFreq > 0) gridFreqsToDraw.push(minDisplayFreq);
+                if (!gridFreqsToDraw.includes(maxDisplayFreq)) gridFreqsToDraw.push(maxDisplayFreq);
+                gridFreqsToDraw = [...new Set(gridFreqsToDraw)].sort((a,b) => a-b);
 
-            ctx.fillStyle = (window.ThemePalette?.get('graph-label-strong') ?? '');
-            ctx.font = `${(isNarrow ? 11 : 12) * dpr}px Arial`; // Consistent font size
-            ctx.textAlign = 'right';
+                ctx.fillStyle = SPECTROGRAM_LABEL_COLOR;
+                ctx.font = `${frequencyLabelFontSize}px Arial`; // Consistent font size
+                ctx.textAlign = 'right';
 
-            gridFreqsToDraw.forEach(freq => {
-                // freqToY gives pixel row 0-255. Scale this to targetHeight for drawing.
-                // Note: freqToY maps low freq to high Y (bottom), high freq to low Y (top).
-                const yPixelRow = this.freqToY(freq); 
-                const yDrawPos = (yPixelRow / 255) * targetHeight;
+                gridFreqsToDraw.forEach(freq => {
+                    // freqToY gives pixel row 0-255. Scale this to targetHeight for drawing.
+                    // Note: freqToY maps low freq to high Y (bottom), high freq to low Y (top).
+                    const yPixelRow = this.freqToY(freq);
+                    const yDrawPos = (yPixelRow / 255) * targetHeight;
 
-                // Draw grid line
-                ctx.beginPath();
-                ctx.moveTo(0, yDrawPos);
-                ctx.lineTo(targetWidth, yDrawPos); // Full width grid line
-                ctx.stroke();
+                    // Draw grid line
+                    ctx.beginPath();
+                    ctx.moveTo(0, yDrawPos);
+                    ctx.lineTo(plotWidth, yDrawPos); // Full width grid line
+                    ctx.stroke();
                 
-                // Draw label, avoid edges
-                if (yDrawPos > 15 * dpr && yDrawPos < targetHeight - 15 * dpr) {
-                     ctx.fillText(freq >= 1000 ? `${Math.round(freq / 100)/10}k` : freq.toString(), (isNarrow ? 46 : 80) * dpr, yDrawPos + (6 * dpr)); // Adjust offset
-                }
-            });
+                    // Draw label, avoid edges
+                    if (yDrawPos > 15 * dpr && yDrawPos < targetHeight - 15 * dpr) {
+                        ctx.fillText(freq >= 1000 ? `${Math.round(freq / 100)/10}k` : freq.toString(), (isNarrow ? 46 : 80) * dpr, yDrawPos + (6 * dpr)); // Adjust offset
+                    }
+                });
+            }
         }
 
         // Draw 1-second markers
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-tone-50') ?? '');
+        ctx.strokeStyle = SPECTROGRAM_GRID_COLOR;
         ctx.lineWidth = 2 * dpr;
         const firstSecond = displayTime === null ? 1 : Math.max(0, Math.ceil(displayTime - period * SPECTROGRAM_HISTORY_WIDTH));
         const lastSecond = displayTime === null ? 0 : Math.floor(displayTime);
         for (let second = firstSecond; second <= lastSecond; second++) {
-            const x = targetWidth + (second - displayTime) * pixelsPerSecond;
+            const x = plotWidth + (second - displayTime) * pixelsPerSecond;
             ctx.beginPath();
             ctx.moveTo(x, targetHeight - (16 * dpr));
             ctx.lineTo(x, targetHeight);
@@ -1042,12 +1175,20 @@ class SpectrogramPlugin extends PluginBase {
         }
 
         // Draw axis labels
-        ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? ''); ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
-        ctx.fillText('Time', targetWidth / 2, targetHeight - (8 * dpr));
-        ctx.save();
-        ctx.translate((isNarrow ? 18 : 20) * dpr, targetHeight / 2); ctx.rotate(-Math.PI / 2);
-        ctx.fillText('Frequency (Hz)', 0, 0);
-        ctx.restore();
+        ctx.fillStyle = SPECTROGRAM_AXIS_COLOR; ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
+        ctx.fillText('Time', plotWidth / 2, targetHeight - (8 * dpr));
+        if (!keyboardGutter) {
+            ctx.save();
+            ctx.translate((isNarrow ? 18 : 20) * dpr, targetHeight / 2); ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Frequency (Hz)', 0, 0);
+            ctx.restore();
+        }
+        if (keyboardGutter) {
+            ctx.restore();
+            this.drawKeyboard(
+                ctx, targetWidth, targetHeight, keyboardGutter, dpr, frequencyLabelFontSize
+            );
+        }
     }
 }
 

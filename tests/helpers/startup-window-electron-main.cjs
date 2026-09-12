@@ -35,6 +35,7 @@ globalThis.startupWindowResults = app.whenReady().then(async () => {
       // the initial page load, before the hidden window is presented.
       ipcHandlers.createMenu();
       await Promise.all([load, readyToShow]);
+      prepared.contentSize = window.getContentSize();
       const firstClientSize = await window.webContents.executeJavaScript('[innerWidth, innerHeight]');
       const presentationShows = [];
       window.on('show', () => presentationShows.push({

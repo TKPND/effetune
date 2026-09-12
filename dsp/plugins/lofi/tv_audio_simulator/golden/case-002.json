@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "type": "TVAudioSimulatorPlugin",
+  "id": "btsc-stereo-weak-signal",
+  "stimulus": "sweep",
+  "sampleRate": 96000,
+  "channels": 2,
+  "frameCount": 8193,
+  "blockSize": 128,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 1,
+  "seed": "0xeffe7a5f",
+  "params": {
+    "rd": true,
+    "ss": "M/BTSC",
+    "tx": "Stereo",
+    "pr": 3,
+    "st": 19,
+    "tn": 0,
+    "bw": 230,
+    "mp": 0,
+    "dl": 5,
+    "fd": 0,
+    "sm": "Auto",
+    "bz": -80,
+    "og": 0,
+    "mx": 100,
+    "fr": true
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.0001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "7ead7bf6c85d915fac3c7921411aa7612d7d7ffa7cff90ebe4e85afc983ca26f",
+  "outputFloats": 16386,
+  "byteLength": 65544,
+  "binary": "case-002.f32"
+}

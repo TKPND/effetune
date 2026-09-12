@@ -17,6 +17,7 @@ const MULTI_F0_LEVEL_RANGE_DB = 24;
 const MULTI_F0_LEVEL_CEILING_DB = -36;
 const MULTI_F0_METER_RELEASE_DB_PER_SECOND = 20;
 const MULTI_F0_RANGE_HOLD_SECONDS = 1;
+const MULTI_F0_VOLUME_RELIEF = 0.06;
 const MULTI_F0_COLORS = [
     { value: 'Normal', label: 'Normal' },
     { value: 'Rainbow', label: 'Note Colors' }
@@ -185,6 +186,7 @@ class NoteSpectrogramPlugin extends PluginBase {
         }
         if (MULTI_F0_LAYOUTS.includes(params.ly) && params.ly !== this.ly) {
             this.ly = params.ly;
+            this.volumeHistoryDirty = true;
             this.drawGraph();
         }
         if (params.vl !== undefined && (params.vl === true) !== this.vl) {
@@ -885,12 +887,23 @@ class NoteSpectrogramPlugin extends PluginBase {
         const top = center - thickness / 2;
         const bottom = center + thickness / 2;
         const gradient = context.createLinearGradient(0, top - fade, 0, bottom + fade);
-        const opaque = `rgba(${red}, ${green}, ${blue}, 1)`; // theme-allow: RGB channels blend the active theme background and trace colors.
+        const highlightRed = Math.round(red + (255 - red) * MULTI_F0_VOLUME_RELIEF);
+        const highlightGreen = Math.round(green + (255 - green) * MULTI_F0_VOLUME_RELIEF);
+        const highlightBlue = Math.round(blue + (255 - blue) * MULTI_F0_VOLUME_RELIEF);
+        const shadowRed = Math.round(red * (1 - MULTI_F0_VOLUME_RELIEF));
+        const shadowGreen = Math.round(green * (1 - MULTI_F0_VOLUME_RELIEF));
+        const shadowBlue = Math.round(blue * (1 - MULTI_F0_VOLUME_RELIEF));
+        const highlightOpaque = `rgba(${highlightRed}, ${highlightGreen}, ${highlightBlue}, 1)`; // theme-allow: RGB channels add subtle relief to the active trace color.
+        const shadowOpaque = `rgba(${shadowRed}, ${shadowGreen}, ${shadowBlue}, 1)`; // theme-allow: RGB channels add subtle relief to the active trace color.
         const transparent = `rgba(${red}, ${green}, ${blue}, 0)`; // theme-allow: RGB channels blend the active theme background and trace colors.
         const fadeRatio = fade / (thickness + 2 * fade);
+        const firstOpaque = this.ly === 'Horizontal' ? shadowOpaque : highlightOpaque;
+        const secondOpaque = this.ly === 'Horizontal' ? highlightOpaque : shadowOpaque;
         gradient.addColorStop(0, transparent);
-        gradient.addColorStop(fadeRatio, opaque);
-        gradient.addColorStop(1 - fadeRatio, opaque);
+        gradient.addColorStop(fadeRatio, firstOpaque);
+        gradient.addColorStop(0.5, firstOpaque);
+        gradient.addColorStop(0.5, secondOpaque);
+        gradient.addColorStop(1 - fadeRatio, secondOpaque);
         gradient.addColorStop(1, transparent);
         context.fillStyle = gradient;
         context.fillRect(column, top - fade, 1, thickness + 2 * fade);

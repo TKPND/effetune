@@ -504,6 +504,60 @@ class PresetAndAssetTests(unittest.TestCase):
                         }
                     )
 
+    def test_legacy_analyzer_keyboard_display_state_is_validated_and_discarded(
+        self,
+    ) -> None:
+        for name in ("Spectrum Analyzer", "Spectrogram"):
+            for keyboard in (True, False):
+                with self.subTest(name=name, keyboard=keyboard):
+                    chain, _ = effetune.Chain.from_legacy_preset(
+                        {"pipeline": [{"name": name, "parameters": {"kb": keyboard}}]}
+                    )
+                    self.assertNotIn("kb", chain.effects[0].parameters)
+            with self.subTest(name=name, keyboard="invalid"):
+                with self.assertRaisesRegex(
+                    effetune.ValidationError,
+                    r"invalid keyboard display state",
+                ):
+                    effetune.Chain.from_legacy_preset(
+                        {"pipeline": [{"name": name, "parameters": {"kb": 1}}]}
+                    )
+
+    def test_legacy_spectrum_analyzer_display_mode_is_validated_and_discarded(
+        self,
+    ) -> None:
+        for mode in ("line", "bar"):
+            with self.subTest(mode=mode):
+                chain, _ = effetune.Chain.from_legacy_preset(
+                    {
+                        "pipeline": [
+                            {"name": "Spectrum Analyzer", "parameters": {"dm": mode}}
+                        ]
+                    }
+                )
+                self.assertNotIn("dm", chain.effects[0].parameters)
+        with self.assertRaisesRegex(
+            effetune.ValidationError,
+            r"invalid display mode state",
+        ):
+            effetune.Chain.from_legacy_preset(
+                {
+                    "pipeline": [
+                        {
+                            "name": "Spectrum Analyzer",
+                            "parameters": {"dm": "invalid"},
+                        }
+                    ]
+                }
+            )
+        with self.assertRaisesRegex(
+            effetune.ValidationError,
+            r"legacy Spectrogram contains unsupported fields: dm",
+        ):
+            effetune.Chain.from_legacy_preset(
+                {"pipeline": [{"name": "Spectrogram", "parameters": {"dm": "bar"}}]}
+            )
+
     def test_legacy_null_channel_preserves_stereo_and_unsupported_routing_fails(self) -> None:
         chain, _ = effetune.Chain.from_legacy_preset(
             {

@@ -482,3 +482,151 @@ test('Spectrum Overlay follows every real graph through the complete plugin CSS 
       await browser.close();
     }
   });
+
+const layoutTargets = [
+  { name: 'IRReverbPlugin', path: 'reverb/ir_reverb' },
+  { name: 'MultibandCompressorPlugin', path: 'dynamics/multiband_compressor', prefix: 'multiband-compressor-band' },
+  { name: 'MultibandExpanderPlugin', path: 'dynamics/multiband_expander', prefix: 'multiband-expander-band' },
+  { name: 'MultibandTransientPlugin', path: 'dynamics/multiband_transient', prefix: 'mbt-band' },
+  { name: 'MultibandSaturationPlugin', path: 'saturation/multiband_saturation', prefix: 'mbs-band' },
+  { name: 'FifteenBandPEQPlugin', path: 'eq/fifteen_band_peq', prefix: 'fifteen-band-peq-band' },
+  { name: 'FiveBandDynamicEQ', path: 'eq/five_band_dynamic_eq', prefix: 'fbdyn-band' },
+  { name: 'VinylSimulatorPlugin', path: 'lofi/vinyl_simulator', prefix: 'vinyl-simulator-tab', button: '.vinyl-simulator-tab' },
+  { name: 'AMRadioSimulatorPlugin', path: 'lofi/am_radio_simulator', prefix: 'am-radio-simulator-tab', button: '.am-radio-simulator-tab' },
+  { name: 'SWRadioSimulatorPlugin', path: 'lofi/sw_radio_simulator', prefix: 'sw-radio-simulator-tab', button: '.sw-radio-simulator-tab' },
+  { name: 'TubeSimulatorPlugin', path: 'saturation/tube_simulator', prefix: 'tube-simulator-tab', button: '.tube-simulator-tab' },
+  { name: 'RoomEqPlugin', path: 'eq/room_eq', prefix: 'room-eq-tab', button: '.room-eq-tab' }
+];
+
+test('effect rows align single-line controls and tabs retain the largest default page',
+  { timeout: 60_000 }, async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const scripts = await Promise.all([
+        'plugins/theme-palette.js', 'plugins/plugin-base.js',
+        'plugins/graph-point-interaction.js',
+        ...layoutTargets.map(({ path }) => `plugins/${path}.js`)
+      ].map(path => fs.readFile(path, 'utf8')));
+
+      for (const width of [1280, 390]) {
+        const page = await browser.newPage({ viewport: { width, height: 1000 } });
+        try {
+          await page.setContent('<main class="pipeline-item"><div class="plugin-ui expanded"></div></main>');
+          await page.evaluate(mobile => {
+            document.body.classList.toggle('layout-mobile', mobile);
+            document.documentElement.classList.toggle('layout-mobile', mobile);
+            window.audioContext = { sampleRate: 48000, destination: { channelCount: 2 } };
+            window.audioManager = { pipeline: [] };
+            window.workletNode = {
+              port: { addEventListener() {}, removeEventListener() {}, postMessage() {} }
+            };
+          }, width < 1159);
+          await loadCssInApplicationOrder(page);
+          for (const content of scripts) await page.addScriptTag({ content });
+
+          const expectedHeight = width === 1280 ? 26 : 40;
+          const shared = await page.evaluate(() => {
+            const plugin = new PluginBase('Layout', 'Single-line controls');
+            const container = document.createElement('div');
+            container.className = 'plugin-parameter-ui';
+            container.append(
+              plugin.createParameterControl('Level', 0, 100, 1, 50, () => {}),
+              plugin.createSelectControl('Mode', ['A', 'B'], 'A', () => {}),
+              plugin.createCheckboxControl('Enable', true, () => {}),
+              plugin.createRadioGroup('Type', ['A', 'B'], 'A', () => {})
+            );
+            const textRow = document.createElement('div');
+            textRow.className = 'parameter-row';
+            textRow.innerHTML = '<label for="layout-text">Name:</label><input id="layout-text" type="text" value="Example">';
+            container.append(textRow);
+            document.querySelector('.plugin-ui').replaceChildren(container);
+            return {
+              rows: [...container.children].map(element => element.getBoundingClientRect().height),
+              fields: [...container.querySelectorAll('input[type="number"], input[type="text"], select')]
+                .map(element => element.getBoundingClientRect().height),
+              glyphs: [...container.querySelectorAll('input[type="checkbox"], input[type="radio"]')]
+                .map(element => element.getBoundingClientRect().height)
+            };
+          });
+          assert.deepEqual(shared.rows, Array(5).fill(expectedHeight), `${width}px shared row heights`);
+          assert.deepEqual(shared.fields, Array(3).fill(expectedHeight), `${width}px shared field heights`);
+          assert.ok(shared.glyphs.every(height => height < expectedHeight), 'choice glyphs retain their compact size');
+
+          for (const target of layoutTargets) {
+            const { name, prefix } = target;
+            const result = await page.evaluate(async ({ name, prefix, button: buttonSelector }) => {
+              const root = document.querySelector('.plugin-ui');
+              root.replaceChildren();
+              const plugin = new window[name]();
+              plugin.id = 1;
+              window.audioManager.pipeline = [plugin];
+              root.append(plugin.createUI());
+              await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+              try {
+                const fields = [...root.querySelectorAll('input[type="number"], input[type="text"], select')]
+                  .filter(element => element.getClientRects().length)
+                  .map(element => ({ className: element.className, height: element.getBoundingClientRect().height }));
+                const checkboxRows = [...root.querySelectorAll('.checkbox-row')]
+                  .filter(element => element.getClientRects().length)
+                  .map(element => ({
+                    height: element.getBoundingClientRect().height,
+                    labelHeight: element.querySelector('label').getBoundingClientRect().height,
+                    label: element.textContent
+                  }));
+                if (!prefix) return { fields, checkboxRows, pages: [] };
+                const contents = root.querySelector(`.${prefix}-contents`);
+                const panels = [...contents.querySelectorAll(`.${prefix}-content`)];
+                const buttons = [...root.querySelectorAll(buttonSelector || `.${prefix}-tab`)];
+                const pages = [];
+                // Tab handlers update synchronously. Compare within one frame so an
+                // unrelated HUD ResizeObserver or animation cannot change the baseline.
+                for (const button of buttons) {
+                  const rootHeightBefore = root.getBoundingClientRect().height;
+                  button.click();
+                  const bounds = contents.getBoundingClientRect();
+                  pages.push({
+                    rootHeight: root.getBoundingClientRect().height,
+                    rootHeightBefore,
+                    contentsHeight: bounds.height,
+                    settingsHeight: contents.parentElement.getBoundingClientRect().height,
+                    panelHeights: panels.map(panel => panel.getBoundingClientRect().height),
+                    allPanelsMeasured: panels.every(panel => panel.getClientRects().length > 0),
+                    oneVisible: panels.filter(panel => getComputedStyle(panel).visibility === 'visible').length === 1,
+                    fits: panels.every(panel => {
+                      const rect = panel.getBoundingClientRect();
+                      return rect.top >= bounds.top - 0.1 && rect.bottom <= bounds.bottom + 0.1 &&
+                        panel.scrollHeight <= panel.clientHeight + 1;
+                    })
+                  });
+                }
+                return { fields, checkboxRows, pages };
+              } finally {
+                plugin.cleanup?.();
+              }
+            }, target);
+            for (const field of result.fields) {
+              assert.equal(field.height, expectedHeight, `${width}px ${name} ${field.className} field height`);
+            }
+            for (const { height, labelHeight, label } of result.checkboxRows) {
+              assert.equal(height, Math.max(expectedHeight, labelHeight), `${width}px ${name} checkbox row height ${label}`);
+            }
+            if (prefix) assert.ok(result.pages.length > 1, `${name} default tabs exist`);
+            for (const pageState of result.pages) {
+              assert.equal(pageState.rootHeight, pageState.rootHeightBefore, `${width}px ${name} switching preserves plugin height`);
+              assert.equal(pageState.rootHeight, result.pages[0].rootHeight, `${width}px ${name} stable plugin height`);
+              assert.equal(pageState.contentsHeight, result.pages[0].contentsHeight, `${width}px ${name} stable tab height`);
+              assert.equal(pageState.settingsHeight, result.pages[0].settingsHeight, `${width}px ${name} stable settings height`);
+              assert.deepEqual(pageState.panelHeights, result.pages[0].panelHeights, `${width}px ${name} stable panel heights`);
+              assert.ok(pageState.allPanelsMeasured, `${width}px ${name} reserves every page`);
+              assert.ok(pageState.oneVisible, `${width}px ${name} exposes only the selected page`);
+              assert.ok(pageState.fits, `${width}px ${name} default pages fit`);
+            }
+          }
+        } finally {
+          await page.close();
+        }
+      }
+    } finally {
+      await browser.close();
+    }
+  });

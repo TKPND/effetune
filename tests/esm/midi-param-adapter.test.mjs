@@ -164,7 +164,9 @@ test('ParamAdapter leaves identity enum and bool values unchanged', async () => 
   const adapter = new ParamAdapter();
   const cases = [
     ['DigitalErrorEmulatorPlugin', 'md', '5C'],
-    ['FMRadioSimulatorPlugin', 'rd', false]
+    ['FMRadioSimulatorPlugin', 'rd', false],
+    ['TVAudioSimulatorPlugin', 'rd', false],
+    ['TVAudioSimulatorPlugin', 'ss', 'I NICAM']
   ];
 
   for (const [type, key, value] of cases) {
@@ -208,6 +210,6 @@ test('ParamAdapter reachability matches the frozen exclusions for every generate
       assert.equal(changed, true, `${id} must change through the adapter`);
     }
   }
-  assert.equal(descriptorCount, 951);
+  assert.equal(descriptorCount, 965);
   assert.deepEqual(observedUnassignable, UNASSIGNABLE_DESCRIPTORS);
 });

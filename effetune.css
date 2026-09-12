@@ -1304,9 +1304,19 @@ body.layout-mobile #pipelineStats {
 .plugin-parameter-ui .parameter-row {
     display: flex;
     align-items: center;
+    min-height: 26px;
     flex-wrap: wrap;
     gap: 10px;
     margin: 2px 0;
+}
+
+body.layout-mobile .plugin-parameter-ui .parameter-row {
+    min-height: var(--et-mobile-control-height);
+}
+
+.plugin-parameter-ui .radio-group label {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 /* Keep wrapped setting labels within the standard control height. */
@@ -1327,6 +1337,8 @@ body.layout-mobile .plugin-parameter-ui .parameter-row:has(> input[type="number"
 .plugin-parameter-ui .parameter-row input[type="range"] {
     flex: 1 1 120px;
     min-width: 120px;
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .plugin-parameter-ui .parameter-row input[type="number"],
@@ -1339,8 +1351,11 @@ body.layout-mobile .plugin-parameter-ui .parameter-row:has(> input[type="number"
     border-radius: 4px;
 }
 
-/* Numeric controls and compact EQ fields share the standard desktop height. */
+/* Single-line effect fields and compact EQ fields share the standard desktop height. */
 body:not(.layout-mobile) :is(
+    .plugin-parameter-ui input[type="number"],
+    .plugin-parameter-ui input[type="text"],
+    .plugin-parameter-ui select,
     .plugin-parameter-ui .parameter-row input[type="number"],
     .pipeline-analyzer-panel input[type="number"],
     .five-band-peq-band input[type="number"],
@@ -4032,6 +4047,12 @@ body.layout-mobile :is(
 
 /* Keep every tab panel in the layout; the largest panel determines the height. */
 :is(
+    .multiband-compressor-band-contents,
+    .multiband-expander-band-contents,
+    .mbt-band-contents,
+    .mbs-band-contents,
+    .fifteen-band-peq-band-contents,
+    .fbdyn-band-contents,
     .vinyl-simulator-tab-contents,
     .am-radio-simulator-tab-contents,
     .sw-radio-simulator-tab-contents,
@@ -4042,6 +4063,12 @@ body.layout-mobile :is(
 }
 
 :is(
+    .multiband-compressor-band-content,
+    .multiband-expander-band-content,
+    .mbt-band-content,
+    .mbs-band-content,
+    .fifteen-band-peq-plugin-ui .fifteen-band-peq-band-content,
+    .fbdyn-band-content,
     .vinyl-simulator-tab-content,
     .am-radio-simulator-tab-content,
     .sw-radio-simulator-tab-content,
@@ -4050,6 +4077,21 @@ body.layout-mobile :is(
 ) {
     display: flex;
     grid-area: 1 / 1;
+}
+
+/* Override legacy panels that remove inactive pages from the layout. */
+:is(
+    .multiband-compressor-band-content,
+    .multiband-expander-band-content,
+    .mbt-band-content,
+    .mbs-band-content,
+    .fifteen-band-peq-plugin-ui .fifteen-band-peq-band-content,
+    .fbdyn-band-content
+):not(.active) {
+    display: flex;
+    flex-direction: column;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .vinyl-simulator-tab-content:not(.active),

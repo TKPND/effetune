@@ -26,6 +26,7 @@ Uma coleção de plugins que adicionam caráter vintage e qualidades nostálgica
 - [Simple Jitter](#simple-jitter) - Compara pequenas flutuações de clock ou acrescenta movimento criativo com valores altos
 - [SW Radio Simulator](#sw-radio-simulator) - Passa a música por uma cadeia modelada de transmissão em onda curta, propagação ionosférica e recepção
 - [Tape Artifacts](#tape-artifacts) - Grava a música em uma fita de rolo modelada e a reproduz
+- [TV Audio Simulator](#tv-audio-simulator) - Recria a recepção de áudio de TV analógica e NICAM
 - [Vinyl Artifacts](#vinyl-artifacts) - Adiciona estalos, crackle, hiss, rumble e vazamento de ruído estéreo no estilo vinil
 - [Vinyl Simulator](#vinyl-simulator) - Grava a entrada em um sulco modelado e a reproduz com uma agulha física simulada
 
@@ -885,6 +886,44 @@ Clique em **Predefinições de efeito** no cabeçalho do efeito para experimenta
    - Um som intencionalmente degradado, com forte movimento de afinação, aspereza, compressão e chiado.
 
 Tape Artifacts acrescenta cerca de 5 ms de atraso quando Mix está acima de 0%. Ele se concentra no timbre, na saturação, no chiado e no movimento do transporte da fita; não acrescenta quedas de sinal, ruído de emendas nem erros de alinhamento da cabeça.
+
+## TV Audio Simulator
+
+TV Audio Simulator passa a música pelo caminho de áudio de uma transmissão de televisão analógica ou digital NICAM. Use-o para comparar sistemas regionais e recriar a redução para mono, o ruído, a distorção de múltiplos percursos e o zumbido de televisores antigos. No NICAM, uma recepção digital instável acaba mudando para o áudio FM mono analógico associado.
+
+### Guia de ajuste
+
+- Escolha primeiro o Standard desejado e comece com Signal em 35 dBµV, Tuning em 0 kHz, Multipath e Fading em 0 e Mix em 100%.
+- Para um som de época bem recebido, aumente Signal e mantenha Tuning centralizado. Processing dá mais densidade ao caminho analógico, mas não ao caminho digital principal do NICAM.
+- Para uma recepção analógica difícil, reduza Signal e depois adicione Multipath ou um pequeno desvio de Tuning. Path Delay muda o caráter dessa distorção.
+- Em B/G NICAM ou I NICAM, reduza Signal aos poucos para ouvir a degradação digital e a mudança para FM mono. Video Buzz adiciona tons de 50/60 Hz; -80 dB o desliga.
+
+### Predefinições do sistema
+
+As nove predefinições cobrem Japão M/EIA-J, América do Norte M/BTSC, Coreia M/A2, Europa e Austrália A2, Reino Unido e países nórdicos NICAM, Europa Oriental D/K mono e França L/AM.
+
+### Parâmetros
+
+- **Broadcast**: Liga ou interrompe a transmissão modelada; desligado deixa o receptor em um canal vazio.
+- **Standard**: Seleciona o sistema de TV e, com ele, modulação, ênfase e a família de varredura de 50/60 Hz.
+- **Tx Mode**: Escolhe Stereo, Mono ou Dual. Combinações indisponíveis retornam ao programa principal mono.
+- **Processing**: Aumenta de 0 a 18 dB a compressão e a densidade analógicas; não afeta o caminho digital NICAM.
+- **Signal**: Ajusta a intensidade recebida de 0 a 70 dBµV. Reduzi-la aumenta ruído ou erros e pode acionar o fallback.
+- **Tuning**: Desloca a sintonia de -200 a +200 kHz; afastar-se de 0 estreita e distorce a recepção.
+- **IF Band**: Ajusta a faixa do receptor de 80 a 240 kHz. Uma faixa menor rejeita mais sinal fora de sintonia, mas pode cortar o programa.
+- **Multipath**: Adiciona um reflexo atrasado; valores maiores aumentam a coloração e a instabilidade estéreo.
+- **Path Delay**: Ajusta o atraso do reflexo de 0,5 a 50 µs e o espaçamento de seus picos e vales.
+- **Fading**: Ajusta de 0 a 20 Hz a velocidade das variações de recepção.
+- **Receive Mode**: `Auto` segue o caminho disponível; `Stereo`, `Main` e `Sub` solicitam um programa específico.
+- **Video Buzz**: Ajusta o zumbido de 50/60 Hz de -80 a -20 dB. -80 dB o desliga.
+- **Output Gain**: Ajusta o nível final de -24 a +24 dB.
+- **Mix**: Mistura o áudio original e o de televisão de 0% a 100%.
+
+### Leitura do HUD
+
+O HUD mostra o Standard e o caminho ativo: `STEREO`, `MAIN`, `SUB`, `NICAM`, `FALLBACK` ou `AM`. Carrier e CNR indicam nível e qualidade; Health indica se o caminho estéreo ou digital selecionado está disponível; Multipath, a profundidade do sinal refletido; e Errors, a taxa de erros de recepção por segundo. O espectro representa o multiplex FM recuperado, o áudio detectado em L AM ou a saída selecionada em NICAM.
+
+O modelo reproduz os efeitos audíveis do áudio de televisão, não um canal completo de imagem e radiofrequência nem um sinal de teste de transmissão.
 
 ## Vinyl Artifacts
 

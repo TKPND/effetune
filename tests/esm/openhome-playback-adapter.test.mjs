@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { setImmediate as delay } from 'node:timers/promises';
 import test from 'node:test';
 
@@ -9,6 +10,11 @@ import {
 import { AudioPlayer } from '../../js/ui/audio-player.js';
 import { PlaybackManager } from '../../js/ui/audio-player/playback-manager.js';
 import { CatalogSequence } from '../../js/ui/audio-player/playback-sequence.js';
+
+test('OpenHome gateway artwork is allowed by the renderer image policy', async () => {
+  const html = await readFile(new URL('../../effetune.html', import.meta.url), 'utf8');
+  assert.match(html, /img-src[^;]*http:\/\/127\.0\.0\.1:\*/);
+});
 
 function createStateManager(initial = {}) {
   const listeners = new Map();
@@ -381,6 +387,7 @@ test('OpenHome adapter keeps stable uint32 queue IDs and publishes an atomic IdA
     afterId: 1,
     uri: 'https://media.test/two.mp3',
     playbackUrl: 'http://127.0.0.1:43123/openhome-media/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    artworkUrl: 'http://127.0.0.1:43123/openhome-media/dddddddddddddddddddddddddddddddd',
     metadata: '<DIDL-Lite><item><title>Two</title></item></DIDL-Lite>'
   }), { requestId: 'insert-2', ok: true, result: { newId: 2 } });
 
@@ -393,6 +400,10 @@ test('OpenHome adapter keeps stable uint32 queue IDs and publishes an atomic IdA
   });
   assert.equal(harness.audioPlayer.playbackManager.playlist[0].path.startsWith('http://127.0.0.1:'), true);
   assert.equal(harness.audioPlayer.playbackManager.playlist.some(track => track.path === 'https://media.test/two.mp3'), false);
+  assert.equal(
+    harness.audioPlayer.playbackManager.playlist[1].meta.artworkUrl,
+    'http://127.0.0.1:43123/openhome-media/dddddddddddddddddddddddddddddddd'
+  );
 
   await runAction(harness, 'delete', 'DeleteId', { id: 1 });
   assert.deepEqual((await runAction(harness, 'ids-2', 'IdArray')).result, {
@@ -818,7 +829,7 @@ test('OpenHome shuffle repeat boundaries do not immediately replay the prior ent
   }
 });
 
-test('local Repeat ONE normalization preserves shuffled OpenHome order and transport', async () => {
+test('local repeat button turns Repeat ALL off while preserving shuffled OpenHome order and transport', async () => {
   const harness = createHarness();
   const manager = installRealPlaybackManager(harness);
   for (let index = 1; index <= 3; index += 1) {
@@ -844,7 +855,7 @@ test('local Repeat ONE normalization preserves shuffled OpenHome order and trans
 
   await manager.toggleRepeatMode();
 
-  assert.equal(harness.stateManager.state.repeatMode, 'ALL');
+  assert.equal(harness.stateManager.state.repeatMode, 'OFF');
   assert.equal(harness.stateManager.state.shuffleMode, true);
   assert.deepEqual(manager.playlist.map(track => track.sourceKey), order);
   assert.equal(harness.adapter.getSnapshot().currentId, currentId);

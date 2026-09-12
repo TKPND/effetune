@@ -783,15 +783,29 @@ function contractBadges(effect) {
 
 function effectPage(effect, docsEntry, appSection) {
   const slug = docsEntry.slug ?? slugForType(effect.type);
-  const concept = effect.assets.length
-    ? '\nSee [Assets and bundles](/dsp/concepts/assets-and-bundles/#asset-required-effects) before using this effect.\n'
-    : publicTelemetryTypes.has(effect.type)
-      ? '\nUse the opt-in decoded telemetry callback or subscription API to observe this analyzer. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).\n'
-      : effect.telemetry.length
-        ? '\nThis type has catalog telemetry metadata but no public observation API in v0.1. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).\n'
-      : docsEntry.sourceGenerating
-        ? '\nThis type can intentionally generate output from zero input at an active setting. See [Processing model](/dsp/concepts/processing-model/#source-generating-effects).\n'
-        : '';
+  const conceptNotices = [];
+  if (effect.assets.length) {
+    conceptNotices.push(
+      'See [Assets and bundles](/dsp/concepts/assets-and-bundles/#asset-required-effects) before using this effect.'
+    );
+  }
+  if (publicTelemetryTypes.has(effect.type)) {
+    conceptNotices.push(
+      'Use the opt-in decoded telemetry callback or subscription API to observe this analyzer. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).'
+    );
+  } else if (effect.telemetry.length) {
+    conceptNotices.push(
+      'This type has catalog telemetry metadata but no public observation API in v0.1. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).'
+    );
+  }
+  if (docsEntry.sourceGenerating) {
+    conceptNotices.push(
+      'This type can intentionally generate output from zero input at an active setting. See [Processing model](/dsp/concepts/processing-model/#source-generating-effects).'
+    );
+  }
+  const concept = conceptNotices.length
+    ? `\n${conceptNotices.join('\n\n')}\n`
+    : '';
   return frontMatter(
     `${docsEntry.displayName} — EffeTune DSP`,
     `/dsp/effects/${slug}/`,

@@ -7,7 +7,7 @@ permalink: /dsp/effects/
 ---
 # Effects
 
-Browse all 100 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
+Browse all 101 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
 
 <label for="effect-filter">Filter effects</label>
 <input id="effect-filter" type="search" placeholder="Name, type, category, seeded, or asset" data-dsp-effect-filter>
@@ -90,6 +90,7 @@ Browse all 100 semantic types registered in the v1 binding catalog. The list rem
 - [Simple Jitter](/dsp/effects/simple-jitter/) (`SimpleJitter`) — Applies deterministic seeded sampling-time jitter. <span data-effect-tags="lo-fi seeded "></span>
 - [SW Radio Simulator](/dsp/effects/sw-radio-simulator/) (`SWRadioSimulator`) — Models fading, interference, limited bandwidth, and noise associated with shortwave radio. <span data-effect-tags="lo-fi seeded "></span>
 - [Tape Artifacts](/dsp/effects/tape-artifacts/) (`TapeArtifacts`) — Models the record and reproduce chain of a reel-to-reel tape machine, including saturation, wow and flutter, hiss, and head response. <span data-effect-tags="lo-fi seeded "></span>
+- [TV Audio Simulator](/dsp/effects/tv-audio-simulator/) (`TVAudioSimulator`) — Models analogue and NICAM television sound reception, including bandwidth, stereo and programme behavior, reception impairment, and picture-related buzz. <span data-effect-tags="lo-fi seeded "></span>
 - [Vinyl Artifacts](/dsp/effects/vinyl-artifacts/) (`VinylArtifacts`) — Adds deterministic seeded clicks, crackle, and surface artifacts. <span data-effect-tags="lo-fi seeded "></span>
 - [Vinyl Simulator](/dsp/effects/vinyl-simulator/) (`VinylSimulator`) — Combines tonal, mechanical, and surface-noise behavior associated with vinyl playback. <span data-effect-tags="lo-fi seeded "></span>
 

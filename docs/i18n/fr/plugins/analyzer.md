@@ -134,6 +134,7 @@ Le graphique défile de droite à gauche à vitesse constante, avec un repère c
   - Nombres plus hauts : plus de détail en fréquence, mais mises à jour temporelles plus lentes
   - Nombres plus bas : mouvement plus rapide, mais moins de détail en fréquence
 - **Frequency Scale** - **Log** accorde davantage d'espace aux basses fréquences ; **Linear** répartit uniformément des largeurs de fréquence égales.
+- **Keyboard** - Affiche à droite du graphique un clavier statique qui met en relation les notes et les fréquences. Il ne modifie ni l'analyse ni le son. La disposition des touches suit **Log** ou **Linear** ; avec **Linear**, les touches des basses fréquences paraissent plus étroites.
 - L'analyseur utilise la moyenne des canaux gauche et droit. Une entrée mono est analysée directement.
 
 ## Spectrum Analyzer
@@ -146,6 +147,8 @@ Crée un affichage visuel en temps réel des fréquences de votre musique, des b
 - La droite montre les hautes fréquences (cymbales, brillance, air)
 - La ligne vert foncé montre le son actuel
 - La ligne vert clair suit les pics récents et descend progressivement lorsqu’ils s’estompent
+- Dans l'affichage **Bar**, chaque barre indique le niveau le plus élevé dans une partie de largeur égale de l'affichage. **Log** utilise des largeurs d'octave égales ; **Linear** utilise des largeurs de fréquence égales.
+- Le fin repère au-dessus d'une barre indique son pic récent et descend progressivement.
 - Les pics plus hauts indiquent une présence plus forte de ces fréquences
 - Observez comment différents instruments créent différents motifs
 
@@ -163,6 +166,10 @@ Crée un affichage visuel en temps réel des fréquences de votre musique, des b
   - Nombres plus hauts : plus de détail en fréquence, avec des mises à jour plus lentes
   - Nombres plus bas : mises à jour plus rapides, avec moins de détail en fréquence
 - **Frequency Scale** - **Log** accorde davantage d'espace aux basses fréquences ; **Linear** répartit uniformément des largeurs de fréquence égales.
+- **Display** - Change uniquement l'apparence du spectre ; il ne modifie ni l'analyse ni le son.
+  - **Line** (par défaut) : Affiche le spectre sous forme de lignes continues.
+  - **Bar** : Affiche sous forme de barre le niveau le plus élevé de chaque bande affichée.
+- **Keyboard** - Affiche sous le graphique un clavier statique qui met en relation les notes et les fréquences. Il ne modifie ni l'analyse ni le son. La disposition des touches suit **Log** ou **Linear** ; avec **Linear**, les touches des basses fréquences paraissent plus étroites.
 - L'analyseur utilise la moyenne des canaux gauche et droit. Une entrée mono est analysée directement.
 
 ### Façons Amusantes d'Utiliser Ces Outils

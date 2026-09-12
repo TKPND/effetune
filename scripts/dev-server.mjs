@@ -11,6 +11,26 @@ const siteOutputRoot = path.join(repoRoot, '_site');
 const expectedGitHubPagesVersion = '232';
 const defaultHost = process.env.HOST || '127.0.0.1';
 const defaultPort = Number.parseInt(process.env.PORT || '8000', 10);
+// Keep this public boundary aligned with the app shell entries in sw-precache.js.
+const webAppRootFiles = new Set([
+  'effetune-library.css',
+  'effetune-mobile.css',
+  'effetune-theme.css',
+  'effetune.css',
+  'effetune.html',
+  'manifest.json',
+  'package.json',
+  'pipeline-analyzer.css',
+  'sw-precache.js',
+  'sw.js'
+]);
+const webAppAssetDirectories = new Set([
+  'features',
+  'images',
+  'js',
+  'plugins',
+  'presets'
+]);
 
 const mimeTypes = new Map([
   ['.aac', 'audio/aac'],
@@ -38,13 +58,16 @@ const mimeTypes = new Map([
 
 function parseArgs(argv) {
   const options = {
+    webOnly: false,
     host: defaultHost,
     port: Number.isFinite(defaultPort) ? defaultPort : 8000
   };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--host' && argv[i + 1]) {
+    if (arg === '--web-only') {
+      options.webOnly = true;
+    } else if (arg === '--host' && argv[i + 1]) {
       options.host = argv[++i];
     } else if (arg.startsWith('--host=')) {
       options.host = arg.slice('--host='.length);
@@ -88,9 +111,19 @@ function getStats(filePath) {
   }
 }
 
-function getRequestTarget(requestUrl, root = siteOutputRoot) {
+function isWebAppAssetPath(filePath) {
+  const relativePath = path.relative(repoRoot, filePath);
+  const segments = relativePath.split(path.sep);
+  if (segments.length === 1) {
+    return webAppRootFiles.has(segments[0].toLowerCase());
+  }
+  return webAppAssetDirectories.has(segments[0].toLowerCase());
+}
+
+function getRequestTarget(requestUrl, root = siteOutputRoot, allowPath = () => true) {
   const sourcePath = resolveRequestPath(requestUrl, root);
   if (!sourcePath) return { status: 403 };
+  if (!allowPath(sourcePath)) return { status: 404 };
 
   const sourceStats = getStats(sourcePath);
   if (sourceStats?.isFile()) {
@@ -154,7 +187,7 @@ function cacheBustLocalAsset(assetUrl) {
   return `${pathname}${query ? `?${query}` : ''}${separator}dev=${createDevCacheToken(assetPath)}${hashPart}`;
 }
 
-function cacheBustModuleSpecifier(specifier, importerPath) {
+function cacheBustModuleSpecifier(specifier, importerPath, root) {
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
     return specifier;
   }
@@ -162,7 +195,7 @@ function cacheBustModuleSpecifier(specifier, importerPath) {
   const [withoutHash, hash = ''] = specifier.split('#');
   const [pathname, query = ''] = withoutHash.split('?');
   const assetPath = path.resolve(path.dirname(importerPath), pathname);
-  if (!isWithinRoot(assetPath, siteOutputRoot)) {
+  if (!isWithinRoot(assetPath, root)) {
     return specifier;
   }
 
@@ -186,15 +219,15 @@ function injectDevelopmentMode(html) {
   );
 }
 
-function injectJavaScriptCacheBusters(source, filePath) {
+function injectJavaScriptCacheBusters(source, filePath, root) {
   return source
     .replace(
       /\b((?:import|export)\s+(?:[^'"]*?\s+from\s*)?)(['"])(\.{1,2}\/[^'"]+)\2/g,
-      (match, prefix, quote, specifier) => `${prefix}${quote}${cacheBustModuleSpecifier(specifier, filePath)}${quote}`
+      (match, prefix, quote, specifier) => `${prefix}${quote}${cacheBustModuleSpecifier(specifier, filePath, root)}${quote}`
     )
     .replace(
       /\b(import\s*\(\s*)(['"])(\.{1,2}\/[^'"]+)\2(\s*\))/g,
-      (match, prefix, quote, specifier, suffix) => `${prefix}${quote}${cacheBustModuleSpecifier(specifier, filePath)}${quote}${suffix}`
+      (match, prefix, quote, specifier, suffix) => `${prefix}${quote}${cacheBustModuleSpecifier(specifier, filePath, root)}${quote}${suffix}`
     );
 }
 
@@ -212,7 +245,7 @@ function getMimeType(filePath) {
   return mimeTypes.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream';
 }
 
-function sendFile(response, request, filePath, status = 200) {
+function sendFile(response, request, filePath, root, status = 200) {
   const extension = path.extname(filePath).toLowerCase();
   setNoCacheHeaders(response, getMimeType(filePath));
 
@@ -232,7 +265,7 @@ function sendFile(response, request, filePath, status = 200) {
   if (extension === '.js' || extension === '.mjs') {
     const source = fs.readFileSync(filePath, 'utf8');
     response.writeHead(status);
-    response.end(injectJavaScriptCacheBusters(source, filePath));
+    response.end(injectJavaScriptCacheBusters(source, filePath, root));
     return;
   }
 
@@ -243,7 +276,7 @@ function sendFile(response, request, filePath, status = 200) {
 function sendError(response, request, status, message, root) {
   const errorPage = status === 404 ? path.join(root, '404.html') : null;
   if (errorPage && getStats(errorPage)?.isFile()) {
-    sendFile(response, request, errorPage, status);
+    sendFile(response, request, errorPage, root, status);
     return;
   }
 
@@ -252,14 +285,14 @@ function sendError(response, request, status, message, root) {
   response.end(request.method === 'HEAD' ? undefined : message);
 }
 
-function createRequestHandler(root = siteOutputRoot) {
+function createRequestHandler(root = siteOutputRoot, allowPath) {
   return function handleRequest(request, response) {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       sendError(response, request, 405, 'Method Not Allowed', root);
       return;
     }
 
-    const target = getRequestTarget(request.url || '/', root);
+    const target = getRequestTarget(request.url || '/', root, allowPath);
     if (target.status === 403) {
       sendError(response, request, 403, 'Forbidden', root);
       return;
@@ -270,7 +303,7 @@ function createRequestHandler(root = siteOutputRoot) {
       return;
     }
 
-    sendFile(response, request, target.filePath);
+    sendFile(response, request, target.filePath, root);
   };
 }
 
@@ -481,19 +514,24 @@ async function listen(server, port, host) {
 
 async function startDevServer(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
-  await verifyGitHubPagesVersion();
-  resetJekyllBuildState();
+  let jekyllProcess = null;
+  if (!options.webOnly) {
+    await verifyGitHubPagesVersion();
+    resetJekyllBuildState();
 
-  console.log(
-    `Building the DSP library and site with GitHub Pages ${expectedGitHubPagesVersion}. The initial build can take a few minutes...`
-  );
-  const jekyllProcess = await assembleInitialSite();
-  const server = http.createServer(createRequestHandler());
+    console.log(
+      `Building the DSP library and site with GitHub Pages ${expectedGitHubPagesVersion}. The initial build can take a few minutes...`
+    );
+    jekyllProcess = await assembleInitialSite();
+  }
+  const server = http.createServer(options.webOnly
+    ? createRequestHandler(repoRoot, isWebAppAssetPath)
+    : createRequestHandler(siteOutputRoot));
 
   try {
     await listen(server, options.port, options.host);
   } catch (error) {
-    jekyllProcess.kill();
+    jekyllProcess?.kill();
     throw error;
   }
 
@@ -501,13 +539,13 @@ async function startDevServer(argv = process.argv.slice(2)) {
   const shutdown = () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    jekyllProcess.kill();
+    jekyllProcess?.kill();
     server.close();
   };
 
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
-  jekyllProcess.once('close', code => {
+  jekyllProcess?.once('close', code => {
     if (!shuttingDown) {
       console.error(`Jekyll stopped unexpectedly (code ${code}).`);
       process.exitCode = 1;
@@ -517,9 +555,11 @@ async function startDevServer(argv = process.argv.slice(2)) {
 
   console.log(`EffeTune dev server running at http://${options.host}:${options.port}/`);
   console.log(`Web app: http://${options.host}:${options.port}/effetune.html`);
-  console.log(`Site home: http://${options.host}:${options.port}/`);
-  console.log(`DSP library: http://${options.host}:${options.port}/dsp/`);
-  console.log(`Japanese docs: http://${options.host}:${options.port}/docs/i18n/ja/`);
+  if (!options.webOnly) {
+    console.log(`Site home: http://${options.host}:${options.port}/`);
+    console.log(`DSP library: http://${options.host}:${options.port}/dsp/`);
+    console.log(`Japanese docs: http://${options.host}:${options.port}/docs/i18n/ja/`);
+  }
   console.log('Press Ctrl+C to stop.');
 
   return { jekyllProcess, server };

@@ -9,8 +9,8 @@ class NyquistDenormalNoise final {
 public:
   static constexpr double kAmplitude = 1.0e-19;
   static constexpr std::uint32_t kMaximumPluginCount = 128u;
-  // FM Radio Simulator has the current maximum of 38 coherent injection sites.
-  static constexpr std::uint32_t kMaximumInternalCoherentSitesPerPlugin = 38u;
+  // TV Audio Simulator has the current maximum of 44 coherent injection sites.
+  static constexpr std::uint32_t kMaximumInternalCoherentSitesPerPlugin = 44u;
   static constexpr std::uint32_t kMaximumCoherentSitesPerPlugin =
       1u + kMaximumInternalCoherentSitesPerPlugin;
   static constexpr double kMaximumCombinedAmplitude =

@@ -162,6 +162,10 @@ _LEGACY_ECHOED_ENABLED_EFFECTS_V1 = ("HornResonator", "HornResonatorPlus")
 # the known values before discarding it so other unknown parameters remain strict.
 _LEGACY_FREQUENCY_SCALE_EFFECTS_V1 = ("SpectrumAnalyzer", "Spectrogram")
 
+# These analyzers also persist a display-only keyboard guide. Validate the
+# boolean before discarding it so other unknown parameters remain strict.
+_LEGACY_KEYBOARD_DISPLAY_EFFECTS_V1 = ("SpectrumAnalyzer", "Spectrogram")
+
 
 def _drop_echoed_structural_keys_v1(
     parameters: dict[str, Any], effect_type: str
@@ -271,6 +275,18 @@ def _prepare_legacy_parameters_v1(
         if scale not in ("log", "linear"):
             raise ValidationError(
                 f"legacy {effect_type} contains invalid frequency scale display state"
+            )
+    if effect_type in _LEGACY_KEYBOARD_DISPLAY_EFFECTS_V1 and "kb" in parameters:
+        keyboard = parameters.pop("kb")
+        if not isinstance(keyboard, bool):
+            raise ValidationError(
+                f"legacy {effect_type} contains invalid keyboard display state"
+            )
+    if effect_type == "SpectrumAnalyzer" and "dm" in parameters:
+        display_mode = parameters.pop("dm")
+        if display_mode not in ("line", "bar"):
+            raise ValidationError(
+                "legacy SpectrumAnalyzer contains invalid display mode state"
             )
     processing_enabled = True
     if effect_type == "Matrix" and "mx" in parameters:

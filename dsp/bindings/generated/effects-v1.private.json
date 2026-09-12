@@ -4711,6 +4711,182 @@
       ],
       "assets": []
     },
+    "TVAudioSimulator": {
+      "internalType": "TVAudioSimulatorPlugin",
+      "layoutHash": 196010340,
+      "floatCount": 14,
+      "packedParameters": [
+        {
+          "publicName": "broadcast",
+          "field": "broadcast",
+          "keys": [
+            "rd"
+          ],
+          "offset": 0,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "standard",
+          "field": "standard",
+          "keys": [
+            "ss"
+          ],
+          "offset": 1,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "txMode",
+          "field": "txMode",
+          "keys": [
+            "tx"
+          ],
+          "offset": 2,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "processing",
+          "field": "processing",
+          "keys": [
+            "pr"
+          ],
+          "offset": 3,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "signal",
+          "field": "signal",
+          "keys": [
+            "st"
+          ],
+          "offset": 4,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "tuning",
+          "field": "tuning",
+          "keys": [
+            "tn"
+          ],
+          "offset": 5,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "ifBandwidth",
+          "field": "ifBand",
+          "keys": [
+            "bw"
+          ],
+          "offset": 6,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "multipath",
+          "field": "multipath",
+          "keys": [
+            "mp"
+          ],
+          "offset": 7,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "pathDelay",
+          "field": "pathDelay",
+          "keys": [
+            "dl"
+          ],
+          "offset": 8,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "fading",
+          "field": "fading",
+          "keys": [
+            "fd"
+          ],
+          "offset": 9,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "receiveMode",
+          "field": "receiveMode",
+          "keys": [
+            "sm"
+          ],
+          "offset": 10,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "buzz",
+          "field": "buzz",
+          "keys": [
+            "bz"
+          ],
+          "offset": 11,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "outputGain",
+          "field": "outputGain",
+          "keys": [
+            "og"
+          ],
+          "offset": 12,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "mix",
+          "field": "mix",
+          "keys": [
+            "mx"
+          ],
+          "offset": 13,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        }
+      ],
+      "assets": []
+    },
     "VinylArtifacts": {
       "internalType": "VinylArtifactsPlugin",
       "layoutHash": 1145282217,
@@ -8753,6 +8929,7 @@
     "dsp/plugins/lofi/simple_jitter/params.json": "dsp/plugins/lofi/simple_jitter/golden/index.json",
     "dsp/plugins/lofi/sw_radio_simulator/params.json": "dsp/plugins/lofi/sw_radio_simulator/golden/index.json",
     "dsp/plugins/lofi/tape_artifacts/params.json": "dsp/plugins/lofi/tape_artifacts/golden/index.json",
+    "dsp/plugins/lofi/tv_audio_simulator/params.json": "dsp/plugins/lofi/tv_audio_simulator/golden/index.json",
     "dsp/plugins/lofi/vinyl_artifacts/params.json": "dsp/plugins/lofi/vinyl_artifacts/golden/index.json",
     "dsp/plugins/lofi/vinyl_simulator/params.json": "dsp/plugins/lofi/vinyl_simulator/golden/index.json",
     "dsp/plugins/modulation/auto_filter/params.json": "dsp/plugins/modulation/auto_filter/golden/index.json",
@@ -8794,5 +8971,5 @@
     "dsp/plugins/spatial/phase_select_eq/params.json": "dsp/plugins/spatial/phase_select_eq/golden/index.json",
     "dsp/plugins/spatial/stereo_blend/params.json": "dsp/plugins/spatial/stereo_blend/golden/index.json"
   },
-  "contractDigest": "9ba1e2ec5e13775f88cd3632f73f25206c045a6cb9e3c4983a18aafadb844e2a"
+  "contractDigest": "20d5f91eb56f8fe42683e7d07c7d77daf019b885a9f5770e655cdca0a7a9c426"
 }

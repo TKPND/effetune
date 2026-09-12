@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -9,11 +10,95 @@ import {
   assembleInitialSite,
   createDspLibraryBuildSpec,
   createJekyllBuildSpec,
+  createRequestHandler,
   getMimeType,
   getRequestTarget,
   parseGitHubPagesVersion,
-  startJekyllWatcher
+  startJekyllWatcher,
+  startDevServer
 } from '../../scripts/dev-server.mjs';
+
+test('web-only startup serves the working tree without preparing a documentation build', async t => {
+  const server = new EventEmitter();
+  let handler;
+  server.listen = (port, host, ready) => {
+    assert.equal(port, 8080);
+    assert.equal(host, '127.0.0.1');
+    ready();
+  };
+  server.close = t.mock.fn();
+  t.mock.method(http, 'createServer', requestHandler => {
+    handler = requestHandler;
+    return server;
+  });
+  t.mock.method(fs, 'rmSync', () => assert.fail('Web-only startup must not reset the site'));
+  const signals = new Map();
+  t.mock.method(process, 'once', (signal, callback) => {
+    signals.set(signal, callback);
+    return process;
+  });
+
+  const result = await startDevServer(['--web-only', '--port', '8080', '--host=127.0.0.1']);
+  assert.equal(result.jekyllProcess, null);
+  assert.equal(result.server, server);
+  const headers = new Map();
+  let body;
+  handler({ method: 'GET', url: '/effetune.html' }, {
+    setHeader: (name, value) => headers.set(name, value),
+    writeHead: status => assert.equal(status, 200),
+    end: value => { body = value; }
+  });
+  assert.match(body, /window\.EFFECTUNE_DEV_SERVER = true;/);
+  assert.match(headers.get('Cache-Control'), /no-store/);
+
+  const requestStatus = url => {
+    let status;
+    handler({ method: 'HEAD', url }, {
+      setHeader() {},
+      writeHead: value => { status = value; },
+      end() {}
+    });
+    return status;
+  };
+  for (const asset of [
+    '/effetune.css',
+    '/features/benchmark-score-reference.js',
+    '/images/favicon.ico',
+    '/js/app.js',
+    '/plugins/plugins.txt',
+    '/presets/presets.txt',
+    '/sw.js'
+  ]) {
+    assert.equal(requestStatus(asset), 200, asset);
+  }
+  assert.equal(requestStatus('/AGENTS.md'), 404);
+  assert.equal(requestStatus('/.git/config'), 404);
+  assert.equal(requestStatus('/tmp/dev/agent-commit-readiness-operations.md'), 404);
+  assert.equal(requestStatus('/scripts/dev-server.mjs'), 404);
+  signals.get('SIGINT')();
+  signals.get('SIGTERM')();
+  assert.equal(server.close.mock.callCount(), 1);
+});
+
+test('dev server suppresses module caching within the selected serving root', t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'effetune-dev-modules-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, 'dep.js'), 'export default 1;');
+  fs.writeFileSync(path.join(root, 'main.js'), [
+    "import value from './dep.js';",
+    "export { default } from './dep.js';",
+    "import('./dep.js');",
+    "import('../outside.js');"
+  ].join('\n'));
+  let body;
+  createRequestHandler(root)({ method: 'GET', url: '/main.js' }, {
+    setHeader() {},
+    writeHead: status => assert.equal(status, 200),
+    end: value => { body = value; }
+  });
+  assert.equal(body.match(/\.\/dep\.js\?dev=\d+/g)?.length, 3);
+  assert.match(body, /import\('\.\.\/outside\.js'\)/);
+});
 
 test('dev server serves WebAssembly with its standard MIME type', () => {
   assert.equal(getMimeType('plugins/dsp/effetune-dsp.wasm'), 'application/wasm');

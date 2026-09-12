@@ -913,7 +913,7 @@ class MultibandTransientPlugin extends PluginBase {
         this._bandControlRows = [];
         const container = document.createElement('div');
         this.instanceId = `mbt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        container.className = 'mbt-container';
+        container.className = 'mbt-container plugin-parameter-ui';
         container.setAttribute('data-instance-id', this.instanceId);
 
         // Frequency sliders UI (from multiband_saturation.js)

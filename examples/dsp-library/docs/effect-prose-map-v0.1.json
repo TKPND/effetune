@@ -68,6 +68,7 @@
     "SimpleJitter": ["docs/plugins/lofi.md", "Simple Jitter"],
     "SWRadioSimulator": ["docs/plugins/lofi.md", "SW Radio Simulator"],
     "TapeArtifacts": ["docs/plugins/lofi.md", "Tape Artifacts"],
+    "TVAudioSimulator": ["docs/plugins/lofi.md", "TV Audio Simulator"],
     "VinylArtifacts": ["docs/plugins/lofi.md", "Vinyl Artifacts"],
     "VinylSimulator": ["docs/plugins/lofi.md", "Vinyl Simulator"],
     "AutoFilter": ["docs/plugins/modulation.md", "Auto Filter"],

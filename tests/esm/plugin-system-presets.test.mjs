@@ -28,6 +28,11 @@ const expectedTargetPresetIds = new Map([
     ['TapeArtifactsPlugin', [
         'pristine-30-ips-reel', 'hobbyist-reel-to-reel', 'tired-old-reel'
     ]],
+    ['TVAudioSimulatorPlugin', [
+        'tv-japan-eiaj', 'tv-north-america-btsc', 'tv-korea-a2',
+        'tv-europe-a2', 'tv-australia-a2', 'tv-uk-nicam',
+        'tv-nordic-nicam', 'tv-eastern-europe-mono', 'tv-france-l'
+    ]],
     ['AMRadioSimulatorPlugin', [
         'local-daytime', 'pocket-transistor', 'night-skywave',
         'summer-thunderstorm', 'stereo-am-broadcast'
@@ -167,10 +172,10 @@ const publicParameterKeys = plugin => Object.keys(plugin.getSerializableParamete
     .sort();
 
 test('plugin system presets have complete, valid, round-trippable parameter records', () => {
-    assert.equal(presetProviders.length, 26, 'system preset provider count');
+    assert.equal(presetProviders.length, 27, 'system preset provider count');
     const targetPresetCount = [...expectedTargetPresetIds.values()]
         .reduce((count, ids) => count + ids.length, 0);
-    assert.equal(targetPresetCount, 96);
+    assert.equal(targetPresetCount, 105);
 
     const providersByClass = new Map(presetProviders.map(provider => [provider.className, provider]));
     for (const [className, expectedIds] of expectedTargetPresetIds) {
@@ -254,6 +259,7 @@ test('preset renderer applies processing-only presets through the selected syste
         'AMRadioSimulatorPlugin',
         'FMRadioSimulatorPlugin',
         'SWRadioSimulatorPlugin',
+        'TVAudioSimulatorPlugin',
         'VinylSimulatorPlugin',
         'TubeSimulatorPlugin'
     ];

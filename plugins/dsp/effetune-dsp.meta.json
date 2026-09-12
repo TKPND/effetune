@@ -1,6 +1,6 @@
 {
   "abiVersion": 1,
-  "sourceDigest": "sha256:90549b24002bff49d9b1083419fa9c82294c48239de45281e3f3186b93461584",
+  "sourceDigest": "sha256:d798d9278c56dae94fbb62709785d5ce21a5b8afe71632332838ecbfcdfa322c",
   "emsdkVersion": "6.0.2",
   "g726PerformanceInput": {
     "contract": "g726-production-performance-input-sha256-v2",
@@ -787,6 +787,12 @@
       "assets": []
     },
     {
+      "name": "TVAudioSimulatorPlugin",
+      "hash": 196010340,
+      "byteCapacity": 0,
+      "assets": []
+    },
+    {
       "name": "VinylArtifactsPlugin",
       "hash": 1145282217,
       "byteCapacity": 0,
@@ -1042,7 +1048,7 @@
     }
   ],
   "sizes": {
-    "baseline": 7000109,
-    "simd": 7126702
+    "baseline": 7029929,
+    "simd": 7158834
   }
 }

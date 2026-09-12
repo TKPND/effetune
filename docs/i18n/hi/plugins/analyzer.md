@@ -134,6 +134,7 @@ displayed waveform captured points को time order में जोड़त�
   - अधिक numbers: अधिक frequency detail, लेकिन time updates धीमे
   - कम numbers: तेज़ movement, लेकिन कम frequency detail
 - **Frequency Scale** - **Log** कम आवृत्तियों को display पर अधिक जगह देता है; **Linear** समान आवृत्ति चौड़ाइयों को समान अंतराल पर दिखाता है।
+- **Keyboard** - ग्राफ़ के दाईं ओर एक स्थिर पियानो-कीबोर्ड गाइड दिखाता है, जो स्वरों को उनकी आवृत्तियों से जोड़ता है। इससे विश्लेषण या ऑडियो नहीं बदलता। कुंजियों की स्थिति **Log** या **Linear** के अनुसार बदलती है; **Linear** में कम आवृत्ति वाली कुंजियाँ अधिक संकरी दिखती हैं।
 - analyzer left और right channels का average उपयोग करता है। Mono input सीधे analyze होता है।
 
 ## Spectrum Analyzer
@@ -147,6 +148,8 @@ displayed waveform captured points को time order में जोड़त�
 - ऊंचे peaks का मतलब उन frequencies की stronger presence है
 - darker green line मौजूदा sound दिखाती है
 - brighter green line recent peaks का अनुसरण करती है और उनके fade होने पर धीरे-धीरे नीचे आती है
+- **Bar** display में, हर bar display के बराबर चौड़ाई वाले हिस्से में सबसे ऊँचा level दिखाती है। **Log** में बराबर octave widths और **Linear** में बराबर frequency widths उपयोग होती हैं।
+- bar के ऊपर का पतला निशान उसका recent peak दिखाता है और धीरे-धीरे नीचे आता है।
 - देखें कि अलग-अलग instruments कैसे अलग patterns बनाते हैं
 
 ### आप क्या देख सकते हैं
@@ -163,6 +166,10 @@ displayed waveform captured points को time order में जोड़त�
   - अधिक numbers: अधिक frequency detail, updates धीमे
   - कम numbers: तेज़ updates, कम frequency detail
 - **Frequency Scale** - **Log** कम आवृत्तियों को display पर अधिक जगह देता है; **Linear** समान आवृत्ति चौड़ाइयों को समान अंतराल पर दिखाता है।
+- **Display** - केवल spectrum का रूप बदलता है; analysis या audio नहीं बदलता।
+  - **Line** (default): spectrum को continuous lines के रूप में दिखाता है।
+  - **Bar**: हर display band का सबसे ऊँचा level bar के रूप में दिखाता है।
+- **Keyboard** - ग्राफ़ के नीचे एक स्थिर पियानो-कीबोर्ड गाइड दिखाता है, जो स्वरों को उनकी आवृत्तियों से जोड़ता है। इससे विश्लेषण या ऑडियो नहीं बदलता। कुंजियों की स्थिति **Log** या **Linear** के अनुसार बदलती है; **Linear** में कम आवृत्ति वाली कुंजियाँ अधिक संकरी दिखती हैं।
 - analyzer left और right channels का average उपयोग करता है। Mono input सीधे analyze होता है।
 
 ### इन टूल का उपयोग करने के मज़ेदार तरीके

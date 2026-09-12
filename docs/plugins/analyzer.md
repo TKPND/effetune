@@ -134,6 +134,7 @@ The graph scrolls from right to left at a steady speed, with marks every second.
   - Higher numbers: More frequency detail, but slower time updates
   - Lower numbers: Faster movement, but less frequency detail
 - **Frequency Scale** - **Log** gives low frequencies more display space; **Linear** places equal frequency widths at equal intervals.
+- **Keyboard** - Shows a static keyboard guide at the right of the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log** or **Linear**; with **Linear**, low-frequency keys look narrower.
 - The analyzer uses the average of the left and right channels. Mono input is analyzed directly.
 
 ## Spectrum Analyzer
@@ -147,6 +148,8 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
 - Higher peaks mean stronger presence of those frequencies
 - Darker green line shows the current sound
 - The brighter green line follows recent peaks and falls smoothly as they fade
+- In **Bar** display, each bar shows the strongest level in an equal-width portion of the display. **Log** uses equal octave widths; **Linear** uses equal frequency widths.
+- The thin marker above a bar shows its recent peak and falls smoothly.
 - Watch how different instruments create different patterns
 
 ### What You Can See
@@ -163,6 +166,10 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
   - Higher numbers: More frequency detail, with slower updates
   - Lower numbers: Quicker updates, with less frequency detail
 - **Frequency Scale** - **Log** gives low frequencies more display space; **Linear** places equal frequency widths at equal intervals.
+- **Display** - Changes only how the spectrum looks; it does not change the analysis or audio.
+  - **Line** (default): Shows the spectrum as continuous lines.
+  - **Bar**: Shows the strongest level in each display band as a bar.
+- **Keyboard** - Shows a static keyboard guide below the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log** or **Linear**; with **Linear**, low-frequency keys look narrower.
 - The analyzer uses the average of the left and right channels. Mono input is analyzed directly.
 
 ### Fun Ways to Use These Tools

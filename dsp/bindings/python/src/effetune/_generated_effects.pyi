@@ -932,6 +932,30 @@ class TapeArtifacts(Effect):
         channel: EffectChannel = ...,
     ) -> None: ...
 
+class TVAudioSimulator(Effect):
+    effect_type: Literal["TVAudioSimulator"]
+    def __init__(
+        self,
+        *,
+        broadcast: bool = ...,
+        standard: Literal["M/EIA-J", "M/BTSC", "M/A2", "B/G A2", "B/G NICAM", "I NICAM", "D/K Mono", "L AM"] = ...,
+        tx_mode: Literal["Stereo", "Mono", "Dual"] = ...,
+        processing: float = ...,
+        signal: float = ...,
+        tuning: float = ...,
+        if_bandwidth: float = ...,
+        multipath: float = ...,
+        path_delay: float = ...,
+        fading: float = ...,
+        receive_mode: Literal["Auto", "Stereo", "Main", "Sub"] = ...,
+        buzz: float = ...,
+        output_gain: float = ...,
+        mix: float = ...,
+        id: str | None = ...,
+        enabled: bool = ...,
+        channel: EffectChannel = ...,
+    ) -> None: ...
+
 class VinylArtifacts(Effect):
     effect_type: Literal["VinylArtifacts"]
     def __init__(

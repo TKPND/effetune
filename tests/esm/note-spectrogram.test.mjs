@@ -489,7 +489,9 @@ test('Volume bars map level to thickness and pitch resolution to center position
     plugin._paintVolumeHistory(100, plugin._displayPalette());
     let bar = fills.find(fill => fill.width === 1);
     assert.deepEqual([bar.y, bar.height], [70, 40]);
-    assert.deepEqual(bar.color.stops.map(stop => stop.offset), [0, 0.25, 0.75, 1]);
+    assert.deepEqual(bar.color.stops.map(stop => stop.offset), [0, 0.25, 0.5, 0.5, 0.75, 1]);
+    assert.equal(bar.color.stops[1].color, 'rgba(0, 240, 0, 1)');
+    assert.equal(bar.color.stops[4].color, 'rgba(15, 255, 15, 1)');
 
     fills.length = 0;
     plugin.levelHistory[0] = 1;
@@ -505,6 +507,37 @@ test('Volume bars map level to thickness and pitch resolution to center position
     plugin._paintVolumeHistory(100, plugin._displayPalette());
     bar = fills.find(fill => fill.width === 1);
     assert.deepEqual([bar.y, bar.height], [30, 40]);
+});
+
+test('Volume relief keeps the screen-left or screen-top side brighter across layouts', async () => {
+    const plugin = await loadPlugin();
+    const gradients = [];
+    const context = {
+        createLinearGradient(...coordinates) {
+            const gradient = createGradient('linear', coordinates);
+            gradients.push(gradient);
+            return gradient;
+        },
+        fillRect() {}
+    };
+    plugin.mn = 21;
+    plugin.mx = 21;
+    plugin.history[0] = 1;
+    plugin.levelHistory[0] = 0.5;
+    const bar = { midi: 21, best: 0, confidence: 1 };
+    const palette = plugin._displayPalette();
+
+    plugin.ly = 'Vertical';
+    plugin._paintVolumeBar(context, 0, 0, bar, 20, palette);
+    plugin.ly = 'Horizontal';
+    plugin._paintVolumeBar(context, 0, 0, bar, 20, palette);
+
+    const verticalStops = gradients[0].stops;
+    const horizontalStops = gradients[1].stops;
+    assert.equal(verticalStops[1].color, 'rgba(15, 255, 15, 1)');
+    assert.equal(verticalStops[4].color, 'rgba(0, 240, 0, 1)');
+    assert.equal(horizontalStops[1].color, verticalStops[4].color);
+    assert.equal(horizontalStops[4].color, verticalStops[1].color);
 });
 
 test('incremental Volume redraw preserves High bars that cross a neighboring row', async () => {
@@ -540,7 +573,7 @@ test('incremental Volume redraw preserves High bars that cross a neighboring row
     fills.length = 0;
     plugin._paintVolumeColumns(0, 1);
     assert.deepEqual(rasterizeColumn(), fullRedraw);
-    assert.match(fullRedraw[8], /rgba\(0, 255, 0, 1\)/);
+    assert.match(fullRedraw[8], /rgba\(15, 255, 15, 1\)/);
 });
 
 test('Volume backgrounds and guides precede confidence-sorted bars in every redraw path', async () => {

@@ -98,6 +98,12 @@ function installCanvasStubs(plugin) {
   const drawCalls = [];
   const putCalls = [];
   const markerCalls = [];
+  const operations = [];
+  const fillCalls = [];
+  const strokeCalls = [];
+  const lineCalls = [];
+  let pathStart = null;
+  let pathEnd = null;
   plugin.imageDataCache = { data: new Uint8ClampedArray(256 * 1024 * 4) };
   plugin.tempCtx = {
     putImageData(...args) { putCalls.push(args); }
@@ -110,19 +116,55 @@ function installCanvasStubs(plugin) {
     font: '',
     textAlign: '',
     lineWidth: 1,
-    fillRect() {},
-    drawImage(...args) { drawCalls.push(args); },
-    beginPath() {},
-    moveTo(x, y) { if (y === plugin.canvas.height - 16) markerCalls.push(x); },
-    lineTo() {},
-    stroke() {},
-    fillText() {},
+    lineJoin: '',
+    fillRect(x, y, width, height) {
+      operations.push({ type: 'fillRect', x, y, width, height });
+      fillCalls.push({ x, y, width, height, fillStyle: this.fillStyle });
+    },
+    drawImage(...args) {
+      drawCalls.push(args);
+      operations.push({ type: 'drawImage', args });
+    },
+    beginPath() { pathStart = null; pathEnd = null; },
+    moveTo(x, y) {
+      pathStart = { x, y };
+      if (y === plugin.canvas.height - 16) markerCalls.push(x);
+    },
+    lineTo(x, y) {
+      pathEnd = { x, y };
+      operations.push({ type: 'lineTo', x, y });
+    },
+    rect(x, y, width, height) { operations.push({ type: 'rect', x, y, width, height }); },
+    clip() {},
+    measureText(text) { return { width: text.length * parseFloat(this.font) * 0.65 }; },
+    stroke() {
+      strokeCalls.push({ strokeStyle: this.strokeStyle, lineWidth: this.lineWidth });
+      if (pathStart && pathEnd) {
+        lineCalls.push({
+          from: pathStart, to: pathEnd,
+          strokeStyle: this.strokeStyle, lineWidth: this.lineWidth
+        });
+      }
+    },
+    strokeText(text, x, y) {
+      operations.push({
+        type: 'strokeText', text, x, y,
+        strokeStyle: this.strokeStyle, lineWidth: this.lineWidth, lineJoin: this.lineJoin,
+        font: this.font, textAlign: this.textAlign
+      });
+    },
+    fillText(text, x, y) {
+      operations.push({
+        type: 'fillText', text, x, y,
+        fillStyle: this.fillStyle, font: this.font, textAlign: this.textAlign
+      });
+    },
     save() {},
     translate() {},
     rotate() {},
     restore() {}
   };
-  return { drawCalls, putCalls, markerCalls };
+  return { drawCalls, putCalls, markerCalls, operations, fillCalls, strokeCalls, lineCalls };
 }
 
 test('Spectrogram persists frequency scale and reprojects canonical history immediately', () => {
@@ -527,4 +569,351 @@ test('Spectrogram keeps fresh data at the right edge after queued telemetry arri
   assert.ok(plugin.getSpectrogramDisplayTime(now) - plugin.prevTime <= plugin.spectrogramColumnPeriod);
   emit(26);
   newestIsAtRightEdge();
+});
+
+
+test('Spectrogram round-trips Keyboard and normalizes it to true-only', () => {
+  const runtime = loadSpectrogram();
+  const plugin = new runtime.SpectrogramPlugin();
+  assert.equal(plugin.getParameters().kb, false);
+  plugin.setParameters({ kb: true });
+  const restored = new runtime.SpectrogramPlugin();
+  restored.setParameters(plugin.getParameters());
+  assert.equal(restored.kb, true);
+  const count = runtime.calls.length;
+  restored.setKeyboardVisible(true);
+  assert.equal(runtime.calls.length, count);
+  restored.setParameters({ kb: 'true' });
+  assert.equal(restored.kb, false);
+  restored.setKeyboardVisible(true);
+  restored.reset();
+  assert.equal(restored.getParameters().kb, false);
+});
+
+test('Spectrogram keyboard cells project the existing frequency rows across the full display range', () => {
+  const { SpectrogramPlugin } = loadSpectrogram();
+  const plugin = new SpectrogramPlugin();
+  for (const scale of ['log', 'linear']) {
+    plugin.sc = scale;
+    const keys = plugin.getKeyboardGeometry(512);
+    assert.equal(keys[0].midi, 15);
+    assert.equal(keys.at(-1).midi, 147);
+    assert.equal(keys[0].end, 512);
+    assert.equal(keys.at(-1).start, 0);
+    assert.equal(keys.find(key => key.midi === 69).center, plugin.freqToY(440) / 255 * 512);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      for (const coordinate of [key.start, key.center, key.end]) {
+        assert.ok(Number.isFinite(coordinate) && coordinate >= 0 && coordinate <= 512);
+      }
+      assert.ok(key.start <= key.center && key.center <= key.end);
+      if (i) assert.equal(keys[i - 1].start, key.end);
+    }
+    const black = keys.find(key => key.midi === 70);
+    assert.equal(black.black, true);
+    assert.equal(black.start, plugin.freqToY(440 * 2 ** (1.5 / 12)) / 255 * 512);
+    assert.equal(black.end, plugin.freqToY(440 * 2 ** (0.5 / 12)) / 255 * 512);
+    if (scale === 'linear') assert.ok(keys[1].end - keys[1].start < 1);
+  }
+});
+
+test('Spectrogram Keyboard keeps Note Spectrogram key colors in light and dark themes', () => {
+  const themes = [
+    {
+      name: 'Paper',
+      palette: {
+        'graph-bg-deep': 'rgba(255, 255, 255, 1)',
+        'graph-base-soft': 'rgba(241, 241, 241, 1)',
+        'graph-label': 'rgba(102, 102, 102, 1)'
+      },
+      whiteKey: 'rgb(255, 255, 255)'
+    },
+    {
+      name: 'Midnight',
+      palette: {
+        'graph-bg-deep': 'rgba(7, 11, 20, 1)',
+        'graph-base-soft': 'rgba(25, 33, 51, 1)',
+        'graph-label': 'rgba(125, 138, 163, 1)'
+      },
+      whiteKey: 'rgb(221, 221, 221)'
+    }
+  ];
+  for (const theme of themes) {
+    const runtime = loadSpectrogram();
+    runtime.windowRef.ThemePalette = { get: name => theme.palette[name] ?? '' };
+    const plugin = new runtime.SpectrogramPlugin();
+    const { fillCalls, strokeCalls, operations } = installCanvasStubs(plugin);
+    const width = 512;
+    const height = 480;
+    const gutter = 28;
+    const edge = width - gutter;
+    const blackDepth = gutter / 1.6;
+    plugin.drawKeyboard(plugin.canvasCtx, width, height, gutter, 1, 12);
+
+    assert.deepEqual(fillCalls[0], {
+      x: edge, y: 0, width: gutter, height, fillStyle: theme.whiteKey
+    }, theme.name + ' white keys');
+    const blackKey = plugin.getKeyboardGeometry(height).find(key => key.midi === 70);
+    assert.ok(fillCalls.some(call =>
+      call.x === edge && call.y === blackKey.start && call.width === blackDepth &&
+      call.height === blackKey.end - blackKey.start && call.fillStyle === 'rgb(34, 34, 34)'),
+    theme.name + ' black keys');
+    assert.ok(strokeCalls.some(call =>
+      call.strokeStyle === theme.palette['graph-label'] && call.lineWidth === 1),
+    theme.name + ' key boundaries');
+    const octaveLabels = operations.filter(operation =>
+      operation.type === 'fillText' && /^\d+$/.test(operation.text));
+    assert.ok(octaveLabels.length >= 6, theme.name + ' octave labels');
+    assert.ok(octaveLabels.every(label => label.y > 0 && label.y < height));
+    assert.ok(octaveLabels.every(label => label.fillStyle === '#111'),
+      theme.name + ' octave label fill');
+    const outlinedLabels = operations.filter(operation => operation.type === 'strokeText');
+    assert.deepEqual(outlinedLabels.map(label => label.text), octaveLabels.map(label => label.text),
+      theme.name + ' outlined octave labels');
+    assert.ok(outlinedLabels.every(label => label.strokeStyle === theme.whiteKey),
+      theme.name + ' octave label outline');
+  }
+});
+
+test('Spectrogram plot uses one fixed black-background palette before history is drawn', () => {
+  const palettes = {
+    Paper: {
+      'graph-bg-deep': 'rgba(255, 255, 255, 1)',
+      'graph-tone-50': 'rgba(138, 138, 138, 1)',
+      'graph-label-strong': 'rgba(71, 71, 71, 1)',
+      'text-primary': 'rgba(26, 26, 26, 1)',
+      'graph-label': 'rgba(102, 102, 102, 1)'
+    },
+    Midnight: {
+      'graph-bg-deep': 'rgba(7, 11, 20, 1)',
+      'graph-tone-50': 'rgba(128, 133, 143, 1)',
+      'graph-label-strong': 'rgba(205, 211, 222, 1)',
+      'text-primary': 'rgba(230, 237, 247, 1)',
+      'graph-label': 'rgba(125, 138, 163, 1)'
+    }
+  };
+  let activeTheme = 'Paper';
+  const runtime = loadSpectrogram();
+  runtime.windowRef.ThemePalette = { get: name => palettes[activeTheme][name] ?? '' };
+  const plugin = new runtime.SpectrogramPlugin();
+  const { drawCalls, operations, fillCalls, strokeCalls } = installCanvasStubs(plugin);
+  plugin.canvas.width = 512;
+  plugin.canvas.height = 256;
+
+  const verifyFixedPlotPalette = (expectedWidth, whiteKey = null) => {
+    const plotWidth = expectedWidth - (whiteKey ? 28 : 0);
+    assert.deepEqual(fillCalls[0], {
+      x: 0, y: 0, width: plotWidth, height: 256, fillStyle: 'rgb(0, 0, 0)'
+    });
+    const frequencyLabels = operations.filter(operation =>
+      operation.type === 'fillText' && operation.fillStyle === '#ccc');
+    assert.equal(operations.find(operation =>
+      operation.type === 'fillText' && operation.text === 'Time').fillStyle, '#fff');
+    if (whiteKey) {
+      assert.equal(frequencyLabels.length, 0);
+      assert.equal(operations.some(operation =>
+        operation.type === 'fillText' && operation.text === 'Frequency (Hz)'), false);
+      assert.ok(strokeCalls.some(call => call.strokeStyle === '#444' && call.lineWidth === 1));
+      assert.ok(fillCalls.some(call =>
+        call.x === plotWidth && call.width === 28 && call.fillStyle === whiteKey));
+    } else {
+      assert.ok(strokeCalls.some(call => call.strokeStyle === '#888' && call.lineWidth === 1));
+      assert.ok(frequencyLabels.length > 0);
+      assert.equal(operations.find(operation =>
+        operation.type === 'fillText' && operation.text === 'Frequency (Hz)').fillStyle, '#fff');
+    }
+  };
+
+  plugin.drawGraph(0);
+  verifyFixedPlotPalette(512);
+  assert.equal(drawCalls.length, 0);
+
+  plugin.kb = true;
+  operations.length = 0;
+  fillCalls.length = 0;
+  strokeCalls.length = 0;
+  plugin.drawGraph(0);
+  verifyFixedPlotPalette(512, 'rgb(255, 255, 255)');
+
+  plugin.handleDspSpectrogramTelemetry(makeSpectrogramFrame({
+    timeSeconds: 1,
+    intensity: () => 0
+  }).frame);
+  drawCalls.length = 0;
+  operations.length = 0;
+  fillCalls.length = 0;
+  strokeCalls.length = 0;
+  plugin.drawGraph(0);
+  verifyFixedPlotPalette(512, 'rgb(255, 255, 255)');
+  assert.ok(drawCalls.length > 0);
+  assert.ok(strokeCalls.some(call => call.strokeStyle === '#888' && call.lineWidth === 2));
+  assert.ok(operations.findIndex(operation => operation.type === 'fillRect') <
+    operations.findIndex(operation => operation.type === 'drawImage'));
+  assert.deepEqual(Array.from(plugin.imageDataCache.data.slice(0, 3)), [0, 0, 0]);
+
+  activeTheme = 'Midnight';
+  plugin.canvas.width = 768;
+  drawCalls.length = 0;
+  operations.length = 0;
+  fillCalls.length = 0;
+  strokeCalls.length = 0;
+  plugin.drawGraph(0);
+  verifyFixedPlotPalette(768, 'rgb(221, 221, 221)');
+});
+
+test('Spectrogram Keyboard replaces the frequency axis with B-C boundary lines', () => {
+  const minFrequency = 20;
+  const maxFrequency = 40000;
+  const minMidi = 69 + 12 * Math.log2(minFrequency / 440);
+  const maxMidi = 69 + 12 * Math.log2(maxFrequency / 440);
+  for (const scale of ['log', 'linear']) {
+    for (const dpr of [1, 2]) {
+      const { SpectrogramPlugin } = loadSpectrogram();
+      const plugin = new SpectrogramPlugin();
+      const { operations, lineCalls } = installCanvasStubs(plugin);
+      plugin.sc = scale;
+      plugin.graphDpr = dpr;
+      plugin.canvas.width = 1024 * dpr;
+      plugin.canvas.height = 1024 * dpr;
+
+      plugin.drawGraph(0);
+      assert.ok(operations.some(operation =>
+        operation.type === 'fillText' && operation.text === 'Frequency (Hz)'));
+      assert.ok(operations.some(operation =>
+        operation.type === 'fillText' && operation.fillStyle === '#ccc'));
+      assert.equal(lineCalls.some(call => call.strokeStyle === '#444'), false);
+
+      operations.length = 0;
+      lineCalls.length = 0;
+      plugin.kb = true;
+      plugin.drawGraph(0);
+      const plotWidth = (1024 - 28) * dpr;
+      const boundaryLines = lineCalls.filter(call =>
+        call.from.x === 0 && call.to.x === plotWidth && call.from.y === call.to.y);
+      const expectedBoundaries = pitchClass => {
+        const positions = [];
+        for (let midi = Math.ceil(minMidi); midi <= Math.floor(maxMidi); midi++) {
+          if ((midi % 12 + 12) % 12 !== pitchClass) continue;
+          const boundaryFrequency = 440 * 2 ** ((midi - 0.5 - 69) / 12);
+          positions.push(plugin.freqToY(boundaryFrequency) / 255 * plugin.canvas.height);
+        }
+        return positions;
+      };
+
+      assert.equal(operations.some(operation =>
+        operation.type === 'fillText' && operation.text === 'Frequency (Hz)'), false);
+      assert.equal(operations.some(operation =>
+        operation.type === 'fillText' && operation.fillStyle === '#ccc'), false);
+      const bCBoundaries = expectedBoundaries(0);
+      const eFBoundaries = expectedBoundaries(5);
+      assert.ok(eFBoundaries.length > 0);
+      assert.deepEqual(boundaryLines.map(call => call.from.y), bCBoundaries);
+      assert.ok(boundaryLines.every(call => call.strokeStyle === '#444'));
+      assert.equal(boundaryLines.length, bCBoundaries.length);
+      assert.ok(boundaryLines.every(call => call.lineWidth === dpr));
+      assert.ok(operations.some(operation =>
+        operation.type === 'fillText' && operation.text === 'Time'));
+    }
+  }
+});
+
+test('Spectrogram Keyboard scales history, grid, clock and labels to the same plot width', () => {
+  const runtime = loadSpectrogram();
+  runtime.windowRef.ThemePalette = { get: name =>
+    name === 'graph-bg-deep' ? 'rgb(16, 16, 16)' : 'rgb(48, 48, 48)' };
+  for (const dpr of [1, 2]) {
+    for (const sc of ['log', 'linear']) {
+      const plugin = new runtime.SpectrogramPlugin();
+      const { drawCalls, markerCalls, operations } = installCanvasStubs(plugin);
+      plugin.sc = sc;
+      plugin.graphDpr = dpr;
+      plugin.canvas.width = 1024 * dpr;
+      plugin.canvas.height = 1024 * dpr;
+      const width = plugin.canvas.width;
+      const height = plugin.canvas.height;
+      const plotWidth = width - 28 * dpr;
+      plugin.handleDspSpectrogramTelemetry(makeSpectrogramFrame({ timeSeconds: 1 }).frame);
+      plugin.handleDspSpectrogramTelemetry(makeSpectrogramFrame({ timeSeconds: 1.125 }).frame);
+      const times = Array.from(plugin.spectrogramColumnTimes);
+      plugin.drawGraph(0);
+      const fullImages = drawCalls.splice(0);
+      const fullMarkers = markerCalls.splice(0);
+      operations.length = 0;
+      plugin.kb = true;
+      plugin.drawGraph(0);
+      assert.equal(drawCalls.length, fullImages.length);
+      drawCalls.forEach((image, index) => {
+        assert.equal(image[5], fullImages[index][5] * plotWidth / width);
+        assert.equal(image[7], fullImages[index][7] * plotWidth / width);
+        assert.ok(image[5] + image[7] <= plotWidth);
+      });
+      const latest = drawCalls.at(-1);
+      assert.equal(latest[5] + latest[7], plotWidth);
+      markerCalls.forEach((x, index) => assert.equal(x, fullMarkers[index] * plotWidth / width));
+      assert.deepEqual(operations.find(operation => operation.type === 'rect'),
+        { type: 'rect', x: 0, y: 0, width: plotWidth, height });
+      const base = operations.find(operation => operation.type === 'fillRect');
+      assert.deepEqual(base, { type: 'fillRect', x: 0, y: 0, width: plotWidth, height });
+      assert.ok(operations.some(operation => operation.type === 'fillRect' &&
+        operation.x === plotWidth && operation.y === 0 && operation.width === 28 * dpr && operation.height === height));
+      const timeLabel = operations.find(operation => operation.type === 'fillText' && operation.text === 'Time');
+      assert.equal(timeLabel.x, plotWidth / 2);
+      assert.equal(operations.some(operation =>
+        operation.type === 'fillText' && operation.text === 'Frequency (Hz)'), false);
+      assert.equal(operations.some(operation =>
+        operation.type === 'fillText' && operation.fillStyle === '#ccc'), false);
+      const octaveLabels = operations.filter(operation =>
+        operation.type === 'fillText' && /^\d+$/.test(operation.text) && operation.x > plotWidth);
+      assert.ok(octaveLabels.length > 0);
+      assert.ok(octaveLabels.every(label =>
+        label.x > plotWidth && label.x < width && label.y > 0 && label.y < height));
+      assert.equal(operations.some(operation =>
+        (operation.type === 'fillText' || operation.type === 'strokeText') && /^C\d+$/.test(operation.text)), false);
+      const outlinedLabels = operations.filter(operation => operation.type === 'strokeText');
+      assert.deepEqual(outlinedLabels.map(({ text, x, y }) => ({ text, x, y })),
+        octaveLabels.map(({ text, x, y }) => ({ text, x, y })));
+      assert.ok(outlinedLabels.every(label =>
+        label.strokeStyle === 'rgb(221, 221, 221)' &&
+        label.lineWidth === 1.5 * dpr && label.lineJoin === 'round'));
+      assert.ok(octaveLabels.length >= 6);
+      const frequencyFont = `${(plugin.graphCssWidth < 500 ? 11 : 12) * dpr}px Arial`;
+      assert.ok(octaveLabels.every(label => label.font === frequencyFont));
+      assert.ok(outlinedLabels.every(label => label.font === frequencyFont));
+      assert.ok(outlinedLabels.every(label => label.textAlign === 'right'));
+      assert.equal(new Set(outlinedLabels.map(label => label.x)).size, 1);
+      const octaveNumbers = new Set(outlinedLabels.map(label => label.text));
+      assert.ok(octaveNumbers.has('10') && octaveNumbers.has('11'));
+      if (sc === 'log') {
+        assert.deepEqual(Array.from(octaveNumbers).sort((left, right) => Number(left) - Number(right)),
+          Array.from({ length: 11 }, (_, index) => String(index + 1)));
+      }
+      const oneDigit = outlinedLabels.find(label => label.text === '9');
+      const twoDigits = outlinedLabels.find(label => label.text === '10');
+      const fontSize = parseFloat(frequencyFont);
+      const oneDigitWidth = fontSize * 0.65;
+      const previousCenter = plotWidth + 28 * dpr / 1.6 +
+        (28 * dpr - 28 * dpr / 1.6) / 2;
+      assert.ok(Math.abs(oneDigit.x - oneDigitWidth / 2 - previousCenter) <= dpr);
+      assert.ok(width - (oneDigit.x + oneDigit.lineWidth / 2) >= dpr);
+      assert.ok(twoDigits.x - 2 * oneDigitWidth - twoDigits.lineWidth / 2 <
+        oneDigit.x - oneDigitWidth - oneDigit.lineWidth / 2);
+      assert.deepEqual(operations.filter(operation => operation.type === 'rect').at(-1),
+        { type: 'rect', x: plotWidth, y: 0, width: 28 * dpr, height });
+      const keys = plugin.getKeyboardGeometry(height);
+      assert.ok(outlinedLabels.every(label => {
+        const key = keys.find(item => item.midi === (Number(label.text) + 1) * 12);
+        return key && label.y === (key.whiteStart + key.whiteEnd) / 2;
+      }));
+      const black = plugin.getKeyboardGeometry(height).find(key => key.midi === 70);
+      assert.ok(operations.some(operation => operation.type === 'fillRect' &&
+        operation.x === plotWidth && operation.y === black.start && operation.height === black.end - black.start));
+      assert.deepEqual(Array.from(plugin.spectrogramColumnTimes), times);
+
+      operations.length = 0;
+      plugin.canvas.width = 28 * dpr;
+      plugin.drawGraph(0);
+      assert.equal(operations.some(operation => operation.type === 'rect'), false);
+      assert.equal(operations.find(operation => operation.type === 'fillText' && operation.text === 'Time').x, 14 * dpr);
+    }
+  }
 });

@@ -506,6 +506,14 @@ is 1; `TAP_SCOPE_SNAPSHOT` (type 3), `TAP_STEREO_FIELD` (type 6), and
   `firstMidi + (i - 2) / divisionsPerSemitone`, placing five bins at -40, -20,
   0, +20, and +40 cents around each piano-key center.
 
+- **Type 25 — `TAP_TV_AUDIO_SIMULATOR`.** Format version 1 is exactly 216 bytes:
+  five float32 values, one cumulative little-endian `u32` error counter, and
+  forty-eight float32 spectrum magnitudes. The float values report received
+  carrier level in dBuV, estimated CNR in dB, scheme health from 0-1, selected
+  path blend from 0-1, and multipath depth in dB. The spectrum uses dBFS on a
+  fixed logarithmic grid. It represents recovered multiplex audio for analogue
+  FM, detected audio for L AM, and selected output audio for NICAM.
+
 ### Latency and Pipeline Descriptors
 
 `et_instance_latency` reflects staged parameters immediately.

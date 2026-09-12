@@ -61,6 +61,7 @@
     {"type":"SimpleJitter","class":"SimpleJitter","factory":"createSimpleJitter"},
     {"type":"SWRadioSimulator","class":"SWRadioSimulator","factory":"createSWRadioSimulator"},
     {"type":"TapeArtifacts","class":"TapeArtifacts","factory":"createTapeArtifacts"},
+    {"type":"TVAudioSimulator","class":"TVAudioSimulator","factory":"createTVAudioSimulator"},
     {"type":"VinylArtifacts","class":"VinylArtifacts","factory":"createVinylArtifacts"},
     {"type":"VinylSimulator","class":"VinylSimulator","factory":"createVinylSimulator"},
     {"type":"AutoFilter","class":"AutoFilter","factory":"createAutoFilter"},

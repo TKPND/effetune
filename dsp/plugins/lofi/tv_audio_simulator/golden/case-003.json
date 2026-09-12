@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "type": "TVAudioSimulatorPlugin",
+  "id": "a2-stereo-44100",
+  "stimulus": "sin1k",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frameCount": 4097,
+  "blockSize": 83,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 2,
+  "seed": "0xeffe7a5c",
+  "params": {
+    "rd": true,
+    "ss": "B/G A2",
+    "tx": "Stereo",
+    "pr": 0,
+    "st": 35,
+    "tn": 0,
+    "bw": 230,
+    "mp": 12,
+    "dl": 7,
+    "fd": 0,
+    "sm": "Stereo",
+    "bz": -80,
+    "og": 0,
+    "mx": 100,
+    "fr": true
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.0001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "7ead7bf6c85d915fac3c7921411aa7612d7d7ffa7cff90ebe4e85afc983ca26f",
+  "outputFloats": 8194,
+  "byteLength": 32776,
+  "binary": "case-003.f32"
+}

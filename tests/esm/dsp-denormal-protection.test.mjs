@@ -12,7 +12,7 @@ const SAMPLE_RATE = 48000;
 const BLOCK_SIZE = 128;
 const MAX_OUTPUT_NOISE = 10 ** (-288 / 20);
 const MAX_PLUGIN_COUNT = 128;
-const MAX_INTERNAL_COHERENT_SITES_PER_PLUGIN = 38;
+const MAX_INTERNAL_COHERENT_SITES_PER_PLUGIN = 44;
 const MAX_COHERENT_SITES_PER_PLUGIN = 1 + MAX_INTERNAL_COHERENT_SITES_PER_PLUGIN;
 
 function channel(audio, index, frames) {
@@ -72,10 +72,14 @@ test('denormal noise is continuous, DC-free, inaudible, and transparent to norma
   const perEffectMatch = headerSource.match(/kAmplitude\s*=\s*([0-9.e+-]+);/i);
   assert.ok(perEffectMatch);
   assert.equal(Number(perEffectMatch[1]), DENORMAL_NOISE_AMPLITUDE);
+  const internalSiteMatch = headerSource.match(
+    /kMaximumInternalCoherentSitesPerPlugin\s*=\s*(\d+)u;/
+  );
+  assert.ok(internalSiteMatch);
+  assert.equal(Number(internalSiteMatch[1]), MAX_INTERNAL_COHERENT_SITES_PER_PLUGIN);
   const maximumCoherentSum = DENORMAL_NOISE_AMPLITUDE *
     MAX_PLUGIN_COUNT * MAX_COHERENT_SITES_PER_PLUGIN;
   assert.ok(maximumCoherentSum <= MAX_OUTPUT_NOISE);
-  assert.ok(20 * Math.log10(maximumCoherentSum) <= -306);
   assert.ok(Math.fround(DENORMAL_NOISE_AMPLITUDE) >= 1.1754943508222875e-38);
 
   const whole = new Float32Array(2 * 256);

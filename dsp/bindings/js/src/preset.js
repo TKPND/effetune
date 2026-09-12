@@ -276,6 +276,10 @@ const LEGACY_ECHOED_ENABLED_EFFECTS_V1 = Object.freeze(['HornResonator', 'HornRe
 // the known values before discarding it so other unknown parameters remain strict.
 const LEGACY_FREQUENCY_SCALE_EFFECTS_V1 = Object.freeze(['SpectrumAnalyzer', 'Spectrogram']);
 
+// These analyzers also persist a display-only keyboard guide. Validate the
+// boolean before discarding it so other unknown parameters remain strict.
+const LEGACY_KEYBOARD_DISPLAY_EFFECTS_V1 = Object.freeze(['SpectrumAnalyzer', 'Spectrogram']);
+
 function dropEchoedStructuralKeysV1(parameters, effectType) {
   for (const key of LEGACY_ECHOED_STRUCTURAL_KEYS_V1) delete parameters[key];
   if (LEGACY_ECHOED_ENABLED_EFFECTS_V1.includes(effectType)) delete parameters.en;
@@ -371,6 +375,19 @@ function prepareLegacyParametersV1(effectType, source) {
       throw new ValidationError(`Legacy ${effectType} contains invalid frequency scale display state.`);
     }
     delete parameters.sc;
+  }
+  if (LEGACY_KEYBOARD_DISPLAY_EFFECTS_V1.includes(effectType) &&
+      Object.hasOwn(parameters, 'kb')) {
+    if (typeof parameters.kb !== 'boolean') {
+      throw new ValidationError(`Legacy ${effectType} contains invalid keyboard display state.`);
+    }
+    delete parameters.kb;
+  }
+  if (effectType === 'SpectrumAnalyzer' && Object.hasOwn(parameters, 'dm')) {
+    if (parameters.dm !== 'line' && parameters.dm !== 'bar') {
+      throw new ValidationError('Legacy SpectrumAnalyzer contains invalid display mode state.');
+    }
+    delete parameters.dm;
   }
   let processingEnabled = true;
   if (effectType === 'Matrix' && Object.hasOwn(parameters, 'mx')) {

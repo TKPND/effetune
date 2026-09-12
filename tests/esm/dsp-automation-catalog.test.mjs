@@ -52,9 +52,9 @@ test('production schemas expose the audited automation population', async () => 
     .filter(([, parameters]) => parameters.length === 0)
     .map(([type]) => type);
 
-  assert.equal(entries.length, 100);
-  assert.equal(entries.filter(([, parameters]) => parameters.length !== 0).length, 87);
-  assert.equal(entries.reduce((count, [, parameters]) => count + parameters.length, 0), 951);
+  assert.equal(entries.length, 101);
+  assert.equal(entries.filter(([, parameters]) => parameters.length !== 0).length, 88);
+  assert.equal(entries.reduce((count, [, parameters]) => count + parameters.length, 0), 965);
   for (const effect of specs) {
     const expectedLeaves = [];
     let packedOffset = 0;
@@ -86,7 +86,7 @@ test('production schemas expose the audited automation population', async () => 
   }
   assert.equal(
     createHash('sha256').update(JSON.stringify(catalog.effects)).digest('hex'),
-    'ebb63523bc83de05d7dd38943f36cde10324b5da774d412902b947fc722a1cad'
+    '9b66e3641d32a0b721e9041b7f9ad136b728946d9bdfc8fcb0bec881f4fc6892'
   );
   assert.deepEqual(privateEffects, [
     'FIRCrossoverPlugin', 'FiveBandFIRPEQPlugin', 'GroupDelayEqPlugin',
@@ -156,6 +156,7 @@ test('production schemas expose the audited automation population', async () => 
     'G726ADPCMSimulatorPlugin.radioBitErrorExponent': 'radioBitErrorRate',
     'SimpleJitterPlugin.rmsJitter': 'rmsJitterNanoseconds',
     'TiltEQPlugin.pivotExponent': 'pivotFrequency',
+    'TVAudioSimulatorPlugin.ifBand': 'ifBandwidth',
     'VinylSimulatorPlugin.hfCutoff': 'highFrequencyCutoff'
   });
   const logarithmicFieldNames = specs.flatMap(effect => effect.fields
@@ -203,6 +204,7 @@ test('production schemas expose the audited automation population', async () => 
     'TubeSimulatorPlugin.inputReference': [0.1, 300],
     'TubeSimulatorPlugin.sourceZ': [0.6, 100],
     'TubeSimulatorPlugin.supply': [0.1, 47],
+    'TVAudioSimulatorPlugin.pathDelay': [0.5, 50],
     'VinylSimulatorPlugin.roughness': [0.1, 100]
   });
   assert.deepEqual(new Set(Object.keys(logarithmicFields)), new Set(logarithmicFieldNames));
@@ -251,6 +253,33 @@ test('production schemas expose the audited automation population', async () => 
       }
     );
   }
+  assert.deepEqual(
+    catalog.effects.TVAudioSimulatorPlugin.find(parameter => parameter.key === 'rd'),
+    {
+      key: 'rd',
+      publicName: 'broadcast',
+      element: 0,
+      field: 'rd',
+      containerKey: '',
+      memberKey: '',
+      packedOffset: 0,
+      kind: 'bool',
+      eligibility: 'stepped',
+      normalization: 'bool',
+      transform: 'identity',
+      transformReference: 1,
+      minimum: 0,
+      maximum: 1,
+      step: 1,
+      default: true,
+      packedDefault: 1,
+      stepCount: 1,
+      title: 'Broadcast',
+      shortTitle: 'Broadcast',
+      unit: '',
+      safetyFlags: 0
+    }
+  );
   assert.equal(catalog.effects.BrickwallLimiterPlugin.some(
     parameter => parameter.field === 'la' || parameter.field === 'os'
   ), false);

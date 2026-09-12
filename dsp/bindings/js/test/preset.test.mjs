@@ -87,6 +87,45 @@ test('legacy analyzer frequency scale display state is validated and discarded',
   }
 });
 
+test('legacy analyzer keyboard display state is validated and discarded', () => {
+  for (const name of ['Spectrum Analyzer', 'Spectrogram']) {
+    for (const keyboard of [true, false]) {
+      const preset = importLegacyPreset({
+        pipeline: [{ name, parameters: { kb: keyboard } }]
+      });
+      assert.equal(Object.hasOwn(preset.chain[0].parameters, 'kb'), false);
+    }
+    assert.throws(
+      () => importLegacyPreset({ pipeline: [{ name, parameters: { kb: 1 } }] }),
+      error => error instanceof ValidationError &&
+        error.message.includes('invalid keyboard display state')
+    );
+  }
+});
+
+test('legacy Spectrum Analyzer display mode is validated and discarded', () => {
+  for (const mode of ['line', 'bar']) {
+    const preset = importLegacyPreset({
+      pipeline: [{ name: 'Spectrum Analyzer', parameters: { dm: mode } }]
+    });
+    assert.equal(Object.hasOwn(preset.chain[0].parameters, 'dm'), false);
+  }
+  assert.throws(
+    () => importLegacyPreset({
+      pipeline: [{ name: 'Spectrum Analyzer', parameters: { dm: 'invalid' } }]
+    }),
+    error => error instanceof ValidationError &&
+      error.message.includes('invalid display mode state')
+  );
+  assert.throws(
+    () => importLegacyPreset({
+      pipeline: [{ name: 'Spectrogram', parameters: { dm: 'bar' } }]
+    }),
+    error => error instanceof ValidationError &&
+      error.message.includes('Unsupported legacy parameter Spectrogram.dm')
+  );
+});
+
 test('legacy importer rejects routing and channel values a serial chain cannot represent', () => {
   assert.throws(() => importLegacyPreset({
     pipeline: [{

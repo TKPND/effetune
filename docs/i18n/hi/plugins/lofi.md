@@ -26,6 +26,7 @@ lang: hi
 - [Simple Jitter](#simple-jitter) - क्लॉक के सूक्ष्म उतार-चढ़ाव की तुलना करता है या बड़े मानों पर रचनात्मक अस्थिरता जोड़ता है
 - [SW Radio Simulator](#sw-radio-simulator) - संगीत को मॉडल की गई शॉर्टवेव प्रसारण, आयनमंडलीय पथ और रिसीवर शृंखला से गुजारता है
 - [Tape Artifacts](#tape-artifacts) - संगीत को मॉडल किए गए reel-to-reel टेप पर रिकॉर्ड करके वापस चलाता है
+- [TV Audio Simulator](#tv-audio-simulator) - एनालॉग और NICAM टेलीविजन ध्वनि रिसेप्शन को फिर से बनाता है
 - [Vinyl Artifacts](#vinyl-artifacts) - विनाइल-शैली के पॉप, क्रैकल, हिस, रंबल और स्टेरियो शोर रिसाव जोड़ता है
 - [Vinyl Simulator](#vinyl-simulator) - इनपुट को मॉडल किए गए groove में काटकर भौतिक stylus मॉडल से चलाता है
 
@@ -896,6 +897,44 @@ Controls के नीचे की पंक्ति चुनी गई Speed
    - Wow/Flutter: 0.480%, Hiss: -56.5 dB re 320 nWb/m, Output: +1.0 dB, Mix: 100%
    - तेज़ pitch movement, grit, compression और hiss वाला जानबूझकर degraded sound।
 
+
+## TV Audio Simulator
+
+TV Audio Simulator संगीत को एनालॉग टेलीविजन प्रसारण या NICAM डिजिटल टेलीविजन के ध्वनि पथ से गुजारता है। इसका उपयोग क्षेत्रीय प्रणालियों की तुलना करने, रिसेप्शन बिगड़ने पर स्टेरियो से मोनो बदलाव सुनने, या पुराने टीवी का सीमित बैंडविड्थ, शोर, मल्टीपाथ विकृति और बज़ जोड़ने के लिए करें। NICAM में अस्थिर डिजिटल रिसेप्शन अंततः साथ भेजे गए एनालॉग FM मोनो ध्वनि पर लौटता है।
+
+### ध्वनि समायोजन गाइड
+
+- मनचाहा Standard चुनें और Signal 35 dBµV, Tuning 0 kHz, Multipath व Fading 0 और Mix 100% से शुरू करें।
+- साफ पुराने टीवी की ध्वनि के लिए Signal बढ़ाएँ और Tuning को बीच में रखें। Processing एनालॉग पथ को अधिक सघन बनाता है, पर NICAM के मुख्य डिजिटल पथ को नहीं बदलता।
+- कठिन एनालॉग रिसेप्शन के लिए पहले Signal घटाएँ, फिर Multipath या थोड़ा Tuning offset जोड़ें। Path Delay विकृति का स्वरूप बदलता है।
+- B/G NICAM या I NICAM में Signal धीरे-धीरे घटाकर डिजिटल क्षति और FM मोनो fallback सुनें। Video Buzz 50/60 Hz टोन जोड़ता है; -80 dB पर यह बंद रहता है।
+
+### सिस्टम प्रीसेट
+
+नौ प्रीसेट जापान M/EIA-J, उत्तरी अमेरिका M/BTSC, कोरिया M/A2, यूरोप व ऑस्ट्रेलिया A2, ब्रिटेन व नॉर्डिक NICAM, पूर्वी यूरोप D/K मोनो और फ्रांस L/AM को कवर करते हैं।
+
+### पैरामीटर
+
+- **Broadcast**: मॉडल किए गए प्रसारण को चालू या बंद करता है; बंद होने पर रिसीवर खाली चैनल पर रहता है।
+- **Standard**: टीवी प्रणाली और उसके modulation, emphasis तथा 50/60 Hz scan family को चुनता है।
+- **Tx Mode**: Stereo, Mono या Dual चुनता है। अनुपलब्ध संयोजन मुख्य मोनो कार्यक्रम पर लौटते हैं।
+- **Processing**: एनालॉग compression और घनत्व 0 से 18 dB तक बढ़ाता है; NICAM डिजिटल पथ पर असर नहीं पड़ता।
+- **Signal**: 0 से 70 dBµV तक रिसेप्शन शक्ति तय करता है। घटाने पर शोर या त्रुटियाँ बढ़ती हैं और fallback हो सकता है।
+- **Tuning**: -200 से +200 kHz तक tuning बदलता है; 0 से दूर जाने पर रिसेप्शन संकरा और विकृत होता है।
+- **IF Band**: 80 से 240 kHz तक receiver passband तय करता है। कम मान off-tune ऊर्जा रोकता है, पर कार्यक्रम भी काट सकता है।
+- **Multipath**: विलंबित reflection जोड़ता है; अधिक मान coloration और stereo instability बढ़ाते हैं।
+- **Path Delay**: reflection delay 0.5 से 50 µs तक तय करके peaks और dips की दूरी बदलता है।
+- **Fading**: रिसेप्शन बदलाव की गति 0 से 20 Hz तक तय करता है।
+- **Receive Mode**: `Auto` उपलब्ध पथ चुनता है; `Stereo`, `Main` और `Sub` किसी खास कार्यक्रम का अनुरोध करते हैं।
+- **Video Buzz**: 50/60 Hz buzz को -80 से -20 dB तक तय करता है; -80 dB पर बंद रहता है।
+- **Output Gain**: अंतिम स्तर -24 से +24 dB तक समायोजित करता है।
+- **Mix**: मूल और टीवी ध्वनि को 0% से 100% तक मिलाता है।
+
+### HUD पढ़ना
+
+HUD Standard और सक्रिय पथ दिखाता है: `STEREO`, `MAIN`, `SUB`, `NICAM`, `FALLBACK` या `AM`। Carrier और CNR स्तर व गुणवत्ता दिखाते हैं। Health बताता है कि चुना गया stereo या digital पथ उपयोग योग्य है या नहीं, Multipath परावर्तित signal की गहराई और Errors प्रति सेकंड reception errors की दर दिखाते हैं। spectrum एनालॉग FM में पुनः प्राप्त multiplex, L AM में detected audio और NICAM में चुना गया output दिखाता है।
+
+यह मॉडल टीवी ध्वनि के सुनाई देने वाले प्रभावों को दोहराता है; यह पूरा चित्र/RF चैनल या प्रसारण परीक्षण संकेत नहीं बनाता।
 
 ## Vinyl Artifacts
 

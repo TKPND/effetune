@@ -83,6 +83,7 @@
     "SimpleJitter": { "displayName": "Simple Jitter", "category": "lo-fi", "summary": "Applies deterministic seeded sampling-time jitter.", "sourceGenerating": false },
     "SWRadioSimulator": { "displayName": "SW Radio Simulator", "category": "lo-fi", "summary": "Models fading, interference, limited bandwidth, and noise associated with shortwave radio.", "sourceGenerating": true },
     "TapeArtifacts": { "displayName": "Tape Artifacts", "category": "lo-fi", "summary": "Models the record and reproduce chain of a reel-to-reel tape machine, including saturation, wow and flutter, hiss, and head response.", "sourceGenerating": true },
+    "TVAudioSimulator": { "displayName": "TV Audio Simulator", "category": "lo-fi", "summary": "Models analogue and NICAM television sound reception, including bandwidth, stereo and programme behavior, reception impairment, and picture-related buzz.", "sourceGenerating": true },
     "VinylArtifacts": { "displayName": "Vinyl Artifacts", "category": "lo-fi", "summary": "Adds deterministic seeded clicks, crackle, and surface artifacts.", "sourceGenerating": true },
     "VinylSimulator": { "displayName": "Vinyl Simulator", "category": "lo-fi", "summary": "Combines tonal, mechanical, and surface-noise behavior associated with vinyl playback.", "sourceGenerating": true },
     "AutoFilter": { "displayName": "Auto Filter", "category": "modulation", "summary": "Provides Auto Filter sweeps, Envelope Filter response, and Auto Wah movement with a resonant state-variable filter.", "sourceGenerating": false },

@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 
 import {
   attachPluginExecutionCapabilities,
@@ -7,6 +11,8 @@ import {
   getPluginExecutionChannelMode,
   getPluginExecutionUnsupportedReason
 } from '../../js/audio/plugin-execution-capabilities.js';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 test('plugin execution capabilities prefer class declarations over compatibility metadata', () => {
   class RoomEqPlugin {}
@@ -72,4 +78,23 @@ test('execution eligibility shares rate and channel-mode decisions', () => {
     sampleRate: 96000,
     channelMode: 'mono'
   }), null);
+});
+
+test('TV Audio Simulator declares its WASM-only execution envelope on the class', async () => {
+  const source = await fs.readFile(
+    path.join(repoRoot, 'plugins', 'lofi', 'tv_audio_simulator.js'), 'utf8');
+  const context = {
+    PluginBase: class {},
+    performance: { now: () => 0 },
+    window: {}
+  };
+  vm.runInNewContext(source, context, { filename: 'plugins/lofi/tv_audio_simulator.js' });
+  const Plugin = context.window.TVAudioSimulatorPlugin;
+  const capabilities = getPluginExecutionCapabilities(Object.create(Plugin.prototype));
+
+  assert.equal(capabilities, Plugin.executionCapabilities);
+  assert.equal(capabilities.requiresWasm, true);
+  assert.deepEqual(Array.from(capabilities.supportedSampleRates),
+    [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000]);
+  assert.deepEqual(Array.from(capabilities.supportedChannelModes), ['mono', 'stereo-pair']);
 });

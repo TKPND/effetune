@@ -6,6 +6,11 @@ lang: en
 
 # Version History
 
+### Version 2.10.0 (TBD, 2026)
+- Added TV Audio Simulator effect
+- Added a bar display mode to the Spectrum Analyzer
+- Various minor improvements
+
 ### Version 2.9.0 (Sep 11, 2026)
 - Added Note Spectrogram effect
 - Added color theme presets

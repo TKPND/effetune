@@ -18,7 +18,7 @@ const pluginRoot = path.join(repoRoot, 'dsp', 'plugins', 'analyzer', 'spectrum_a
 const schemaPath = path.join(pluginRoot, 'params.json');
 const goldenDir = path.join(pluginRoot, 'golden');
 const kernelPath = path.join(pluginRoot, 'kernel.cpp');
-const jsEngineHash = '6035d10a99b40044b69b9ddc3aae6b66cde208c68a8ee19558b9a94fcda1e1cb';
+const jsEngineHash = '442871de1b7833d224574b67facd479d703868d8c41ef066eef19bbfe96c7f41';
 
 async function directoryBytes(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });

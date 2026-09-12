@@ -253,4 +253,6 @@ CLAUDE.md
 !/tests/esm/theme-palette.test.mjs
 !/tests/esm/theme-color-census.test.mjs
 !/tests/esm/plugin-list-collapse-browser.test.mjs
+!/tests/esm/dsp-tv-audio-simulator-integration-v1.test.mjs
+!/tests/esm/dsp-tv-audio-simulator-port-v1.test.mjs
 !/tests/helpers/theme-palette-stub.mjs

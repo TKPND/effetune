@@ -26,6 +26,7 @@ Une collection de plugins qui ajoutent du caractère vintage et des qualités no
 - [Simple Jitter](#simple-jitter) - Compare de faibles fluctuations d’horloge ou ajoute un mouvement créatif avec des valeurs élevées
 - [SW Radio Simulator](#sw-radio-simulator) - Fait passer la musique dans une chaîne modélisée d'émission en ondes courtes, de propagation ionosphérique et de réception
 - [Tape Artifacts](#tape-artifacts) - Enregistre la musique sur une bande magnétique à bobines modélisée puis la relit
+- [TV Audio Simulator](#tv-audio-simulator) - Recrée la réception sonore des télévisions analogiques et NICAM
 - [Vinyl Artifacts](#vinyl-artifacts) - Ajoute des pops, crépitements, souffle, rumble et fuite de bruit stéréo façon vinyle
 - [Vinyl Simulator](#vinyl-simulator) - Grave le signal dans un sillon modélisé puis le lit avec un modèle physique de pointe
 
@@ -868,6 +869,44 @@ Cliquez sur **Préréglages d’effet** dans l’en-tête de l’effet pour essa
    - Un son volontairement dégradé, avec une forte instabilité de hauteur, du grain, de la compression et du souffle.
 
 Tape Artifacts ajoute environ 5 ms de retard lorsque Mix dépasse 0 %. Il se concentre sur le timbre, la saturation, le souffle et le mouvement du défilement ; il n'ajoute ni décrochages, ni bruits de raccord, ni défauts d'alignement de tête.
+
+## TV Audio Simulator
+
+TV Audio Simulator fait passer la musique par la chaîne sonore d'une diffusion télévisée analogique ou numérique NICAM. Il permet de comparer les normes régionales et de retrouver la réduction en mono, le souffle, la distorsion par trajets multiples et le bourdonnement des anciens téléviseurs. En NICAM, une réception numérique devenue instable bascule vers le son FM mono analogique associé.
+
+### Guide de réglage
+
+- Choisissez d'abord le Standard recherché, puis commencez avec Signal à 35 dBµV, Tuning à 0 kHz, Multipath et Fading à 0, et Mix à 100 %.
+- Pour un son d'époque bien reçu, augmentez Signal et gardez Tuning centré. Processing densifie la voie analogique, mais pas la voie numérique NICAM principale.
+- Pour une réception analogique difficile, baissez Signal puis ajoutez Multipath ou un léger décalage de Tuning. Path Delay change la couleur de cette distorsion.
+- En B/G NICAM ou I NICAM, baissez progressivement Signal pour entendre la dégradation numérique puis le passage en FM mono. Video Buzz ajoute les tonalités de 50/60 Hz ; -80 dB les désactive.
+
+### Préréglages système
+
+Les neuf préréglages couvrent le Japon M/EIA-J, l'Amérique du Nord M/BTSC, la Corée M/A2, l'Europe et l'Australie A2, le Royaume-Uni et les pays nordiques NICAM, l'Europe de l'Est D/K mono et la France L/AM.
+
+### Paramètres
+
+- **Broadcast** : Active ou arrête la diffusion modélisée ; à l'arrêt, le récepteur reste sur un canal vide.
+- **Standard** : Sélectionne la norme de télévision, donc la modulation, l'accentuation et la famille de balayage 50/60 Hz.
+- **Tx Mode** : Choisit Stereo, Mono ou Dual. Une combinaison indisponible revient au programme principal mono.
+- **Processing** : Augmente de 0 à 18 dB la compression et la densité analogiques ; sans effet sur la voie numérique NICAM.
+- **Signal** : Règle le niveau reçu de 0 à 70 dBµV. Le réduire ajoute du bruit ou des erreurs et peut provoquer le fallback.
+- **Tuning** : Décale l'accord de -200 à +200 kHz ; s'éloigner de 0 rétrécit et déforme la réception.
+- **IF Band** : Règle la bande du récepteur de 80 à 240 kHz. Une bande étroite rejette mieux le hors-accord, mais peut couper le programme.
+- **Multipath** : Ajoute un signal réfléchi retardé ; une valeur élevée renforce la coloration et l'instabilité stéréo.
+- **Path Delay** : Règle le retard de la réflexion de 0,5 à 50 µs et l'espacement de ses bosses et creux.
+- **Fading** : Règle de 0 à 20 Hz la vitesse des variations de réception.
+- **Receive Mode** : `Auto` suit la voie disponible ; `Stereo`, `Main` et `Sub` demandent un programme précis.
+- **Video Buzz** : Règle le bourdonnement 50/60 Hz de -80 à -20 dB. -80 dB le désactive.
+- **Output Gain** : Règle le niveau final de -24 à +24 dB.
+- **Mix** : Mélange le son original et le son télévisé de 0 à 100 %.
+
+### Lecture du HUD
+
+Le HUD affiche le Standard et la voie active : `STEREO`, `MAIN`, `SUB`, `NICAM`, `FALLBACK` ou `AM`. Carrier et CNR indiquent le niveau et la qualité ; Health indique si la voie stéréo ou numérique choisie est utilisable ; Multipath, la profondeur du signal réfléchi ; Errors, le taux d'erreurs de réception par seconde. Le spectre représente le multiplex FM restitué, le son détecté en L AM ou la sortie choisie en NICAM.
+
+Le modèle reproduit les effets audibles du son télévisé, pas un canal complet d'image et de radiofréquence ni un signal de test de diffusion.
 
 ## Vinyl Artifacts
 

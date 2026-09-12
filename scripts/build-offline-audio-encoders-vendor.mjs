@@ -10,9 +10,9 @@ const outfile = path.join(outputDirectory, 'offline-audio-encoders.mjs');
 const noticeFile = path.join(outputDirectory, 'offline-audio-encoders.NOTICE.txt');
 const libFlacLicenseFile = path.join(root, 'licenses', 'libFLAC-COPYING.Xiph');
 const libFlacCommit = '3f1ecff843dd1b8c07fbb5f59425a4ec71fe4f6c';
-const mediabunnyVersion = '1.56.1';
+const mediabunnyVersion = '1.56.2';
 const mediabunnyTag = `v${mediabunnyVersion}`;
-const mediabunnyCommit = '6319bf2eee41c1143c3de02d35347cf31d6de53e';
+const mediabunnyCommit = 'f48609437864d569dfd2e853396a7236a46ab0d5';
 const packages = [
   'mediabunny',
   '@mediabunny/flac-encoder'

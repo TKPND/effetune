@@ -1,0 +1,77 @@
+.tv-audio-simulator-container {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.tv-audio-simulator-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tv-audio-simulator-section {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--et-surface-21);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--et-surface-10), var(--et-graph-bg-deep) 25%);
+}
+
+.tv-audio-simulator-section-title {
+    margin: 0 0 8px;
+    color: var(--et-surface-89);
+    font: 600 12px/1.2 Arial, sans-serif;
+    letter-spacing: 0.04em;
+}
+
+.tv-audio-simulator-standard-detail {
+    margin: 6px 0 0;
+    color: var(--et-surface-66);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.tv-audio-simulator-hud {
+    width: 100%;
+    min-height: 120px;
+    max-width: none !important;
+    margin-top: 8px;
+    overflow: hidden;
+    border: 1px solid var(--et-surface-21);
+    border-radius: 4px;
+    background: var(--et-graph-bg-deep);
+}
+
+.tv-audio-simulator-hud canvas {
+    display: block;
+}
+
+.tv-audio-simulator-status-note {
+    margin-top: 6px;
+    color: var(--et-surface-66);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.tv-audio-simulator-status-note:empty {
+    display: none;
+}
+
+body.layout-mobile .tv-audio-simulator-container,
+body.layout-mobile .tv-audio-simulator-controls,
+body.layout-mobile .tv-audio-simulator-section,
+body.layout-mobile .tv-audio-simulator-hud {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+body.layout-mobile .tv-audio-simulator-controls {
+    gap: 6px;
+}
+
+body.layout-mobile .tv-audio-simulator-section {
+    padding: 8px;
+}

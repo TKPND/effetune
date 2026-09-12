@@ -271,6 +271,9 @@
           "$ref": "#/$defs/TapeArtifacts"
         },
         {
+          "$ref": "#/$defs/TVAudioSimulator"
+        },
+        {
           "$ref": "#/$defs/VinylArtifacts"
         },
         {
@@ -5219,6 +5222,144 @@
               "default": -62.5
             },
             "output": {
+              "type": "number",
+              "minimum": -24,
+              "maximum": 24,
+              "x-effetune-unit": "dB",
+              "default": 0
+            },
+            "mix": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "x-effetune-unit": "%",
+              "default": 100
+            }
+          }
+        }
+      }
+    },
+    "TVAudioSimulator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "TVAudioSimulator"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "channel": {
+          "$ref": "#/$defs/channel"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "broadcast": {
+              "type": "boolean",
+              "default": true
+            },
+            "standard": {
+              "type": "string",
+              "enum": [
+                "M/EIA-J",
+                "M/BTSC",
+                "M/A2",
+                "B/G A2",
+                "B/G NICAM",
+                "I NICAM",
+                "D/K Mono",
+                "L AM"
+              ],
+              "default": "M/EIA-J"
+            },
+            "txMode": {
+              "type": "string",
+              "enum": [
+                "Stereo",
+                "Mono",
+                "Dual"
+              ],
+              "default": "Stereo"
+            },
+            "processing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 18,
+              "x-effetune-unit": "dB",
+              "default": 0
+            },
+            "signal": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 70,
+              "x-effetune-unit": "dBuV",
+              "default": 35
+            },
+            "tuning": {
+              "type": "number",
+              "minimum": -200,
+              "maximum": 200,
+              "x-effetune-unit": "kHz",
+              "default": 0
+            },
+            "ifBandwidth": {
+              "type": "number",
+              "minimum": 80,
+              "maximum": 240,
+              "x-effetune-unit": "kHz",
+              "default": 230
+            },
+            "multipath": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "x-effetune-unit": "%",
+              "default": 0
+            },
+            "pathDelay": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 50,
+              "x-effetune-unit": "us",
+              "default": 5
+            },
+            "fading": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 20,
+              "x-effetune-unit": "Hz",
+              "default": 0
+            },
+            "receiveMode": {
+              "type": "string",
+              "enum": [
+                "Auto",
+                "Stereo",
+                "Main",
+                "Sub"
+              ],
+              "default": "Auto"
+            },
+            "buzz": {
+              "type": "number",
+              "minimum": -80,
+              "maximum": -20,
+              "x-effetune-unit": "dB",
+              "default": -80
+            },
+            "outputGain": {
               "type": "number",
               "minimum": -24,
               "maximum": 24,

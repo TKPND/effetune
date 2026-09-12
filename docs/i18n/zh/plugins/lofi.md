@@ -26,6 +26,7 @@ lang: zh
 - [Simple Jitter](#simple-jitter) - 比较细微的时钟波动，或用较大数值加入创作性的起伏
 - [SW Radio Simulator](#sw-radio-simulator) - 让音乐经过建模的短波广播、电离层传播与接收链路
 - [Tape Artifacts](#tape-artifacts) - 将音乐录到建模的开盘磁带上再放出来
+- [TV Audio Simulator](#tv-audio-simulator) - 重现模拟电视与NICAM电视伴音接收
 - [Vinyl Artifacts](#vinyl-artifacts) - 加入黑胶风格的爆点、噼啪声、嘶声、隆隆声和立体声噪声串扰
 - [Vinyl Simulator](#vinyl-simulator) - 将输入刻入模拟唱槽，再用物理唱针模型播放
 
@@ -885,6 +886,44 @@ Tape Artifacts 将音乐录制到模拟的开盘式磁带机上再播放。信�
    - 有意劣化的声音，带有强烈音高晃动、粗糙感、压缩和底噪。
 
 当 Mix 高于 0% 时，Tape Artifacts 会增加约 5 ms 延迟。它专注于磁带音色、饱和、底噪和走带变化，不会添加信号丢失、接带噪声或磁头对位误差。
+
+## TV Audio Simulator
+
+TV Audio Simulator让音乐经过模拟电视广播或NICAM数字电视的伴音通路。它适合比较不同地区的电视伴音制式，也可重现接收变差时的立体声收窄、噪声、多径失真和老式电视的图像串扰嗡声。在NICAM制式下，数字接收不再可靠时会切换到同时传送的模拟FM单声道伴音。
+
+### 声音调整指南
+
+- 先选择所需的Standard，然后从Signal 35 dBµV、Tuning 0 kHz、Multipath和Fading 0、Mix 100%开始。
+- 要获得接收良好的年代电视声，可提高Signal并让Tuning保持居中。Processing会增加模拟通路的压缩感和密度，但不作用于NICAM数字主通路。
+- 要模拟困难的模拟接收，先降低Signal，再加入Multipath或轻微偏移Tuning。Path Delay会改变多径失真的质感。
+- 使用B/G NICAM或I NICAM时，逐渐降低Signal即可听到数字损伤和切换至FM单声道的过程。Video Buzz加入50/60 Hz音调；-80 dB时关闭。
+
+### 系统预设
+
+九个预设涵盖日本M/EIA-J、北美M/BTSC、韩国M/A2、欧洲与澳大利亚A2、英国与北欧NICAM、东欧D/K单声道以及法国L/AM。
+
+### 参数
+
+- **Broadcast**：开启或停止建模的广播；关闭时接收机仍停留在无信号频道上。
+- **Standard**：选择电视制式，并同时确定调制、加重和50/60 Hz扫描系列。
+- **Tx Mode**：选择Stereo、Mono或Dual。制式不支持的组合会回到主节目单声道。
+- **Processing**：在0至18 dB范围增加模拟发射端的压缩和密度；不影响NICAM数字通路。
+- **Signal**：设置0至70 dBµV的接收强度。降低会增加噪声或数字错误，并可能触发回退。
+- **Tuning**：在-200至+200 kHz范围偏移调谐；偏离0越多，接收越窄、失真越大。
+- **IF Band**：设置80至240 kHz的接收带宽。较窄可更强地抑制失谐能量，但也可能削减节目带宽。
+- **Multipath**：加入延迟反射；提高会加重梳状染色与立体声不稳定。
+- **Path Delay**：设置0.5至50 µs的反射延迟，改变峰谷的间距。
+- **Fading**：设置0至20 Hz的接收电平变化速度。
+- **Receive Mode**：`Auto`跟随可用通路；`Stereo`、`Main`和`Sub`请求特定节目。
+- **Video Buzz**：设置-80至-20 dB的50/60 Hz嗡声；-80 dB时关闭。
+- **Output Gain**：在-24至+24 dB范围调整最终电平。
+- **Mix**：在0%至100%之间混合原声与电视伴音。
+
+### HUD读法
+
+HUD显示Standard和当前通路：`STEREO`、`MAIN`、`SUB`、`NICAM`、`FALLBACK`或`AM`。Carrier与CNR表示电平和质量；Health表示所选立体声或数字通路是否可用；Multipath表示反射信号深度；Errors表示每秒接收错误率。频谱在模拟FM时显示恢复的复合伴音，在L AM时显示检波后音频，在NICAM时显示所选输出。
+
+本模型重现电视伴音的可听特征，而不是完整的图像与射频频道，也不能作为广播测试信号。
 
 ## Vinyl Artifacts
 

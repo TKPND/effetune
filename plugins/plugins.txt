@@ -80,6 +80,7 @@ lofi/bluetooth_sbc_simulator: SBC Codec Simulator | Lo-Fi | BluetoothSBCSimulato
 lofi/simple_jitter: Simple Jitter | Lo-Fi | SimpleJitterPlugin
 lofi/sw_radio_simulator: SW Radio Simulator | Lo-Fi | SWRadioSimulatorPlugin | css
 lofi/tape_artifacts: Tape Artifacts | Lo-Fi | TapeArtifactsPlugin | css
+lofi/tv_audio_simulator: TV Audio Simulator | Lo-Fi | TVAudioSimulatorPlugin | css
 lofi/vinyl_artifacts: Vinyl Artifacts | Lo-Fi | VinylArtifactsPlugin
 lofi/vinyl_simulator: Vinyl Simulator | Lo-Fi | VinylSimulatorPlugin | css
 modulation/auto_filter: Auto Filter | Modulation | AutoFilterPlugin

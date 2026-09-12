@@ -8,6 +8,8 @@ const SPECTRUM_MAX_POINTS = 14;
 const SPECTRUM_MAX_POINT_BIN_COUNT = 8190;
 const SPECTRUM_MIN_DISPLAY_FREQ = 20;
 const SPECTRUM_MAX_DISPLAY_FREQ = 40000;
+const SPECTRUM_WIDE_BAR_COUNT = 48;
+const SPECTRUM_NARROW_BAR_COUNT = 24;
 const SPECTRUM_DISPLAY_FREQ_RANGE =
     SPECTRUM_MAX_DISPLAY_FREQ - SPECTRUM_MIN_DISPLAY_FREQ;
 const SPECTRUM_LOG_MIN_DISPLAY_FREQ = Math.log10(SPECTRUM_MIN_DISPLAY_FREQ);
@@ -22,6 +24,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this.dr = -96;
         this.pt = 12;
         this.sc = 'log';
+        this.kb = false;
+        this.dm = 'line';
         const fftSize = 1 << this.pt; // Using bit shift for power of 2
         this.spectrum = new Float32Array(fftSize >> 1).fill(-144);
         this.peaks = new Float32Array(fftSize >> 1).fill(-144);
@@ -200,10 +204,26 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this.updateParameters();
     }
 
+    setKeyboardVisible(value) {
+        const visible = value === true;
+        if (visible === this.kb) return;
+        this.kb = visible;
+        this.updateParameters();
+        this.drawGraph();
+    }
+
     setFrequencyScale(value) {
         const scale = value === 'linear' ? 'linear' : 'log';
         if (scale === this.sc) return;
         this.sc = scale;
+        this.updateParameters();
+        this.drawGraph();
+    }
+
+    setDisplayMode(value) {
+        const mode = value === 'bar' ? 'bar' : 'line';
+        if (mode === this.dm) return;
+        this.dm = mode;
         this.updateParameters();
         this.drawGraph();
     }
@@ -221,6 +241,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this.setDBRange(-96);
         this.setPoints(12); // Note: constructor uses 12, reset button might use 10. Keeping 12 here.
         this.setFrequencyScale('log');
+        this.setKeyboardVisible(false);
+        this.setDisplayMode('line');
     }
 
     getParameters() {
@@ -230,7 +252,9 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             enabled: this.enabled,
             dr: this.dr,
             pt: this.pt,
-            sc: this.sc
+            kb: this.kb,
+            sc: this.sc,
+            dm: this.dm
         };
     }
 
@@ -238,7 +262,9 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         if (params.enabled !== undefined) this.enabled = params.enabled;
         if (params.dr !== undefined) this.setDBRange(params.dr);
         if (params.pt !== undefined) this.setPoints(params.pt);
+        if (params.kb !== undefined) this.setKeyboardVisible(params.kb);
         if (params.sc !== undefined) this.setFrequencyScale(params.sc);
+        if (params.dm !== undefined) this.setDisplayMode(params.dm);
         this.updateParameters();
     }
 
@@ -518,6 +544,20 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         );
         container.appendChild(frequencyScaleRow);
 
+        const displayModeRow = this.createRadioGroup(
+            'Display',
+            [
+                { value: 'line', label: 'Line' },
+                { value: 'bar', label: 'Bar' }
+            ],
+            this.dm,
+            value => this.setDisplayMode(value), 'dm'
+        );
+        container.appendChild(displayModeRow);
+        container.appendChild(this.createCheckboxControl(
+            'Keyboard', this.kb, value => this.setKeyboardVisible(value), 'kb'
+        ));
+
         const { container: graphContainer, canvas, dispose } = this.createResponsiveGraph({
             maxWidth: 1024,
             aspectRatio: '32 / 15',
@@ -547,6 +587,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             pointsValue.value = 1 << defaultPoints;
             const logScaleRadio = frequencyScaleRow.querySelector('input[value="log"]');
             if (logScaleRadio) logScaleRadio.checked = true;
+            const lineDisplayRadio = displayModeRow.querySelector('input[value="line"]');
+            if (lineDisplayRadio) lineDisplayRadio.checked = true;
 
             this.reset(); // This will call setDBRange and setPoints
         };
@@ -661,6 +703,87 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         return Math.min(elapsed, analysisIntervalFrames / this.sampleRate);
     }
 
+    getKeyboardGeometry(length) {
+        const minMidi = 69 + 12 * Math.log2(SPECTRUM_MIN_DISPLAY_FREQ / 440);
+        const maxMidi = 69 + 12 * Math.log2(SPECTRUM_MAX_DISPLAY_FREQ / 440);
+        const blackClasses = [1, 3, 6, 8, 10];
+        const isBlack = midi => blackClasses.includes((midi % 12 + 12) % 12);
+        const position = midi => {
+            const frequency = 440 * 2 ** ((midi - 69) / 12);
+            return Math.max(0, Math.min(length, this.frequencyToX(frequency, length)));
+        };
+        const keys = [];
+        for (let midi = Math.ceil(minMidi - 0.5); midi <= Math.floor(maxMidi + 0.5); midi++) {
+            const black = isBlack(midi);
+            const lower = position(midi - 0.5);
+            const upper = position(midi + 0.5);
+            const previousWhite = midi - (isBlack(midi - 1) ? 2 : 1);
+            const nextWhite = midi + (isBlack(midi + 1) ? 2 : 1);
+            const whiteLower = position((previousWhite + midi) / 2);
+            const whiteUpper = position((midi + nextWhite) / 2);
+            keys.push({
+                midi, black, center: position(midi),
+                start: Math.min(lower, upper), end: Math.max(lower, upper),
+                whiteStart: Math.min(whiteLower, whiteUpper),
+                whiteEnd: Math.max(whiteLower, whiteUpper)
+            });
+        }
+        return keys;
+    }
+
+    drawKeyboard(ctx, width, height, gutter, dpr) {
+        const background = (window.ThemePalette?.get('graph-bg-deep') ?? '')
+            .match(/[\d.]+/g)?.slice(0, 3).map(Number);
+        if (!background || background.length !== 3) return;
+        const light = background.every(channel => channel > 127);
+        const white = light ? 255 : 221;
+        const black = 34;
+        const keys = this.getKeyboardGeometry(width);
+        const edge = height - gutter;
+        const blackDepth = gutter / 1.6;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, edge, width, gutter);
+        ctx.clip();
+        // A continuous white base keeps subpixel keys aligned without gaps.
+        ctx.fillStyle = 'rgb(' + white + ', ' + white + ', ' + white + ')'; // theme-allow: Theme-dependent keyboard color.
+        ctx.fillRect(0, edge, width, gutter);
+        ctx.strokeStyle = (window.ThemePalette?.get('graph-label') ?? '');
+        ctx.lineWidth = dpr;
+        for (const key of keys) {
+            if (key.black || key.whiteStart <= 0 || key.whiteStart >= width) continue;
+            ctx.beginPath();
+            ctx.moveTo(key.whiteStart, edge);
+            ctx.lineTo(key.whiteStart, height);
+            ctx.stroke();
+        }
+        ctx.fillStyle = 'rgb(' + black + ', ' + black + ', ' + black + ')'; // theme-allow: Fixed self-painted black key color.
+        for (const key of keys) {
+            if (!key.black) continue;
+            ctx.fillRect(key.start, edge, key.end - key.start, blackDepth);
+        }
+        ctx.beginPath();
+        ctx.moveTo(0, edge);
+        ctx.lineTo(width, edge);
+        ctx.stroke();
+        ctx.fillStyle = '#111'; // theme-allow: Text on the self-painted white keys.
+        ctx.font = (7 * dpr) + 'px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const key of keys) {
+            if (key.midi % 12 !== 0) continue;
+            const label = 'C' + (key.midi / 12 - 1);
+            const center = (key.whiteStart + key.whiteEnd) / 2;
+            const labelWidth = ctx.measureText(label).width;
+            const halfExtent = labelWidth / 2;
+            if (center - halfExtent < key.whiteStart + dpr ||
+                center + halfExtent > key.whiteEnd - dpr ||
+                center - halfExtent < dpr || center + halfExtent > width - dpr) continue;
+            ctx.fillText(label, center, edge + blackDepth + (gutter - blackDepth) / 2);
+        }
+        ctx.restore();
+    }
+
     drawGraph(now = performance.now()) {
         if (!this.canvas) return;
         
@@ -669,6 +792,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         const height = this.canvas.height;
         const dpr = this.graphDpr || 1;
         const isNarrow = this.graphCssWidth < 500;
+        const keyboardGutter = this.kb && height > 44.8 * dpr ? 44.8 * dpr : 0;
+        const plotHeight = height - keyboardGutter;
 
         ctx.fillStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
         ctx.fillRect(0, 0, width, height);
@@ -696,39 +821,95 @@ class SpectrumAnalyzerPlugin extends PluginBase {
              return;
         }
 
-        // Vertical grid lines (frequency) - Dynamic
-        let baseGridFreqs = this.sc === 'linear'
-            ? (isNarrow
-                ? [20, 10000, 20000, 30000, 40000]
-                : [20, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000])
-            : (isNarrow
-                ? [20, 100, 1000, 10000, 20000]
-                : [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]);
-        // Add Nyquist to the list if it's not too close to another major tick, or for the max label
-        // Filter and ensure min/max are present
-        let gridFreqsToDraw = baseGridFreqs.filter(f => f >= minDisplayFreq && f <= maxDisplayFreq);
-        if (!gridFreqsToDraw.includes(minDisplayFreq) && minDisplayFreq > 0) gridFreqsToDraw.unshift(minDisplayFreq);
-        if (!gridFreqsToDraw.includes(maxDisplayFreq)) gridFreqsToDraw.push(maxDisplayFreq);
-        gridFreqsToDraw = [...new Set(gridFreqsToDraw)].sort((a, b) => a - b); // Unique & sorted
+        if (keyboardGutter) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, width, plotHeight);
+            ctx.clip();
+        }
+        const drawBars = this.dm === 'bar';
+        const deferredTicks = this.drawGrid(
+            ctx, width, plotHeight, dpr, isNarrow, drawBars, Boolean(keyboardGutter)
+        );
+        if (drawBars) {
+            const levels = this.collectSpectrumLevels(width, now);
+            const bandCount = isNarrow ? SPECTRUM_NARROW_BAR_COUNT : SPECTRUM_WIDE_BAR_COUNT;
+            const bands = SpectrumAnalyzerPlugin.aggregateBands(levels, width, bandCount);
+            this.drawSpectrumBars(ctx, bands, width, plotHeight, dpr);
+            this.drawAxisLabels(ctx, width, plotHeight, dpr, isNarrow, deferredTicks, !keyboardGutter);
+        } else {
+            this.drawAxisLabels(ctx, width, plotHeight, dpr, isNarrow, deferredTicks, !keyboardGutter);
+            const levels = this.collectSpectrumLevels(width, now);
+            this.drawSpectrumLines(ctx, levels, plotHeight, dpr);
+        }
+        if (keyboardGutter) {
+            ctx.restore();
+            this.drawKeyboard(ctx, width, height, keyboardGutter, dpr);
+        }
+    }
 
-        gridFreqsToDraw.forEach(freq => {
-            const x = this.frequencyToX(freq, width);
-            if (x >=0 && x <= width) { // Draw only if within canvas
+    drawGrid(ctx, width, height, dpr, isNarrow, deferTicks, keyboard) {
+        const minDisplayFreq = SPECTRUM_MIN_DISPLAY_FREQ;
+        const maxDisplayFreq = SPECTRUM_MAX_DISPLAY_FREQ;
+        const deferredTicks = [];
+
+        if (keyboard) {
+            for (const key of this.getKeyboardGeometry(width)) {
+                const pitchClass = (key.midi % 12 + 12) % 12;
+                if ((pitchClass !== 0 && pitchClass !== 5) ||
+                    key.start <= 0 || key.start >= width) continue;
+                ctx.strokeStyle = (window.ThemePalette?.get(
+                    pitchClass === 0 ? 'graph-grid-strong' : 'graph-grid-subtle'
+                ) ?? '');
+                ctx.lineWidth = dpr;
                 ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, height);
+                ctx.moveTo(key.start, 0);
+                ctx.lineTo(key.start, height);
                 ctx.stroke();
-
-                if (freq !== minDisplayFreq && freq !== maxDisplayFreq && x > width*0.02 && x < width*0.98) { // Avoid clutter at edges
-                    ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? '');
-                    ctx.font = `${(isNarrow ? 11 : 12) * dpr}px Arial`;
-                    ctx.textAlign = 'center';
-                    ctx.fillText(freq >= 1000 ? `${Math.round(freq / 100)/10}k` : freq, x, height - ((isNarrow ? 30 : 40) * dpr));
-                }
             }
-        });
+        } else {
+            // Vertical grid lines (frequency) - Dynamic
+            let baseGridFreqs = this.sc === 'linear'
+                ? (isNarrow
+                    ? [20, 10000, 20000, 30000, 40000]
+                    : [20, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000])
+                : (isNarrow
+                    ? [20, 100, 1000, 10000, 20000]
+                    : [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]);
+            // Add Nyquist to the list if it's not too close to another major tick, or for the max label
+            // Filter and ensure min/max are present
+            let gridFreqsToDraw = baseGridFreqs.filter(f => f >= minDisplayFreq && f <= maxDisplayFreq);
+            if (!gridFreqsToDraw.includes(minDisplayFreq) && minDisplayFreq > 0) gridFreqsToDraw.unshift(minDisplayFreq);
+            if (!gridFreqsToDraw.includes(maxDisplayFreq)) gridFreqsToDraw.push(maxDisplayFreq);
+            gridFreqsToDraw = [...new Set(gridFreqsToDraw)].sort((a, b) => a - b); // Unique & sorted
+
+            gridFreqsToDraw.forEach(freq => {
+                const x = this.frequencyToX(freq, width);
+                if (x >=0 && x <= width) { // Draw only if within canvas
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+
+                    if (freq !== minDisplayFreq && freq !== maxDisplayFreq && x > width*0.02 && x < width*0.98) { // Avoid clutter at edges
+                        ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? '');
+                        ctx.font = `${(isNarrow ? 11 : 12) * dpr}px Arial`;
+                        ctx.textAlign = 'center';
+                        const text = freq >= 1000 ? `${Math.round(freq / 100)/10}k` : freq;
+                        const y = height - ((isNarrow ? 30 : 40) * dpr);
+                        if (deferTicks) {
+                            deferredTicks.push({ text, x, y, fillStyle: ctx.fillStyle, font: ctx.font, textAlign: ctx.textAlign });
+                        } else {
+                            ctx.fillText(text, x, y);
+                        }
+                    }
+                }
+            });
+        }
 
         // Horizontal grid lines (dB) - No change to this logic
+        ctx.strokeStyle = (window.ThemePalette?.get('graph-grid-subtle') ?? '');
+        ctx.lineWidth = dpr;
         const dbStep = isNarrow ? 24 : 12;
         for (let db = 0; db >= this.dr; db -= dbStep) {
             const y = height * (db / this.dr);
@@ -738,18 +919,52 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             ctx.stroke();
             if (db !== 0 && db !== this.dr) {
                 ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? ''); ctx.font = `${(isNarrow ? 11 : 12) * dpr}px Arial`; ctx.textAlign = 'right';
-                ctx.fillText(`${db}dB`, (isNarrow ? 46 : 80) * dpr, y + (6 * dpr));
+                const text = `${db}dB`;
+                const x = (isNarrow ? 46 : 80) * dpr;
+                const labelY = y + (6 * dpr);
+                if (deferTicks) {
+                    deferredTicks.push({ text, x, y: labelY, fillStyle: ctx.fillStyle, font: ctx.font, textAlign: ctx.textAlign });
+                } else {
+                    ctx.fillText(text, x, labelY);
+                }
             }
         }
+        return deferredTicks;
+    }
 
+    drawAxisLabels(ctx, width, height, dpr, isNarrow, deferredTicks, showFrequency) {
+        const outline = this.dm === 'bar';
+        if (outline) {
+            ctx.save();
+            ctx.strokeStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
+            ctx.lineWidth = 2 * dpr;
+            ctx.lineJoin = 'round';
+        }
         // Draw axis labels
         ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? ''); ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
-        ctx.fillText('Frequency (Hz)', width / 2, height - (8 * dpr));
+        if (showFrequency) {
+            if (outline) ctx.strokeText('Frequency (Hz)', width / 2, height - (8 * dpr));
+            ctx.fillText('Frequency (Hz)', width / 2, height - (8 * dpr));
+        }
         ctx.save();
         ctx.translate((isNarrow ? 18 : 20) * dpr, height / 2); ctx.rotate(-Math.PI / 2);
+        if (outline) ctx.strokeText('Level (dB)', 0, 0);
         ctx.fillText('Level (dB)', 0, 0);
         ctx.restore();
 
+        for (const tick of deferredTicks) {
+            ctx.fillStyle = tick.fillStyle;
+            ctx.font = tick.font;
+            ctx.textAlign = tick.textAlign;
+            if (outline) ctx.strokeText(tick.text, tick.x, tick.y);
+            ctx.fillText(tick.text, tick.x, tick.y);
+        }
+        if (outline) ctx.restore();
+    }
+
+    collectSpectrumLevels(width, now) {
+        const minDisplayFreq = SPECTRUM_MIN_DISPLAY_FREQ;
+        const maxDisplayFreq = SPECTRUM_MAX_DISPLAY_FREQ;
         // Draw spectrum
         const fftSize = 1 << this.spectrumPoints;
         const binCount = this.spectrum.length;
@@ -783,13 +998,15 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         }
         
         // Sort map entries by x-coordinate for correct line drawing
-        const sortedXToLevels = new Map([...xToLevels.entries()].sort((a, b) => a[0] - b[0]));
+        return [...xToLevels.entries()].sort((a, b) => a[0] - b[0]);
+    }
 
+    drawSpectrumLines(ctx, levels, height, dpr) {
         // Draw spectrum line
         ctx.beginPath();
         ctx.strokeStyle = (window.ThemePalette?.get('graph-trace-fill') ?? ''); ctx.lineWidth = 2 * dpr;
         let first = true;
-        for (const [x, [spectrumLevel]] of sortedXToLevels) {
+        for (const [x, [spectrumLevel]] of levels) {
             const y = height * (spectrumLevel / this.dr);
             if (first) {
                 ctx.moveTo(x, y);
@@ -804,7 +1021,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         ctx.beginPath();
         ctx.strokeStyle = (window.ThemePalette?.get('graph-trace') ?? ''); ctx.lineWidth = dpr;
         first = true;
-        for (const [x, [, peakLevel]] of sortedXToLevels) {
+        for (const [x, [, peakLevel]] of levels) {
             const y = height * (peakLevel / this.dr);
             if (first) {
                 ctx.moveTo(x, y);
@@ -814,6 +1031,73 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             }
         }
         ctx.stroke();
+    }
+
+    static aggregateBands(levels, width, bandCount) {
+        const spectrum = new Float32Array(bandCount).fill(-Infinity);
+        const peaks = new Float32Array(bandCount).fill(-Infinity);
+        let firstFilled = bandCount;
+        let lastFilled = -1;
+
+        for (const [x, [spectrumLevel, peakLevel]] of levels) {
+            const index = Math.floor(x * bandCount / width);
+            const band = index >= bandCount ? bandCount - 1 : index;
+            if (spectrumLevel > spectrum[band]) spectrum[band] = spectrumLevel;
+            if (peakLevel > peaks[band]) peaks[band] = peakLevel;
+            if (band < firstFilled) firstFilled = band;
+            if (band > lastFilled) lastFilled = band;
+        }
+
+        // Bridge gaps only between measured bands, leaving both outer ranges empty.
+        for (let band = firstFilled + 1; band < lastFilled; band++) {
+            if (spectrum[band] === -Infinity) {
+                spectrum[band] = spectrum[band - 1];
+                peaks[band] = peaks[band - 1];
+            }
+        }
+        return { spectrum, peaks, firstFilled, lastFilled };
+    }
+
+    drawSpectrumBars(ctx, bands, width, height, dpr) {
+        const { spectrum, peaks, firstFilled, lastFilled } = bands;
+        if (firstFilled > lastFilled) return;
+
+        const bandWidth = width / spectrum.length;
+        const desiredGap = 2 * dpr;
+        const gap = bandWidth - desiredGap >= 1 ? desiredGap : 0;
+        const availableWidth = bandWidth - gap;
+        const barWidth = availableWidth >= 1 ? availableWidth : 1;
+        const peakHeight = dpr >= 1 ? dpr : 1;
+        const segmentPitch = 6 * dpr;
+
+        ctx.fillStyle = (window.ThemePalette?.get('graph-trace-fill') ?? '');
+        ctx.save();
+        ctx.beginPath();
+        for (let band = firstFilled; band <= lastFilled; band++) {
+            const x = band * bandWidth + gap / 2;
+            const y = height * (spectrum[band] / this.dr);
+            ctx.fillRect(x, y, barWidth, height - y);
+            ctx.rect(x, y, barWidth, height - y);
+        }
+
+        // Cut horizontal segments only through the bar bodies, preserving the grid.
+        ctx.clip();
+        ctx.strokeStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
+        ctx.lineWidth = dpr >= 1 ? dpr : 1;
+        ctx.beginPath();
+        for (let y = height - segmentPitch; y > 0; y -= segmentPitch) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = (window.ThemePalette?.get('graph-trace') ?? '');
+        for (let band = firstFilled; band <= lastFilled; band++) {
+            const x = band * bandWidth + gap / 2;
+            const y = height * (peaks[band] / this.dr);
+            ctx.fillRect(x, y, barWidth, peakHeight);
+        }
     }
 }
 

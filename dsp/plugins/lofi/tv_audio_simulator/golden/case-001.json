@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "type": "TVAudioSimulatorPlugin",
+  "id": "eiaj-dual-sub-48000",
+  "stimulus": "noise",
+  "sampleRate": 48000,
+  "channels": 2,
+  "frameCount": 4097,
+  "blockSize": 127,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 0,
+  "seed": "0xeffe7a5e",
+  "params": {
+    "rd": true,
+    "ss": "M/EIA-J",
+    "tx": "Dual",
+    "pr": 0,
+    "st": 45,
+    "tn": 0,
+    "bw": 230,
+    "mp": 0,
+    "dl": 5,
+    "fd": 0,
+    "sm": "Sub",
+    "bz": -80,
+    "og": 0,
+    "mx": 100,
+    "fr": true
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.0001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "7ead7bf6c85d915fac3c7921411aa7612d7d7ffa7cff90ebe4e85afc983ca26f",
+  "outputFloats": 8194,
+  "byteLength": 32776,
+  "binary": "case-001.f32"
+}

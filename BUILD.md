@@ -279,7 +279,18 @@ To debug the web version in a browser with no-cache dynamic loading for plugins:
 npm run dev
 ```
 
-Then open:
+To test only the web app without building the DSP library or documentation site:
+
+```bash
+npm run dev -- --web-only
+```
+
+Open `http://127.0.0.1:8000/effetune.html`. This mode serves the working tree directly
+with development cache suppression and uses the existing DSP artifacts. Ruby and
+Jekyll are not required. Documentation pages are not rendered in this mode.
+Add `--port 8080` to use another port. Stop the server with Ctrl+C.
+
+With the full `npm run dev` command, open:
 
 - `http://localhost:8000/effetune.html` for the web app
 - `http://localhost:8000/` for the local documentation site home

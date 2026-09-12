@@ -15,17 +15,17 @@ const DEFAULT_SUMMARY = path.join(
   'dsp-library-goldens-summary.json'
 );
 const EXPECTED_BACKENDS = Object.freeze({
-  'python-native': 940,
-  'javascript-baseline': 940,
-  'javascript-simd': 940
+  'python-native': 946,
+  'javascript-baseline': 946,
+  'javascript-simd': 946
 });
 const EXPECTED_WORKLET_GOLDEN = Object.freeze({
-  'chromium-audioworklet-baseline': 102,
-  'chromium-audioworklet-simd': 102
+  'chromium-audioworklet-baseline': 103,
+  'chromium-audioworklet-simd': 103
 });
 const EXPECTED_WORKLET_NONIDENTITY = Object.freeze({
-  'chromium-audioworklet-nonidentity-baseline': 94,
-  'chromium-audioworklet-nonidentity-simd': 94
+  'chromium-audioworklet-nonidentity-baseline': 95,
+  'chromium-audioworklet-nonidentity-simd': 95
 });
 const PYTHON_STATE_CONTRACTS = Object.freeze([
   'sameSeed',
@@ -1451,10 +1451,10 @@ export async function runAcceptance(options = {}) {
     backends: [],
     status: 'failed'
   };
-  if (inventorySummary.effects !== 100 ||
-      inventorySummary.total !== 940 ||
+  if (inventorySummary.effects !== 101 ||
+      inventorySummary.total !== 946 ||
       inventorySummary.assetCases !== 30 ||
-      inventorySummary.eventCases !== 152) {
+      inventorySummary.eventCases !== 153) {
     throw new Error(
       `Frozen inventory mismatch: ${JSON.stringify(inventorySummary)}`
     );

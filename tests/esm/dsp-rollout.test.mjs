@@ -118,6 +118,7 @@ test('rollout enables only shipped kernels with matching generated layouts', () 
     'SimpleJitterPlugin',
     'SWRadioSimulatorPlugin',
     'TapeArtifactsPlugin',
+    'TVAudioSimulatorPlugin',
     'VinylArtifactsPlugin',
     'VinylSimulatorPlugin',
     'AutoFilterPlugin',
