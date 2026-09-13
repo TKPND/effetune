@@ -306,41 +306,7 @@ const SweepMeasurement = {
         this.currentPoint = point;
     },
 
-    /**
-     * Export recorded audio for debugging
-     */
-    exportDebugAudio() {
-        if (!this.fullRecordBuffer) {
-            console.error("No recorded audio available for export");
-            return;
-        }
-        
-        try {
-            // Get sample rate from audio context
-            const sampleRate = audioUtils.audioContext.sampleRate;
-            
-            // Export full recording
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            audioUtils.exportWAV(this.fullRecordBuffer, sampleRate, `full_recording_${timestamp}.wav`);
-            
-            console.log("Exported debug audio file");
-        } catch (error) {
-            console.error("Error exporting debug audio:", error);
-        }
-    },
     
-    /**
-     * Finalize the sweep measurement by averaging and calculating frequency response
-     */
-    finalizeSweepMeasurement() {
-        if (!this.currentPoint) {
-            console.error('No measurement point available');
-            return;
-        }
-        
-        // Export debug audio file if needed
-        // this.exportDebugAudio();
-    },
 
     /**
      * Save the current point and continue with measurement

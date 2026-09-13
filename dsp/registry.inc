@@ -3,6 +3,7 @@
 EFFETUNE_PLUGIN(LevelMeterPlugin, analyzer/level_meter)
 EFFETUNE_PLUGIN(NoteSpectrogramPlugin, analyzer/note_spectrogram)
 EFFETUNE_PLUGIN(OscilloscopePlugin, analyzer/oscilloscope)
+EFFETUNE_PLUGIN(PitchMeterPlugin, analyzer/pitch_meter)
 EFFETUNE_PLUGIN(SpectrogramPlugin, analyzer/spectrogram)
 EFFETUNE_PLUGIN(SpectrumAnalyzerPlugin, analyzer/spectrum_analyzer)
 EFFETUNE_PLUGIN(StereoMeterPlugin, analyzer/stereo_meter)

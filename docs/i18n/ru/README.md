@@ -309,6 +309,7 @@ EffeTune создан для аудиоэнтузиастов, которые х
 | Analyzer  | Level Meter | Показывает уровень аудио с удержанием пиков | [Подробнее](plugins/analyzer.md#level-meter) |
 | Analyzer  | Note Spectrogram | Показывает оцененные высоты звука во времени в виде piano roll | [Подробнее](plugins/analyzer.md#note-spectrogram) |
 | Analyzer  | Oscilloscope | Визуализация формы сигнала в реальном времени | [Подробнее](plugins/analyzer.md#oscilloscope) |
+| Analyzer  | Pitch Meter | Отслеживает одну основную частоту и её настройку во времени | [Подробнее](plugins/analyzer.md#pitch-meter) |
 | Analyzer  | Spectrogram | Показывает изменение спектра частот во времени | [Подробнее](plugins/analyzer.md#spectrogram) |
 | Analyzer  | Spectrum Analyzer | В реальном времени показывает силу баса, середины и верхов | [Подробнее](plugins/analyzer.md#spectrum-analyzer) |
 | Analyzer  | Stereo Meter | Визуализирует стереобаланс и корреляцию каналов | [Подробнее](plugins/analyzer.md#stereo-meter) |
@@ -366,6 +367,7 @@ EffeTune создан для аудиоэнтузиастов, которые х
 | Lo-Fi     | Simple Jitter | Имитация цифрового джиттера | [Подробнее](plugins/lofi.md#simple-jitter) |
 | Lo-Fi     | SW Radio Simulator | Проводит музыку через модель тракта коротковолнового вещания, ионосферного распространения и приёма | [Подробнее](plugins/lofi.md#sw-radio-simulator) |
 | Lo-Fi     | Tape Artifacts | Записывает музыку на моделируемую катушечную ленту и воспроизводит её | [Подробнее](plugins/lofi.md#tape-artifacts) |
+| Lo-Fi     | TV Audio Simulator | Пропускает музыку через моделируемые тракты аналогового телевидения и NICAM | [Подробнее](plugins/lofi.md#tv-audio-simulator) |
 | Lo-Fi     | Vinyl Artifacts | Добавляет виниловые pops, crackle, hiss, rumble и утечку стереошума | [Подробнее](plugins/lofi.md#vinyl-artifacts) |
 | Lo-Fi     | Vinyl Simulator | Записывает вход в моделируемую канавку и воспроизводит ее физической моделью иглы | [Подробнее](plugins/lofi.md#vinyl-simulator) |
 | Modulation | Auto Filter | Перемещает резонансный фильтр с помощью LFO или огибающей громкости | [Подробнее](plugins/modulation.md#auto-filter) |

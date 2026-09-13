@@ -2,6 +2,7 @@ export type {
   LevelMeterOptions,
   NoteSpectrogramOptions,
   OscilloscopeOptions,
+  PitchMeterOptions,
   SpectrogramOptions,
   SpectrumAnalyzerOptions,
   StereoMeterOptions,
@@ -111,6 +112,7 @@ export {
   LevelMeter,
   NoteSpectrogram,
   Oscilloscope,
+  PitchMeter,
   Spectrogram,
   SpectrumAnalyzer,
   StereoMeter,
@@ -215,6 +217,7 @@ export {
   createLevelMeter,
   createNoteSpectrogram,
   createOscilloscope,
+  createPitchMeter,
   createSpectrogram,
   createSpectrumAnalyzer,
   createStereoMeter,
@@ -433,7 +436,8 @@ export interface CreateChainOptions extends ArtifactOptions {
 }
 
 export interface TelemetryFrameBase {
-  readonly kind: 'level' | 'noteSpectrogram' | 'oscilloscope' | 'spectrum' | 'spectrogram' | 'stereo';
+  readonly kind: 'level' | 'noteSpectrogram' | 'oscilloscope' | 'pitch' | 'spectrum' | 'spectrumHq' |
+    'spectrogram' | 'spectrogramHq' | 'stereo';
   readonly effectType: EffectType;
   readonly effectId: string | null;
   readonly effectIndex: number;
@@ -473,6 +477,23 @@ export interface SpectrumTelemetryFrame extends TelemetryFrameBase {
   readonly peakDb: Float32Array;
 }
 
+export interface SpectrumHqTelemetryFrame extends TelemetryFrameBase {
+  readonly kind: 'spectrumHq';
+  readonly sampleRate: number;
+  readonly points: number;
+  readonly hop: number;
+  readonly generation: number;
+  readonly captureEnd: bigint;
+  readonly frameIndex: number;
+  readonly cellCount: number;
+  readonly minFrequency: number;
+  readonly maxFrequency: number;
+  readonly firstValidIndex: number;
+  readonly validCellCount: number;
+  readonly currentDb: Float32Array;
+  readonly peakDb: Float32Array;
+}
+
 export interface NoteSpectrogramTelemetryFrame extends TelemetryFrameBase {
   readonly kind: 'noteSpectrogram';
   readonly sampleRate: number;
@@ -486,11 +507,42 @@ export interface NoteSpectrogramTelemetryFrame extends TelemetryFrameBase {
   readonly volumeDb: Float32Array;
 }
 
+export interface PitchMeterTelemetryFrame extends TelemetryFrameBase {
+  readonly kind: 'pitch';
+  readonly sampleRate: number;
+  readonly timeSeconds: number;
+  readonly hopSeconds: number;
+  readonly frameIndex: number;
+  readonly generation: number;
+  readonly f0Hz: number;
+  readonly midi: number;
+  readonly cents: number;
+  readonly confidence: number;
+  readonly levelDb: number;
+  readonly voiced: boolean;
+}
+
 export interface SpectrogramTelemetryFrame extends TelemetryFrameBase {
   readonly kind: 'spectrogram';
   readonly sampleRate: number;
   readonly timeSeconds: number;
   readonly points: number;
+  readonly intensities: Uint8Array;
+}
+
+export interface SpectrogramHqTelemetryFrame extends TelemetryFrameBase {
+  readonly kind: 'spectrogramHq';
+  readonly sampleRate: number;
+  readonly points: number;
+  readonly hop: number;
+  readonly generation: number;
+  readonly captureEnd: bigint;
+  readonly frameIndex: number;
+  readonly cellCount: number;
+  readonly minFrequency: number;
+  readonly maxFrequency: number;
+  readonly firstValidIndex: number;
+  readonly validCellCount: number;
   readonly intensities: Uint8Array;
 }
 
@@ -511,8 +563,11 @@ export type TelemetryFrame =
   | LevelTelemetryFrame
   | OscilloscopeTelemetryFrame
   | SpectrumTelemetryFrame
+  | SpectrumHqTelemetryFrame
   | SpectrogramTelemetryFrame
+  | SpectrogramHqTelemetryFrame
   | NoteSpectrogramTelemetryFrame
+  | PitchMeterTelemetryFrame
   | StereoTelemetryFrame;
 
 export type TelemetryCallback = (frame: TelemetryFrame) => void;

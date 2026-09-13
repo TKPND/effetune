@@ -41,8 +41,8 @@ class ValidationAndEffectsTests(unittest.TestCase):
             effetune._generated_effects.create_effect("NotAnEffect")
 
     def test_generated_catalog_imports_and_constructs_all_approved_classes(self) -> None:
-        self.assertEqual(len(EFFECT_CLASSES), 101)
-        self.assertEqual(len(EFFECT_METADATA["effects"]), 101)
+        self.assertEqual(len(EFFECT_CLASSES), 102)
+        self.assertEqual(len(EFFECT_METADATA["effects"]), 102)
         asset_effects = {
             "CrosstalkCancellation",
             "FIRCrossover",
@@ -88,55 +88,56 @@ class ValidationAndEffectsTests(unittest.TestCase):
         with self.assertRaises(effetune.ValidationError):
             effetune.HardClipping(mode="unknown")
 
-    def test_note_spectrogram_midi_range_is_canonicalized_for_processing(self) -> None:
+    def test_analyzer_midi_ranges_are_canonicalized_for_processing(self) -> None:
         supplied = {"minimumMidi": 91, "maximumMidi": 28}
         canonical = {"minimumMidi": 28, "maximumMidi": 91}
-        effect = effetune.NoteSpectrogram(
-            id="notes", minimum_midi=91, maximum_midi=28
-        )
-        self.assertEqual(
-            {name: effect.parameters[name] for name in supplied}, supplied
-        )
-        self.assertEqual(
-            _canonicalize_processing_parameters(
-                "NoteSpectrogram", effect.parameters
-            ),
-            effect.parameters | canonical,
-        )
-        self.assertEqual(
-            {name: effect.parameters[name] for name in supplied}, supplied
-        )
-
-        for names in (
-            ("minimumMidi", "maximumMidi"),
-            ("maximumMidi", "minimumMidi"),
+        for effect_type, effect_class in (
+            ("NoteSpectrogram", effetune.NoteSpectrogram),
+            ("PitchMeter", effetune.PitchMeter),
         ):
-            with self.subTest(order=names):
-                pending: dict[str, int] = {}
-                defaults = dict(effetune.NoteSpectrogram().parameters)
-                for name in names:
-                    pending[name] = supplied[name]
-                    same_frame = _canonicalize_processing_parameters(
-                        "NoteSpectrogram", defaults | pending
-                    )
-                    self.assertLessEqual(
-                        same_frame["minimumMidi"], same_frame["maximumMidi"]
-                    )
+            with self.subTest(effect_type=effect_type):
+                effect = effect_class(minimum_midi=91, maximum_midi=28)
                 self.assertEqual(
-                    {name: same_frame[name] for name in canonical}, canonical
+                    {name: effect.parameters[name] for name in supplied}, supplied
+                )
+                self.assertEqual(
+                    _canonicalize_processing_parameters(effect_type, effect.parameters),
+                    effect.parameters | canonical,
+                )
+                self.assertEqual(
+                    {name: effect.parameters[name] for name in supplied}, supplied
                 )
 
-                processing = effect.parameters | canonical
-                for name in names:
-                    processing = _canonicalize_processing_parameters(
-                        "NoteSpectrogram", processing | {name: supplied[name]}
-                    )
-                    self.assertLessEqual(
-                        processing["minimumMidi"], processing["maximumMidi"]
-                    )
-                self.assertEqual(
-                    {name: processing[name] for name in canonical}, canonical
-                )
+                for names in (
+                    ("minimumMidi", "maximumMidi"),
+                    ("maximumMidi", "minimumMidi"),
+                ):
+                    with self.subTest(order=names):
+                        pending: dict[str, int] = {}
+                        defaults = dict(effect_class().parameters)
+                        for name in names:
+                            pending[name] = supplied[name]
+                            same_frame = _canonicalize_processing_parameters(
+                                effect_type, defaults | pending
+                            )
+                            self.assertLessEqual(
+                                same_frame["minimumMidi"], same_frame["maximumMidi"]
+                            )
+                        self.assertEqual(
+                            {name: same_frame[name] for name in canonical}, canonical
+                        )
+
+                        processing = effect.parameters | canonical
+                        for name in names:
+                            processing = _canonicalize_processing_parameters(
+                                effect_type, processing | {name: supplied[name]}
+                            )
+                            self.assertLessEqual(
+                                processing["minimumMidi"], processing["maximumMidi"]
+                            )
+                        self.assertEqual(
+                            {name: processing[name] for name in canonical}, canonical
+                        )
 
     def test_phaser_stage_choices_are_preserved_and_odd_values_are_rejected(self) -> None:
         for stages in (2, 4, 6, 8, 10, 12):

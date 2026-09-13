@@ -19,9 +19,29 @@ class FakeElement {
     this.width = 800;
     this.height = 160;
     this.clientWidth = 800;
+    this.hidden = false;
+    this.listeners = new Map();
+    this.classList = {
+      toggle: (name, force) => {
+        const names = new Set(this.className.split(/\s+/).filter(Boolean));
+        const present = force === undefined ? !names.has(name) : force;
+        if (present) names.add(name); else names.delete(name);
+        this.className = [...names].join(' ');
+        return present;
+      }
+    };
   }
   appendChild(child) { this.children.push(child); return child; }
   setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  getAttribute(name) { return this.attributes.get(name) ?? null; }
+  addEventListener(name, listener) { this.listeners.set(name, listener); }
+  click() { this.listeners.get('click')?.({ target: this }); }
+  querySelectorAll(selector) {
+    if (!selector.startsWith('.')) return [];
+    const className = selector.slice(1);
+    return descendants(this).filter(element =>
+      element !== this && element.className.split(/\s+/).includes(className));
+  }
   getBoundingClientRect() { return { width: this.clientWidth }; }
   getContext() { return null; }
 }
@@ -107,7 +127,10 @@ async function loadPlugin({ telemetryHub = null } = {}) {
     document,
     performance: { now: () => 1000 },
     cancelAnimationFrame(id) { cancelledFrames.push(id); },
-    window: { dspTelemetryHub: telemetryHub }
+    window: {
+      dspTelemetryHub: telemetryHub,
+      ThemePalette: { get: token => token }
+    }
   };
   vm.runInNewContext(source, context, { filename: pluginPath });
   return { Plugin: context.window.TVAudioSimulatorPlugin, source, cancelledFrames };
@@ -200,6 +223,10 @@ test('TV Audio Simulator provides nine complete system presets', async () => {
   const keys = ['rd', 'ss', 'tx', 'pr', 'st', 'tn', 'bw', 'mp', 'dl', 'fd',
     'sm', 'bz', 'og', 'mx'];
   for (const preset of presets) assert.deepEqual(Array.from(Object.keys(preset.params)), keys);
+  const australia = presets.find(preset => preset.id === 'tv-australia-a2');
+  assert.deepEqual({ label: australia.label, ss: australia.params.ss }, {
+    label: 'Australia TV (B/G / A2)', ss: 'B/G A2'
+  });
 });
 
 test('TV Audio Simulator resolves programme modes consistently across standards', async () => {
@@ -353,6 +380,39 @@ test('TV HUD draws each disabled gate once after the base loop stops', async () 
   assert.equal(drawn.at(-1), 'Receiver display paused');
 });
 
+test('TV HUD fills and strokes the active spectrum like the FM receiver graph', async () => {
+  const { Plugin } = await loadPlugin();
+  const plugin = new Plugin();
+  const operations = [];
+  const drawingContext = {
+    fillStyle: '',
+    clearRect() {},
+    fillRect() {},
+    fillText() {},
+    beginPath() { operations.push({ type: 'begin' }); },
+    moveTo(x, y) { operations.push({ type: 'move', x, y }); },
+    lineTo(x, y) { operations.push({ type: 'line', x, y }); },
+    fill() { operations.push({ type: 'fill', style: this.fillStyle }); },
+    stroke() { operations.push({ type: 'stroke' }); }
+  };
+  plugin.hudCanvas = {
+    width: 600, height: 160, clientWidth: 600,
+    getContext: () => drawingContext
+  };
+  plugin.executionState = { state: 'active', reason: null };
+  plugin.executionStateReceived = true;
+  plugin.lastTelemetryAt = 1000;
+
+  plugin.drawHud();
+
+  const fillIndex = operations.findIndex(operation => operation.type === 'fill');
+  assert.notEqual(fillIndex, -1);
+  assert.equal(operations[fillIndex].style, 'graph-trace-soft');
+  assert.equal(operations[fillIndex - 1].type, 'line');
+  assert.equal(operations[fillIndex - 1].x, 592);
+  assert.ok(operations.slice(fillIndex + 1).some(operation => operation.type === 'stroke'));
+});
+
 test('TV telemetry v1 validates its independent 216-byte payload', async () => {
   let subscription;
   const telemetryHub = {
@@ -387,16 +447,24 @@ test('TV telemetry v1 validates its independent 216-byte payload', async () => {
   assert.equal(plugin.parseDspTelemetryFrame({ frameType: 25, formatVersion: 1, payload }), null);
 });
 
-test('TV UI presents the planned sections and standard-specific explanation', async () => {
+test('TV UI groups controls into accessible tabs and keeps the selected tab', async () => {
   const { Plugin } = await loadPlugin();
   const plugin = new Plugin();
   plugin.setParameters({ ss: 'B/G NICAM' });
   const ui = plugin.createUI();
   const elements = descendants(ui);
-  assert.deepEqual(elements.filter(element => element.tagName === 'H3')
+  const tabs = elements.filter(element =>
+    element.className.split(/\s+/).includes('tv-audio-simulator-tab'));
+  assert.deepEqual(tabs
     .map(element => element.textContent), [
     'Standard', 'Programme', 'Reception', 'Video Buzz', 'Output'
   ]);
+  assert.ok(tabs.every(tab => tab.getAttribute('role') === 'tab'));
+  const panels = elements.filter(element =>
+    element.className.split(/\s+/).includes('tv-audio-simulator-tab-content'));
+  assert.equal(panels.length, 5);
+  assert.ok(panels.every(panel => panel.getAttribute('role') === 'tabpanel'));
+  assert.deepEqual(panels.map(panel => panel.hidden), [false, true, true, true, true]);
   assert.equal(elements.some(element =>
     element.textContent === 'Digital audio / analogue B/G FM mono fallback'), true);
   assert.equal(plugin._hudSignalLabel(), 'FALLBACK');
@@ -404,12 +472,21 @@ test('TV UI presents the planned sections and standard-specific explanation', as
   assert.equal(plugin._hudSignalLabel(), 'NICAM');
   plugin.setParameters({ ss: 'L AM' });
   assert.equal(plugin._hudSignalLabel(), 'AM');
+  tabs[2].click();
+  assert.equal(plugin.selectedTab, 'reception');
+  assert.deepEqual(tabs.map(tab => tab.getAttribute('aria-selected')),
+    ['false', 'false', 'true', 'false', 'false']);
+  assert.deepEqual(panels.map(panel => panel.hidden), [true, true, false, true, true]);
+  const rebuilt = plugin.createUI();
+  const rebuiltTabs = descendants(rebuilt).filter(element =>
+    element.className.split(/\s+/).includes('tv-audio-simulator-tab'));
+  assert.equal(rebuiltTabs[2].getAttribute('aria-selected'), 'true');
 });
 
-test('TV stylesheet keeps grouped controls and HUD responsive', async () => {
+test('TV stylesheet keeps tabbed controls and HUD responsive', async () => {
   const css = await fs.readFile(
     path.join(repoRoot, 'plugins', 'lofi', 'tv_audio_simulator.css'), 'utf8');
-  assert.match(css, /\.tv-audio-simulator-controls\s*\{[\s\S]*flex-direction:\s*column/);
+  assert.match(css, /\.tv-audio-simulator-tab\s*\{[\s\S]*flex:\s*1 1 100px/);
   assert.match(css, /\.tv-audio-simulator-hud\s*\{[\s\S]*min-height:\s*120px/);
   assert.match(css, /body\.layout-mobile[\s\S]*max-width:\s*100%/);
 });

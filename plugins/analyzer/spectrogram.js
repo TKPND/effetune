@@ -43,6 +43,9 @@ class SpectrogramPlugin extends PluginBase {
         this.dr = -96;
         this.pt = 12;  // exponent for FFT size (2^pt)
         this.sc = 'log';
+        this.hqGeneration = -1;
+        this.hqFrameIndex = -1;
+        this.hqReceiver = null;
         this.kb = false;
         const fftSize = 1 << this.pt; // using bit shift for power of 2
         this.spectrum = new Float32Array(fftSize >> 1).fill(-144);
@@ -88,7 +91,7 @@ class SpectrogramPlugin extends PluginBase {
         this._dspTelemetryHub = null;
         this._dspTelemetryTapId = null;
         this._dspTelemetryUnsubscribe = null;
-        this._boundDspSpectrogramTelemetry = frame => this.handleDspSpectrogramTelemetry(frame);
+        this._boundDspSpectrogramTelemetry = (frame, producer) => this.handleDspSpectrogramTelemetry(frame, producer);
 
         // Initialize ImageData cache and temporary canvas for drawing
         this.imageDataCache = null;
@@ -121,6 +124,20 @@ class SpectrogramPlugin extends PluginBase {
 
     // Processor function as a string (runs in separate context)
     static processorFunction = `
+        if (parameters.hq === true || parameters.sc === 'log-hq') {
+            const analyzer = context.multiresSpectrum;
+            if (!analyzer) throw new Error('Spectrum analysis must be prepared before processing');
+            const frame = analyzer.process(data, parameters);
+            data.measurements = frame ? frame.measurements : null;
+            context.multiresFrame = frame;
+            return data;
+        }
+        if (context.multiresSpectrum) {
+            const frame = context.multiresSpectrum.captureLegacy(data, parameters, time);
+            data.measurements = frame ? frame.measurements : null;
+            context.multiresFrame = frame;
+            return data;
+        }
         // Create result buffer
         const result = data; // Assuming 'data' is the input audio Float32Array from processor
 
@@ -227,7 +244,7 @@ class SpectrogramPlugin extends PluginBase {
     }
 
     displayRowToCanonicalRow(row) {
-        if (this.sc === 'log') return row;
+        if (this.sc !== 'linear') return row;
         return SPECTROGRAM_LINEAR_TO_CANONICAL_ROW[row];
     }
 
@@ -252,6 +269,7 @@ class SpectrogramPlugin extends PluginBase {
         if (newPoints === this.pt) return;
         
         this.pt = newPoints; // Update pt first
+        if (this.sc === 'log-hq') this.resetHqDisplay();
         const fftSize = 1 << newPoints;
         
         this.spectrum = new Float32Array(fftSize >> 1).fill(-144);
@@ -285,11 +303,20 @@ class SpectrogramPlugin extends PluginBase {
     }
 
     setFrequencyScale(value) {
-        const scale = value === 'linear' ? 'linear' : 'log';
+        const scale = value === 'linear' || value === 'log-hq' ? value : 'log';
         if (scale === this.sc) return;
+        if (scale === 'log-hq' || this.sc === 'log-hq') this.resetHqDisplay();
         this.sc = scale;
         this.repaintSpectrogramHistory();
         this.updateParameters();
+    }
+
+    resetHqDisplay() {
+        // Retain the received watermark: parameter changes can coalesce while audio is paused.
+        this.hqFrameIndex = -1;
+        this.resetDspSpectrogramHistory();
+        this.spectrogramBuffer.fill(-144);
+        this.clearSpectrogramImage();
     }
 
     repaintSpectrogramHistory() {
@@ -323,7 +350,8 @@ class SpectrogramPlugin extends PluginBase {
             dr: this.dr,
             pt: this.pt,
             kb: this.kb,
-            sc: this.sc
+            sc: this.sc,
+            hq: this.sc === 'log-hq'
         };
     }
 
@@ -333,6 +361,8 @@ class SpectrogramPlugin extends PluginBase {
         if (params.pt !== undefined) this.setPoints(params.pt);
         if (params.kb !== undefined) this.setKeyboardVisible(params.kb);
         if (params.sc !== undefined) this.setFrequencyScale(params.sc);
+        else if (params.hq === true) this.setFrequencyScale('log-hq');
+        else if (params.hq === false && this.sc === 'log-hq') this.setFrequencyScale('log');
         this.updateParameters();
     }
 
@@ -397,6 +427,7 @@ class SpectrogramPlugin extends PluginBase {
     }
 
     parseDspSpectrogramTelemetryFrame(frame) {
+        if (frame?.formatVersion === 2) return globalThis.MultiresSpectrum?.decode(frame, SPECTROGRAM_TAP_FRAME) ?? null;
         if (frame?.frameType !== SPECTROGRAM_TAP_FRAME ||
             frame.formatVersion !== SPECTROGRAM_TELEMETRY_VERSION) {
             return null;
@@ -428,12 +459,24 @@ class SpectrogramPlugin extends PluginBase {
         return { sampleRate, timeSeconds, cellCount, points, intensities };
     }
 
-    handleDspSpectrogramTelemetry(frame) {
+    handleDspSpectrogramTelemetry(frame, producer = this._dspTelemetryHub?.port ?? null) {
         const snapshot = this.parseDspSpectrogramTelemetryFrame(frame);
         if (!snapshot || !this.enabled || !this._sectionEnabled ||
             !this.spectrogramIntensityBuffer) {
             return;
         }
+        if (snapshot.highQuality) {
+            if (this.sc !== 'log-hq' || snapshot.points !== this.pt ||
+                producer !== (this._dspTelemetryHub?.port ?? null)) return;
+            this.hqReceiver ??= new globalThis.MultiresSpectrum.FrameReceiver();
+            if (!this.hqReceiver.accept(snapshot, producer)) return;
+            if (this.hqReceiver.streamChanged) {
+                this.resetDspSpectrogramHistory();
+                this.clearSpectrogramImage();
+            }
+            this.hqGeneration = snapshot.generation;
+            this.hqFrameIndex = snapshot.frameIndex;
+        } else if (this.sc === 'log-hq') return;
         if (!this.dspSpectrogramActive) {
             this.resetDspSpectrogramHistory();
             this.dspSpectrogramActive = true;
@@ -527,6 +570,11 @@ class SpectrogramPlugin extends PluginBase {
     }
 
     process(message) {
+        if (message?.measurements?.hqFrame) {
+            this.handleDspSpectrogramTelemetry(message.measurements.hqFrame);
+            return;
+        }
+        if (this.sc === 'log-hq') return;
         if (!message?.measurements?.buffer) return;
         if (!this.enabled || !this._sectionEnabled) return;
         if (!this.spectrogramBuffer) return; // Check if spectrogramBuffer exists
@@ -687,6 +735,7 @@ class SpectrogramPlugin extends PluginBase {
             'Frequency Scale',
             [
                 { value: 'log', label: 'Log' },
+                { value: 'log-hq', label: 'Log (HQ)' },
                 { value: 'linear', label: 'Linear' }
             ],
             this.sc,
@@ -1058,7 +1107,8 @@ class SpectrogramPlugin extends PluginBase {
         const plotWidth = targetWidth - keyboardGutter;
         
         const background = this.spectrogramColorLut;
-        ctx.fillStyle = `rgb(${background[0]}, ${background[1]}, ${background[2]})`; // theme-allow: Spectrogram colormap background.
+        const graphBackgroundColor = `rgb(${background[0]}, ${background[1]}, ${background[2]})`; // theme-allow: Spectrogram colormap background.
+        ctx.fillStyle = graphBackgroundColor;
         ctx.fillRect(0, 0, plotWidth, targetHeight);
         
         if (keyboardGutter) {
@@ -1111,6 +1161,7 @@ class SpectrogramPlugin extends PluginBase {
             }
         }
 
+        const frequencyTicks = [];
         if (keyboardGutter) {
             this.drawKeyboardGrid(ctx, plotWidth, targetHeight, dpr);
         } else {
@@ -1155,7 +1206,11 @@ class SpectrogramPlugin extends PluginBase {
                 
                     // Draw label, avoid edges
                     if (yDrawPos > 15 * dpr && yDrawPos < targetHeight - 15 * dpr) {
-                        ctx.fillText(freq >= 1000 ? `${Math.round(freq / 100)/10}k` : freq.toString(), (isNarrow ? 46 : 80) * dpr, yDrawPos + (6 * dpr)); // Adjust offset
+                        frequencyTicks.push({
+                            text: freq >= 1000 ? `${Math.round(freq / 100)/10}k` : freq.toString(),
+                            x: (isNarrow ? 46 : 80) * dpr,
+                            y: yDrawPos + (6 * dpr)
+                        });
                     }
                 });
             }
@@ -1174,15 +1229,29 @@ class SpectrogramPlugin extends PluginBase {
             ctx.stroke();
         }
 
-        // Draw axis labels
+        // Draw axis labels last so their background-colored outlines stay above the plot.
+        ctx.save();
+        ctx.strokeStyle = graphBackgroundColor;
+        ctx.lineWidth = 2 * dpr;
+        ctx.lineJoin = 'round';
         ctx.fillStyle = SPECTROGRAM_AXIS_COLOR; ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
+        ctx.strokeText('Time', plotWidth / 2, targetHeight - (8 * dpr));
         ctx.fillText('Time', plotWidth / 2, targetHeight - (8 * dpr));
         if (!keyboardGutter) {
             ctx.save();
             ctx.translate((isNarrow ? 18 : 20) * dpr, targetHeight / 2); ctx.rotate(-Math.PI / 2);
+            ctx.strokeText('Frequency (Hz)', 0, 0);
             ctx.fillText('Frequency (Hz)', 0, 0);
             ctx.restore();
         }
+        ctx.fillStyle = SPECTROGRAM_LABEL_COLOR;
+        ctx.font = `${frequencyLabelFontSize}px Arial`;
+        ctx.textAlign = 'right';
+        for (const tick of frequencyTicks) {
+            ctx.strokeText(tick.text, tick.x, tick.y);
+            ctx.fillText(tick.text, tick.x, tick.y);
+        }
+        ctx.restore();
         if (keyboardGutter) {
             ctx.restore();
             this.drawKeyboard(

@@ -91,10 +91,8 @@ export class PipelineCore {
 
         // Rebuild columns if the count differs or forceRedraw is true
         if (currentColumns.length !== columnCount || forceRedraw) {
-            // console.log(`Rebuilding columns. Current: ${currentColumns.length}, Target: ${columnCount}, Force: ${forceRedraw}`);
             this.columnManager.rebuildPipelineColumns(columnCount); // This will also call distributePluginsToColumns
         } else {
-            // console.log(`Column count matches (${columnCount}). Redistributing plugins.`);
             // Only redistribute plugins if columns don't need rebuilding
             // Make sure elements exist, otherwise rebuild
             if (this.pipelineList.childElementCount === 0 && pipeline.length > 0) {
@@ -106,7 +104,6 @@ export class PipelineCore {
 
         this.updateSelectionClasses(); // Update selection visuals after distribution
         this.updateURL(); // Update URL based on the new state
-        // console.log("updatePipelineUI finished.");
          // Ensure pull tab position is updated after potential column changes
         requestAnimationFrame(() => {
              this.columnManager.updatePluginListPullTab();

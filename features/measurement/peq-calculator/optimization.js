@@ -51,14 +51,6 @@ export function qMaxForGain(gainDb) {
   return gainDb > PEAK_DIP_HYSTERESIS_DB ? Q_MAX_PEAK : Q_MAX_DIP;
 }
 
-/**
- * Return log10(Q) upper bound for a given gain.
- * @param {number} gainDb
- * @returns {number}
- */
-export function logQMaxForGain(gainDb) {
-  return gainDb > PEAK_DIP_HYSTERESIS_DB ? LOG_Q_MAX_PEAK : LOG_Q_MAX_DIP;
-}
 
 /**
  * Compute the error vector for least squares optimization (log-space parameters).

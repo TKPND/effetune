@@ -51,6 +51,19 @@ class Oscilloscope(Effect):
         channel: EffectChannel = ...,
     ) -> None: ...
 
+class PitchMeter(Effect):
+    effect_type: Literal["PitchMeter"]
+    def __init__(
+        self,
+        *,
+        reference_a4: float = ...,
+        minimum_midi: int = ...,
+        maximum_midi: int = ...,
+        id: str | None = ...,
+        enabled: bool = ...,
+        channel: EffectChannel = ...,
+    ) -> None: ...
+
 class Spectrogram(Effect):
     effect_type: Literal["Spectrogram"]
     def __init__(
@@ -58,6 +71,7 @@ class Spectrogram(Effect):
         *,
         d_brange: float = ...,
         points: int = ...,
+        high_quality_log: bool = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,
@@ -70,6 +84,7 @@ class SpectrumAnalyzer(Effect):
         *,
         d_brange: float = ...,
         points: int = ...,
+        high_quality_log: bool = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,

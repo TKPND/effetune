@@ -120,7 +120,7 @@ async function withAudioGlobals(options, callback) {
   const AudioNodeClass = options.AudioNodeClass ?? createAudioNodeClass(calls);
   const globals = {
     window: {
-      location: { pathname: '/app/index.html' },
+      location: { pathname: '/app/index.html', href: 'https://effetune.test/app/index.html' },
       ...options.window
     },
     console: createConsole(calls),
@@ -497,7 +497,7 @@ test('loadAudioWorklet creates a configured worklet and applies pending audio co
   await withAudioGlobals({
     AudioWorkletNode: null,
     window: {
-      location: { pathname: '/nested/player/index.html' },
+      location: { pathname: '/nested/player/index.html', href: 'https://effetune.test/nested/player/index.html' },
       electronAPI: {},
       electronIntegration: {
         async loadAudioPreferences() {
@@ -538,7 +538,7 @@ test('loadAudioWorklet creates a configured worklet and applies pending audio co
   await withAudioGlobals({
     AudioWorkletNode: null,
     window: {
-      location: { pathname: '/offline/index.html' },
+      location: { pathname: '/offline/index.html', href: 'https://effetune.test/offline/index.html' },
       audioPreferences: { lowLatencyOutput: false }
     },
     fetch: async url => {
@@ -556,12 +556,14 @@ test('loadAudioWorklet creates a configured worklet and applies pending audio co
         this.options = options;
       }
     },
-    URL: {
-      createObjectURL(blob) {
+    URL: class extends URL {
+      static createObjectURL(blob) {
+        assert.equal(blob.parts.length, 3);
+        assert.match(blob.parts[0], /multires-spectrum\.js/);
         blobFallbackCalls.push(['createObjectURL', blob.options.type]);
         return 'blob://processor';
-      },
-      revokeObjectURL(url) {
+      }
+      static revokeObjectURL(url) {
         blobFallbackCalls.push(['revokeObjectURL', url]);
       }
     }
@@ -582,7 +584,7 @@ test('loadAudioWorklet creates a configured worklet and applies pending audio co
 
     assert.equal(await manager.loadAudioWorklet(), '');
     assert.deepEqual(calls.filter(call => call[0] === 'addModule').map(call => call[1]), [
-      '/offline/plugins/audio-processor.js',
+      'https://effetune.test/offline/plugins/multires-spectrum.js',
       'blob://processor'
     ]);
     assert.deepEqual(blobFallbackCalls, [
@@ -653,7 +655,8 @@ test('loadAudioWorklet waits for delayed registration and reports actual module 
     manager.audioContext = {
       destination: { channelCount: 2 },
       audioWorklet: {
-        addModule() {
+        addModule(path) {
+          if (path.endsWith('multires-spectrum.js')) return Promise.resolve();
           calls.push(['addModuleDelayed']);
           return new Promise(resolve => {
             finishModuleLoad = resolve;

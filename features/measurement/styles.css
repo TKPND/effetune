@@ -671,22 +671,6 @@ canvas {
     margin-bottom: 0;
 }
 
-.control-row.eq-type .radio-options {
-    display: flex;
-    gap: 20px;
-}
-
-.control-row.eq-type .radio-options label {
-    display: inline-flex;
-    align-items: center;
-    width: auto;
-}
-
-.control-row.btn-row {
-    justify-content: center;
-    margin: 10px 0;
-}
-
 /* Log scale slider styling */
 .log-slider {
     -webkit-appearance: none;
@@ -714,14 +698,8 @@ canvas {
     cursor: pointer;
 }
 
-/* Existing code for freq-range, etc. can be removed */
-.freq-range, .smoothing, .eq-type {
+.eq-type {
     margin-bottom: 15px;
-}
-
-.freq-range input[type="number"] {
-    width: 80px;
-    display: inline-block;
 }
 
 .export-section {

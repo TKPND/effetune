@@ -283,6 +283,9 @@ function createUIManager(calls) {
     setError(message, isError, params) {
       calls.push(['setError', message, isError ?? null, params ?? null]);
     },
+    showTransientMessage(message, isError, params, duration) {
+      calls.push(['showTransientMessage', message, isError ?? null, params ?? null, duration]);
+    },
     clearError() {
       calls.push(['clearError']);
     }
@@ -424,7 +427,7 @@ test('drop area creation and file inputs handle web, Electron, invalid, single, 
 
     fileInput.files = [createFile('bad.txt')];
     await fileInput.dispatch('change', { target: fileInput });
-    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Please select audio files'));
+    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'error.selectAudioFiles'));
 
     fileInput.files = [createFile('one.wav')];
     await fileInput.dispatch('change', { target: fileInput });
@@ -830,9 +833,10 @@ test('download links support web and Electron save flows', async () => {
     await link.dispatch('click');
     await flushMicrotasks();
     assert.ok(saveCalls.some(call => call[0] === 'saveFile'));
-    assert.ok(calls.some(call => call[0] === 'setError' && String(call[1]).includes('File saved successfully')));
+    assert.deepEqual(calls.find(call => call[0] === 'showTransientMessage'),
+      ['showTransientMessage', 'success.fileSaved', false, { filePath: 'C:/song.wav' }, 3000]);
     runTimeouts();
-    assert.ok(calls.some(call => call[0] === 'clearError'));
+    assert.equal(calls.some(call => call[0] === 'clearError'), false);
 
     processor.showDownloadLink({
       blob: createBlob(2048, { type: 'audio/flac' }),
@@ -955,7 +959,7 @@ test('processDroppedAudioFiles filters input, reports errors, cleans classes, an
     documentRef.body.appendChild(stray);
 
     await processor.processDroppedAudioFiles(null);
-    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Please select audio files'));
+    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'error.selectAudioFiles'));
 
     await processor.processDroppedAudioFiles([createFile('bad.txt'), createFile('ok.wav')]);
     assert.equal(processor.dropArea.classList.contains('drag-active'), false);

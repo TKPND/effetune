@@ -4,25 +4,14 @@
     box-sizing: border-box;
 }
 
-.tv-audio-simulator-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.tv-audio-simulator-section {
-    min-width: 0;
+.tv-audio-simulator-panel {
     padding: 10px;
-    border: 1px solid var(--et-surface-21);
     border-radius: 4px;
     background: color-mix(in srgb, var(--et-surface-10), var(--et-graph-bg-deep) 25%);
 }
 
-.tv-audio-simulator-section-title {
-    margin: 0 0 8px;
-    color: var(--et-surface-89);
-    font: 600 12px/1.2 Arial, sans-serif;
-    letter-spacing: 0.04em;
+.tv-audio-simulator-tab {
+    flex: 1 1 100px;
 }
 
 .tv-audio-simulator-standard-detail {
@@ -59,8 +48,8 @@
 }
 
 body.layout-mobile .tv-audio-simulator-container,
-body.layout-mobile .tv-audio-simulator-controls,
-body.layout-mobile .tv-audio-simulator-section,
+body.layout-mobile .tv-audio-simulator-panel,
+body.layout-mobile .tv-audio-simulator-tab-content,
 body.layout-mobile .tv-audio-simulator-hud {
     width: 100%;
     max-width: 100%;
@@ -68,10 +57,11 @@ body.layout-mobile .tv-audio-simulator-hud {
     box-sizing: border-box;
 }
 
-body.layout-mobile .tv-audio-simulator-controls {
-    gap: 6px;
+body.layout-mobile .tv-audio-simulator-panel {
+    padding: 8px;
+    overflow-x: clip;
 }
 
-body.layout-mobile .tv-audio-simulator-section {
-    padding: 8px;
+body.layout-mobile .tv-audio-simulator-tab {
+    flex: 1 1 calc(50% - 4px);
 }

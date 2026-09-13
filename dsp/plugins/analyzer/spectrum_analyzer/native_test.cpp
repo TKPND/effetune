@@ -1,3 +1,5 @@
+#include "../../../generated/cpp/SpectrumAnalyzerPluginParams.h"
+#include "effetune/dsp/multires_spectrum.h"
 #include "effetune/kernel.h"
 
 #include "pffft.h"
@@ -117,8 +119,12 @@ struct KernelHarness {
       : ring_storage(kTelemetryBytes), output(kTelemetryBytes) {
     descriptor = et_kernel_descriptor_SpectrumAnalyzerPlugin();
     SPECTRUM_CHECK(descriptor != nullptr);
-    SPECTRUM_CHECK(descriptor != nullptr && descriptor->paramsHash == 0xc99dcc20u);
-    SPECTRUM_CHECK(descriptor != nullptr && descriptor->paramsFloatCount == 2u);
+    SPECTRUM_CHECK(descriptor != nullptr &&
+                   descriptor->paramsHash ==
+                       effetune::generated::SpectrumAnalyzerPluginParams::kHash);
+    SPECTRUM_CHECK(descriptor != nullptr &&
+                   descriptor->paramsFloatCount ==
+                       effetune::generated::SpectrumAnalyzerPluginParams::kFloatCount);
     SPECTRUM_CHECK(descriptor != nullptr && descriptor->objectSize <= object_storage.size());
     if (descriptor == nullptr || descriptor->objectSize > object_storage.size()) {
       return;
@@ -138,9 +144,11 @@ struct KernelHarness {
     }
   }
 
-  void setParams(float dB_range, float points) noexcept {
-    const std::array<float, 2> params = {dB_range, points};
-    SPECTRUM_CHECK(kernel->stageParameters(params.data(), 2u, descriptor->paramsHash) == ET_OK);
+  void setParams(float dB_range, float points, bool hq = false) noexcept {
+    const std::array<float, effetune::generated::SpectrumAnalyzerPluginParams::kFloatCount> params =
+        {dB_range, points, hq ? 1.0F : 0.0F};
+    SPECTRUM_CHECK(kernel->stageParameters(params.data(), static_cast<std::uint32_t>(params.size()),
+                                           descriptor->paramsHash) == ET_OK);
   }
 
   void process(float *audio, std::uint32_t channels, std::uint32_t frames,
@@ -455,6 +463,146 @@ void testLatencyIsUnchanged() {
   SPECTRUM_CHECK(harness.kernel != nullptr && harness.kernel->latencySamples() == 0u);
 }
 
+struct HqProbe {
+  std::array<float, effetune::dsp::MultiresSpectrum::kSpectrumCells> levels{};
+  effetune::dsp::MultiresSpectrumFrame frame;
+  std::uint32_t completed = 0u;
+  void hqBegin(const effetune::dsp::MultiresSpectrumFrame &next) noexcept { frame = next; }
+  void hqCell(std::uint32_t index, float level) noexcept { levels[index] = level; }
+  void hqCommit() noexcept { ++completed; }
+  float at(double frequency) const noexcept {
+    const auto index = static_cast<std::uint32_t>(
+        std::round(std::log(frequency / 20.0) / std::log(2000.0) * (levels.size() - 1u)));
+    return levels[index];
+  }
+};
+
+void testHqFirAliasBudgetAndLowFrequencySeparation() {
+  effetune::dsp::MultiresSpectrum analyzer;
+  SPECTRUM_CHECK(analyzer.prepare(32768.0F, false));
+  double largest_alias = 0.0;
+  double largest_ripple = 0.0;
+  const auto &coefficients = analyzer.firCoefficients();
+  for (std::uint32_t point = 0u; point <= 8000u; ++point) {
+    const double frequency = 0.5 * point / 8000.0;
+    double real = 0.0;
+    double imaginary = 0.0;
+    for (std::uint32_t tap = 0u; tap < coefficients.size(); ++tap) {
+      real += coefficients[tap] * std::cos(2.0 * kPi * frequency * tap);
+      imaginary -= coefficients[tap] * std::sin(2.0 * kPi * frequency * tap);
+    }
+    const double amplitude = std::hypot(real, imaginary);
+    if (frequency >= 3.0 / 16.0) {
+      largest_alias = amplitude > largest_alias ? amplitude : largest_alias;
+    }
+    if (frequency <= 1.0 / 16.0) {
+      const double ripple = std::abs(20.0 * std::log10(amplitude));
+      largest_ripple = ripple > largest_ripple ? ripple : largest_ripple;
+    }
+  }
+  // Three coherent aliases together remain at least 12 dB below the -144 dB floor.
+  SPECTRUM_CHECK(3.0 * largest_alias < std::pow(10.0, -156.0 / 20.0));
+  SPECTRUM_CHECK(largest_ripple < 0.001);
+
+  analyzer.reset(10u);
+  HqProbe probe;
+  for (std::uint32_t sample = 0u; sample < 8192u; ++sample) {
+    const double phase = 2.0 * kPi * sample / 32768.0;
+    analyzer.push(static_cast<float>(0.5 * std::sin(96.0 * phase) + 0.5 * std::sin(128.0 * phase)),
+                  probe);
+    if (sample < 4191u) {
+      SPECTRUM_CHECK(probe.completed == 0u);
+    }
+  }
+  SPECTRUM_CHECK(analyzer.ready() && probe.completed >= 2u);
+  SPECTRUM_CHECK(near(probe.at(96.0), -6.0206F, 0.7F));
+  SPECTRUM_CHECK(near(probe.at(128.0), -6.0206F, 0.7F));
+  SPECTRUM_CHECK(probe.at(112.0) < -25.0F);
+
+  // Exercise the actual double FIR accumulation and float FFT, not just ideal coefficients.
+  analyzer.reset(10u);
+  probe.completed = 0u;
+  for (std::uint32_t sample = 0u; sample < 8192u; ++sample) {
+    analyzer.push(static_cast<float>(std::sin(2.0 * kPi * (8192.0 + 128.0) * sample / 32768.0)),
+                  probe);
+  }
+  SPECTRUM_CHECK(probe.at(128.0) < -144.0F);
+  SPECTRUM_CHECK(probe.frame.generation == 2u);
+}
+
+std::vector<std::uint8_t> renderHqPayload(const std::vector<std::uint32_t> &blocks) {
+  KernelHarness harness(44100.0F, 129u);
+  harness.setParams(-144.0F, 8.0F, true);
+  processSamples(harness, 44100.0F, 8192u, blocks, [](std::uint32_t sample) {
+    return static_cast<float>(0.5 * std::sin(2.0 * kPi * 1000.0 * sample / 44100.0));
+  });
+  harness.telemetryTick();
+  const std::uint32_t bytes = harness.read();
+  SPECTRUM_CHECK(bytes == 16u + 48u + 2048u * 8u);
+  if (bytes == 0u) {
+    return {};
+  }
+  SPECTRUM_CHECK(readU16(harness.output.data()) == 4u);
+  SPECTRUM_CHECK(readU16(harness.output.data() + 2u) == 2u);
+  const std::uint8_t *payload = harness.output.data() + 16u;
+  SPECTRUM_CHECK(readU32(payload + 8u) == 1470u);
+  SPECTRUM_CHECK(readU32(payload + 12u) == 1u);
+  SPECTRUM_CHECK(readU32(payload + 16u) % 4u == 0u);
+  SPECTRUM_CHECK(readU32(payload + 20u) == 0u);
+  SPECTRUM_CHECK(readU32(payload + 28u) == 2048u);
+  SPECTRUM_CHECK(readU32(payload + 40u) == 0u);
+  const std::uint32_t valid = readU32(payload + 44u);
+  SPECTRUM_CHECK(valid > 0u && valid < 2048u);
+  for (std::uint32_t index = valid; index < 2048u; ++index) {
+    SPECTRUM_CHECK(readF32(payload + 48u + index * 4u) == -240.0F);
+    SPECTRUM_CHECK(readF32(payload + 48u + (2048u + index) * 4u) == -240.0F);
+  }
+  return {payload, payload + bytes - 16u};
+}
+
+void testHqCaptureAndVariableBlocks() {
+  const auto reference = renderHqPayload({16u});
+  SPECTRUM_CHECK(!reference.empty());
+  SPECTRUM_CHECK(reference == renderHqPayload({1u, 7u, 16u, 32u, 64u, 128u, 129u}));
+}
+
+void testHqAllPointSchedulesFinishBeforeNextHop() {
+  for (const float sample_rate : {44100.0F, 192000.0F}) {
+    for (const bool spectrogram : {false, true}) {
+      effetune::dsp::MultiresSpectrum analyzer;
+      SPECTRUM_CHECK(analyzer.prepare(sample_rate, spectrogram));
+      for (std::uint32_t points = 8u; points <= 14u; ++points) {
+        analyzer.reset(points);
+        HqProbe probe;
+        const std::uint32_t size = 1u << points;
+        const auto rate_hop = static_cast<std::uint32_t>(std::ceil(sample_rate / 30.0));
+        const std::uint32_t hop = !spectrogram && rate_hop > size / 2u ? rate_hop : size / 2u;
+        const std::uint32_t initial = spectrogram || hop < size ? hop : size;
+        const std::uint32_t warmup = 4u * size + 96u;
+        const std::uint32_t first_job = initial + ((warmup - initial + hop - 1u) / hop) * hop;
+        const std::uint32_t first_publication = first_job + hop / 16u * 16u;
+        const std::uint32_t total = first_job + 3u * hop;
+        for (std::uint32_t sample = 0u; sample < total; ++sample) {
+          analyzer.push(0.0F, probe);
+          if (sample + 1u == first_publication - 1u) {
+            SPECTRUM_CHECK(probe.completed == 0u);
+          } else if (sample + 1u == first_publication) {
+            SPECTRUM_CHECK(probe.completed == 1u);
+          }
+        }
+        SPECTRUM_CHECK(analyzer.ready() && probe.completed == 3u);
+        // The next job may already have begun; completed data remains silence.
+        SPECTRUM_CHECK(probe.frame.points == points);
+        SPECTRUM_CHECK(probe.frame.hopSamples == hop);
+        SPECTRUM_CHECK(probe.frame.captureEndSample % 4u == 0u);
+        for (std::uint32_t cell = 0u; cell < probe.frame.cellCount; ++cell) {
+          SPECTRUM_CHECK(probe.levels[cell] == -240.0F);
+        }
+      }
+    }
+  }
+}
+
 } // namespace
 
 int main() {
@@ -466,6 +614,9 @@ int main() {
   testPreparedTwiddleTablesAcrossPointChangesAndReset();
   testPublishedPayloadRemainsCoherentDuringStaging();
   testLatencyIsUnchanged();
+  testHqFirAliasBudgetAndLowFrequencySeparation();
+  testHqCaptureAndVariableBlocks();
+  testHqAllPointSchedulesFinishBeforeNextHop();
   if (failures != 0) {
     std::fprintf(stderr, "%d Spectrum Analyzer native check(s) failed\n", failures);
     return 1;

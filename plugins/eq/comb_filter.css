@@ -51,7 +51,8 @@
 
 .comb-filter-plugin-ui .radio-group {
     display: flex;
-    gap: 10px;
+    column-gap: 10px;
+    row-gap: 4px;
     align-items: center;
     margin: 5px 0;
 }
@@ -64,4 +65,4 @@
     min-width: auto;
     margin-right: 15px;
     cursor: pointer;
-} 
+}

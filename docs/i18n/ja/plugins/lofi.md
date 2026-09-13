@@ -906,11 +906,11 @@ TV Audio Simulatorは、音楽をアナログテレビ放送またはNICAMデジ
 - 良好に受信した当時のテレビらしい音には、Signalを上げてTuningを中央に保ちます。Processingを上げるとアナログ放送の密度感が増しますが、NICAMのデジタル主経路には作用しません。
 - 受信状態の悪いアナログテレビを再現するには、まずSignalを下げ、次にMultipathまたは小さなTuningのずれを加えます。Path Delayでマルチパス歪みの質感が変わります。
 - B/G NICAMまたはI NICAMでは、Signalを徐々に下げるとデジタル音声の劣化とアナログFMモノへの切り替えを確認できます。デジタル経路ではHUDに`NICAM`、切り替え後は`FALLBACK`と表示されます。
-- 電源周波数や走査に由来するトーンが必要な場合だけVideo Buzzを上げます。最小値の-80 dBではバズがオフになります。
+- 電源周波数や走査に由来するトーンが必要な場合だけ、Video BuzzタブでBuzzを上げます。Buzzの最小値である-80 dBでは、バズがオフになります。
 
 ### システムプリセット
 
-9個のプリセットで代表的な地域方式を選べます: Japan TV (M / EIA-J)、North America TV (M / BTSC)、Korea TV (M / A2)、Europe TV (B/G / A2)、Australia TV (B / A2)、UK TV (I / NICAM)、Nordic TV (B/G / NICAM)、Eastern Europe TV (D/K mono)、France TV (L / AM sound)。各プリセットは受信状態の開始点にもなるため、Signal、Tuning、Multipath、Fadingで劣化量を調整してください。
+9個のプリセットで代表的な地域方式を選べます: Japan TV (M / EIA-J)、North America TV (M / BTSC)、Korea TV (M / A2)、Europe TV (B/G / A2)、Australia TV (B/G / A2)、UK TV (I / NICAM)、Nordic TV (B/G / NICAM)、Eastern Europe TV (D/K mono)、France TV (L / AM sound)。各プリセットは受信状態の開始点にもなるため、Signal、Tuning、Multipath、Fadingで劣化量を調整してください。
 
 ### パラメータ
 
@@ -921,11 +921,11 @@ TV Audio Simulatorは、音楽をアナログテレビ放送またはNICAMデジ
 - **Signal**: 受信強度を0～70 dBµVで設定します。下げるとアナログではノイズが増えてステレオが失われ、NICAMではエラーが増えて最終的にフォールバックします。
 - **Tuning**: 受信機の同調を-200～+200 kHzずらします。0から離すほど受信音が狭く歪み、さらにずらすと番組を受信できなくなります。
 - **IF Band**: 受信機の通過帯域を80～240 kHzで設定します。狭くすると同調外の成分を強く除去できますが、Tuningがずれていると番組の帯域も多く失われます。
-- **Multipath**: 遅れて届く反射波を加えます。上げるほど櫛形の音色変化、ステレオの不安定さ、受信歪みが強まります。
+- **Multipath** (0～100%): 遅れて届く反射波を加えます。上げるほど櫛形の音色変化、ステレオの不安定さ、受信歪みが強まります。
 - **Path Delay**: 反射波の遅延を0.5～50 µsで設定します。短い遅延では緩やかな音色変化、長い遅延では間隔の狭い山と谷が生じます。
 - **Fading**: 受信レベルの揺れを0～20 Hzで設定します。上げるほど音が速く揺れ、良好な受信と劣化した受信の切り替わりが頻繁になります。
 - **Receive Mode**: `Auto`は利用できるステレオ、主音声、副音声、NICAM、フォールバック経路を自動で選びます。`Stereo`、`Main`、`Sub`では番組を指定でき、選択した送信方式で利用できない組み合わせは主音声モノに戻ります。
-- **Video Buzz**: 映像由来の50/60 Hzバズを-80～-20 dBで設定します。-80 dBではオフです。NICAMのフォールバックを含むアナログ経路で聞こえます。
+- **Buzz**: 映像由来の50/60 Hzバズを-80～-20 dBで設定します。-80 dBではオフです。NICAMのフォールバックを含むアナログ経路で聞こえます。
 - **Output Gain**: 最終出力を-24～+24 dBで調整します。送信処理や受信ノイズでピークが強くなりすぎる場合は下げます。
 - **Mix**: 原音とテレビ音声経路を0～100%でブレンドします。
 

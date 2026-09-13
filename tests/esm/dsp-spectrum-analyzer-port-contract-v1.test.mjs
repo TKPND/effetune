@@ -18,7 +18,7 @@ const pluginRoot = path.join(repoRoot, 'dsp', 'plugins', 'analyzer', 'spectrum_a
 const schemaPath = path.join(pluginRoot, 'params.json');
 const goldenDir = path.join(pluginRoot, 'golden');
 const kernelPath = path.join(pluginRoot, 'kernel.cpp');
-const jsEngineHash = '442871de1b7833d224574b67facd479d703868d8c41ef066eef19bbfe96c7f41';
+const jsEngineHash = '634bec1422830d0de15f9b0f7ff172b04b7316594f56ed2d32de09211cfc4c79';
 
 async function directoryBytes(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -48,15 +48,16 @@ test('Spectrum Analyzer schema freezes legacy keys, bounds, defaults, and hash',
   const raw = JSON.parse(await fs.readFile(schemaPath, 'utf8'));
   const schema = validateParamSpec(raw, schemaPath);
   assert.equal(schema.type, 'SpectrumAnalyzerPlugin');
-  assert.equal(schema.hash, 0xc99dcc20);
-  assert.equal(schema.floatCount, 2);
+  assert.equal(schema.hash, 0x3e6e0819);
+  assert.equal(schema.floatCount, 3);
   assert.deepEqual(
     raw.fields.map(({ name, key, kind, min, max, default: defaultValue }) => ({
       name, key, kind, min, max, default: defaultValue
     })),
     [
       { name: 'dBRange', key: 'dr', kind: 'float', min: -144, max: -48, default: -96 },
-      { name: 'points', key: 'pt', kind: 'int', min: 8, max: 14, default: 12 }
+      { name: 'points', key: 'pt', kind: 'int', min: 8, max: 14, default: 12 },
+      { name: 'highQualityLog', key: 'hq', kind: 'bool', min: undefined, max: undefined, default: false }
     ]
   );
 });
@@ -64,7 +65,8 @@ test('Spectrum Analyzer schema freezes legacy keys, bounds, defaults, and hash',
 test('Spectrum Analyzer passthrough goldens are exact, current, and below 2 MiB', async () => {
   assert.ok(await directoryBytes(goldenDir) <= DEFAULT_GOLDEN_BUDGET_BYTES);
   const goldens = await readGoldenSet(goldenDir);
-  assert.equal(goldens.length, 6);
+  assert.equal(goldens.length, 7);
+  assert.equal(goldens.at(-1).metadata.params.hq, true);
   assert.ok(goldens.some(item => item.metadata.channels === 1));
   assert.ok(goldens.some(item => item.metadata.channels === 4));
   assert.ok(goldens.some(item => item.metadata.blockSize === 83));
@@ -81,7 +83,7 @@ test('Spectrum Analyzer passthrough goldens are exact, current, and below 2 MiB'
     '--type', 'SpectrumAnalyzerPlugin',
     '--self-check'
   ], { log() {} });
-  assert.equal(result.results.length, 6);
+  assert.equal(result.results.length, 7);
   assert.equal(result.results.every(item => item.comparison.pass), true);
 });
 

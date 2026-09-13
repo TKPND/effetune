@@ -421,7 +421,8 @@ test('web environment delegates safely and detects Electron changes', async () =
       powerSaving: {
         mode: 'balanced',
         silenceThresholdDb: -80,
-        fullSuspendDelaySeconds: 300
+        fullSuspendDelaySeconds: 300,
+        skipDisplayDspWhenHidden: true
       },
       offlineOutput: DEFAULT_OFFLINE_OUTPUT_SETTINGS
     });
@@ -430,7 +431,8 @@ test('web environment delegates safely and detects Electron changes', async () =
       powerSaving: {
         mode: 'balanced',
         silenceThresholdDb: -80,
-        fullSuspendDelaySeconds: 300
+        fullSuspendDelaySeconds: 300,
+        skipDisplayDspWhenHidden: true
       },
       offlineOutput: DEFAULT_OFFLINE_OUTPUT_SETTINGS,
       language: 'en'
@@ -592,9 +594,7 @@ test('Electron constructor defers preferences and config while callbacks dispatc
     electronAPI.handlers.ipc['start-double-blind-test']();
 
     assert.equal(windowRef.pendingPresetFilePath, 'pending.eft');
-    assert.deepEqual(windowRef._debugCommandLineMusicFiles, ['song.wav']);
     assert.deepEqual(windowRef.pendingMusicFiles, ['pending-song-2.wav']);
-    assert.equal(windowRef._commandLineMusicFilesNoInput, true);
     assert.equal(windowRef.pendingPresetName, 'Deferred');
     assert.ok(calls.some(call => call[0] === 'createAudioPlayer' && call[2] === false));
     assert.ok(calls.some(call => call[0] === 'loadPreset' && call[1] === 'Ready'));

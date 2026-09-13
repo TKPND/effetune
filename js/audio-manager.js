@@ -1765,7 +1765,7 @@ export class AudioManager {
         // can publish it within the private startup graph or a protected
         // runtime transition.
         workletNode.port.postMessage({ type: 'dspEnableTypes', types: [] });
-        workletNode.port.postMessage({ type: 'dspSetTelemetryRate', hz: globalThis.document?.hidden ? 15 : 60 });
+        workletNode.port.postMessage({ type: 'dspSetTelemetryRate', hz: this.getDspTelemetryRate() });
         return true;
     }
 
@@ -1844,8 +1844,20 @@ export class AudioManager {
         this._finalizeParallelDspBarrier(barrier, [], 'js');
     }
 
-    updateDspTelemetryRate() {
-        const hz = globalThis.document?.hidden ? 15 : 60;
+    getDspTelemetryRate(state = null) {
+        const controller = this.powerPolicyController;
+        const hidden = typeof state?.hidden === 'boolean'
+            ? state.hidden
+            : globalThis.document?.hidden === true || controller?.hostHidden === true ||
+                (controller?.dspUiSuppressionReasons?.size || 0) !== 0;
+        const displayDspBypassed = typeof state?.displayDspBypassed === 'boolean'
+            ? state.displayDspBypassed
+            : controller?.displayDspBypassed === true;
+        return displayDspBypassed ? 0 : (hidden ? 15 : 60);
+    }
+
+    updateDspTelemetryRate(state = null) {
+        const hz = this.getDspTelemetryRate(state);
         const nodes = new Set([
             this.contextManager?.workletNode,
             this.workletNode,
@@ -2309,7 +2321,7 @@ export class AudioManager {
         } else if (data.type === 'dspCleanupNeeded') {
             workletNode?.port?.postMessage({ type: 'dspCleanupFailed' });
         } else if (data.type === 'dspTelemetry') {
-            this.telemetryHub.handleMessage(data);
+            this.telemetryHub.handleMessage(data, workletNode?.port);
         }
     }
     

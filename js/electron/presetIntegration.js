@@ -29,9 +29,7 @@ export async function openPresetFile(isElectron, filePath) {
     console.error('Cannot open preset file: Electron integration or UI manager not available');
     return Promise.reject(new Error('Electron integration or UI manager not available'));
   }
-  
-  // Debug logs removed for release
-  
+
   try {
     // Set pipeline state flags to false
     try {
@@ -53,8 +51,7 @@ export async function openPresetFile(isElectron, filePath) {
     // Verify file exists and has correct extension
     if (!filePath.endsWith('.effetune_preset')) {
       console.error('Not a preset file:', filePath);
-      window.uiManager.setError('Not a valid preset file');
-      setTimeout(() => window.uiManager.clearError(), 3000);
+      window.uiManager.showTransientMessage('error.invalidPresetData', true, {}, 3000);
       return;
     }
     
@@ -64,8 +61,7 @@ export async function openPresetFile(isElectron, filePath) {
     
     if (!readResult.success) {
       console.error('Failed to read preset file:', readResult.error);
-      window.uiManager.setError(`Failed to read preset file: ${readResult.error}`);
-      setTimeout(() => window.uiManager.clearError(), 3000);
+      window.uiManager.showTransientMessage('error.failedToReadPresetFile', true, {}, 3000);
       return;
     }
     
@@ -76,8 +72,7 @@ export async function openPresetFile(isElectron, filePath) {
       fileData = JSON.parse(readResult.content);
     } catch (parseError) {
       console.error('Failed to parse preset file JSON:', parseError);
-      window.uiManager.setError('Invalid preset file format');
-      setTimeout(() => window.uiManager.clearError(), 3000);
+      window.uiManager.showTransientMessage('error.invalidPresetData', true, {}, 3000);
       return;
     }
     
@@ -105,8 +100,7 @@ export async function openPresetFile(isElectron, filePath) {
     } else {
       // Unknown format
       console.error('Unknown preset format:', fileData);
-      window.uiManager.setError('Unknown preset format');
-      setTimeout(() => window.uiManager.clearError(), 3000);
+      window.uiManager.showTransientMessage('error.unknownPresetFormat', true, {}, 3000);
       return;
     }
     
@@ -120,26 +114,21 @@ export async function openPresetFile(isElectron, filePath) {
     
     if (isFirstLaunch) {
       // For first launch, use the original behavior
-      // Debug logs removed for release
       
       // Load the preset into UI
-      // Debug logs removed for release
       window.uiManager.loadPreset(presetData);
       
       // Rebuild the audio pipeline to ensure audio processing works correctly
       if (window.app && window.app.audioManager) {
         try {
           // Rebuild the pipeline immediately
-          // Debug logs removed for release
           await window.app.audioManager.rebuildPipeline(true);
-          // Debug logs removed for release
         } catch (rebuildError) {
           console.error('Error rebuilding audio pipeline:', rebuildError);
         }
       }
     } else if (isAppInitialized) {
       // For already initialized app, use the drag & drop behavior
-      // Debug logs removed for release
       
       // Check if there's an audio player active
       const hasAudioPlayer = window.uiManager && window.uiManager.audioPlayer;
@@ -154,7 +143,6 @@ export async function openPresetFile(isElectron, filePath) {
         // Rebuild the pipeline to ensure audio processing works correctly with the new preset
         if (window.app && window.app.audioManager) {
           try {
-            // Debug logs removed for release
             
             // Force disconnect all existing connections first
             if (window.app.audioManager.workletNode) {
@@ -162,19 +150,16 @@ export async function openPresetFile(isElectron, filePath) {
                 window.app.audioManager.workletNode.disconnect();
               } catch (e) {
                 // Ignore errors if already disconnected
-                // Debug logs removed for release
               }
             }
             
             // Rebuild pipeline with force flag to ensure complete rebuild
             await window.app.audioManager.rebuildPipeline(true);
-            // Debug logs removed for release
             
             // Force reconnection of the audio player to the new pipeline
             if (window.uiManager.audioPlayer.contextManager) {
               try {
                 window.uiManager.audioPlayer.contextManager.connectToAudioContext();
-                // Debug logs removed for release
               } catch (reconnectError) {
                 console.error('Error reconnecting audio player:', reconnectError);
               }
@@ -184,13 +169,11 @@ export async function openPresetFile(isElectron, filePath) {
           }
         }
       } else {
-        // Debug logs removed for release
         window.uiManager.loadPreset(presetData);
         
         // Rebuild the pipeline to ensure audio processing works correctly with the new preset
         if (window.app && window.app.audioManager) {
           try {
-            // Debug logs removed for release
             
             // Force disconnect all existing connections first
             if (window.app.audioManager.workletNode) {
@@ -198,13 +181,11 @@ export async function openPresetFile(isElectron, filePath) {
                 window.app.audioManager.workletNode.disconnect();
               } catch (e) {
                 // Ignore errors if already disconnected
-                // Debug logs removed for release
               }
             }
             
             // Rebuild pipeline with force flag to ensure complete rebuild
             await window.app.audioManager.rebuildPipeline(true);
-            // Debug logs removed for release
           } catch (rebuildError) {
             console.error('Error rebuilding audio pipeline:', rebuildError);
           }
@@ -212,19 +193,16 @@ export async function openPresetFile(isElectron, filePath) {
       }
     } else {
       // For not yet initialized app (but not first launch), store for later use
-      // Debug logs removed for release
       window.pendingPresetFilePath = filePath;
     }
     
     // Display message with filename using translation key
-    window.uiManager.setError('success.presetLoaded', false, { name: fileName });
-    setTimeout(() => window.uiManager.clearError(), 3000);
+    window.uiManager.showTransientMessage('success.presetLoaded', false, { name: fileName }, 3000);
     
     return Promise.resolve(true);
   } catch (error) {
     console.error('Error opening preset file:', error);
-    window.uiManager.setError(`Error opening preset file: ${error.message}`);
-    setTimeout(() => window.uiManager.clearError(), 3000);
+    window.uiManager.showTransientMessage('error.failedToLoadPreset', true, {}, 3000);
     return Promise.reject(error);
   }
 }
@@ -337,8 +315,7 @@ export async function importPreset(isElectron) {
     window.uiManager.loadPreset(presetData);
     
     // Display message with filename using translation key
-    window.uiManager.setError('success.presetLoaded', false, { name: fileName });
-    setTimeout(() => window.uiManager.clearError(), 3000);
+    window.uiManager.showTransientMessage('success.presetLoaded', false, { name: fileName }, 3000);
   } catch (error) {
     console.error('Error importing preset:', error);
   }

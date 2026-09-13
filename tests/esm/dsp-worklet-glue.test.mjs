@@ -1736,6 +1736,17 @@ test('worklet applies a telemetry rate received before DSP initialization', asyn
     binding.calls.filter(call => call[0] === 'setTelemetryRate'),
     [['setTelemetryRate', 15]]
   );
+
+  await harness.send({ type: 'dspSetTelemetryRate', hz: 0 });
+  await harness.send({ type: 'dspSetTelemetryRate', hz: 60 });
+  assert.deepEqual(
+    binding.calls.filter(call => call[0] === 'setTelemetryRate'),
+    [
+      ['setTelemetryRate', 15],
+      ['setTelemetryRate', 0],
+      ['setTelemetryRate', 60]
+    ]
+  );
 });
 
 test('worklet uses one native pipeline call when every active node is WASM-ready', async () => {
@@ -4138,6 +4149,185 @@ test('new power identities adopt the configured UI telemetry gate directly', asy
 
   await configure(4, 8, true);
   assert.equal(harness.processor.powerPolicy.uiTelemetryEnabled, true);
+});
+
+test('background display DSP bypass skips analyzer JavaScript while preserving routed audio', async () => {
+  const harness = await createWorkletHarness();
+  await registerObservedFallback(harness, 'SpectrumAnalyzerPlugin', 100);
+  await registerObservedFallback(harness, 'VolumePlugin', 10);
+  await harness.send({
+    type: 'updatePlugins',
+    plugins: [
+      pluginConfig({
+        id: 7,
+        type: 'SpectrumAnalyzerPlugin',
+        inputBus: 0,
+        outputBus: 1,
+        wasmParams: undefined
+      }),
+      pluginConfig({ id: 8, inputBus: 1, outputBus: 0, wasmParams: undefined })
+    ],
+    masterBypass: false
+  });
+
+  await harness.send({
+    type: 'setDisplayDspBypassed',
+    bypassed: true,
+    commandId: 1,
+    workletGraphGeneration: 0,
+    topologyRevision: 0
+  });
+  const backgroundOutput = processBlock(harness.processor);
+  assert.equal(backgroundOutput[0][0], 12);
+  assert.equal(harness.processor.pluginContexts.get(7)?.jsRuns, undefined);
+  assert.equal(harness.processor.pluginContexts.get(8)?.jsRuns, 1);
+
+  await harness.send({
+    type: 'setDisplayDspBypassed',
+    bypassed: false,
+    commandId: 2,
+    workletGraphGeneration: 0,
+    topologyRevision: 0
+  });
+  const foregroundOutput = processBlock(harness.processor);
+  assert.equal(foregroundOutput[0][0], 112);
+  assert.equal(harness.processor.pluginContexts.get(7)?.jsRuns, 1);
+});
+
+test('background display DSP bypass keeps normal WASM active and leaves the native pipeline safely', async () => {
+  const binding = createBinding({
+    pipelineConfigureStatus: 0,
+    capabilities: {
+      abiVersion: 1,
+      simd: false,
+      kernels: [
+        { name: 'SpectrumAnalyzerPlugin', hash: 0x2345, byteCapacity: 0, kernelIndex: 0 },
+        { name: 'VolumePlugin', hash: 0x1234, byteCapacity: 0, kernelIndex: 1 }
+      ]
+    }
+  });
+  const harness = await createWorkletHarness({ binding });
+  await harness.send({
+    type: 'updatePlugins',
+    plugins: [
+      pluginConfig({ id: 7, type: 'SpectrumAnalyzerPlugin', wasmParamsHash: 0x2345 }),
+      pluginConfig({ id: 8 })
+    ],
+    masterBypass: false
+  });
+  await harness.send({ type: 'dspEnableTypes', types: ['SpectrumAnalyzerPlugin', 'VolumePlugin'] });
+  await harness.send({ type: 'dspModule', module: {} });
+  assert.equal(harness.processor.dspPipelineReady, true);
+
+  await harness.send({
+    type: 'setDisplayDspBypassed',
+    bypassed: true,
+    commandId: 1,
+    workletGraphGeneration: 0,
+    topologyRevision: 0
+  });
+  assert.equal(harness.processor.dspPipelineReady, false);
+  const analyzerTypes = [
+    'LevelMeterPlugin',
+    'NoteSpectrogramPlugin',
+    'OscilloscopePlugin',
+    'PitchMeterPlugin',
+    'SpectrogramPlugin',
+    'SpectrumAnalyzerPlugin',
+    'StereoMeterPlugin'
+  ];
+  assert.deepEqual(
+    analyzerTypes.map(type => harness.processor.isDisplayDspExecutionBypassed({ type })),
+    [true, true, true, true, true, true, true]
+  );
+  binding.calls.length = 0;
+  const output = processBlock(harness.processor);
+  const instanceCalls = binding.calls.filter(call => call[0] === 'instanceProcess');
+  assert.equal(instanceCalls.length, 1);
+  assert.equal(instanceCalls[0][1], 101);
+  assert.equal(output[0][0], 2);
+
+  await harness.send({
+    type: 'setDisplayDspBypassed',
+    bypassed: false,
+    commandId: 2,
+    workletGraphGeneration: 0,
+    topologyRevision: 0
+  });
+  assert.equal(harness.processor.dspPipelineReady, true);
+  assert.deepEqual(
+    analyzerTypes.map(type => harness.processor.isDisplayDspExecutionBypassed({ type })),
+    [false, false, false, false, false, false, false]
+  );
+});
+
+test('background display DSP bypass pauses Spectrum Overlay acquisition and restores its route', async () => {
+  const binding = createBinding({ pipelineConfigureStatus: 0 });
+  const harness = await createWorkletHarness({ binding });
+  await harness.send({
+    type: 'updatePlugins',
+    plugins: [pluginConfig({ id: 7 })],
+    masterBypass: false
+  });
+  await harness.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
+  await harness.send({ type: 'dspModule', module: {} });
+  assert.equal(harness.processor.dspPipelineReady, true);
+
+  await harness.send({ type: 'setSpectrumTap', pluginId: 7, enabled: true, mode: 'compare' });
+  await harness.send({ type: 'setSpectrumTapRoute', pluginId: 7, enabled: true });
+  assert.equal(harness.processor.dspPipelineReady, false);
+  const tapState = harness.processor.spectrumTapState.get(7);
+  tapState.position = 2040;
+  tapState.inputBuffer.fill(0.25);
+  tapState.outputBuffer.fill(0.5);
+
+  await harness.send({
+    type: 'setDisplayDspBypassed',
+    bypassed: true,
+    commandId: 1,
+    workletGraphGeneration: 0,
+    topologyRevision: 0
+  });
+  assert.equal(harness.processor.dspPipelineReady, true);
+  const inputBefore = tapState.inputBuffer.slice();
+  const outputBefore = tapState.outputBuffer.slice();
+  processBlock(harness.processor);
+  assert.equal(tapState.position, 2040);
+  assert.deepEqual(tapState.inputBuffer, inputBefore);
+  assert.deepEqual(tapState.outputBuffer, outputBefore);
+  assert.equal(messagesOf(harness.posts, 'spectrumOverlay').length, 0);
+
+  await harness.send({
+    type: 'setDisplayDspBypassed',
+    bypassed: false,
+    commandId: 2,
+    workletGraphGeneration: 0,
+    topologyRevision: 0
+  });
+  assert.equal(harness.processor.dspPipelineReady, false);
+  processBlock(harness.processor);
+  assert.equal(tapState.position, 2168);
+  assert.equal(messagesOf(harness.posts, 'spectrumOverlay').length, 1);
+
+  harness.posts.length = 0;
+  tapState.position = 2040;
+  await harness.send({
+    type: 'configurePowerPolicy',
+    enabled: true,
+    workletGraphGeneration: 1,
+    topologyRevision: 1,
+    commandId: 3,
+    uiTelemetryEnabled: false,
+    displayDspBypassed: false,
+    silenceThresholdDb: -80,
+    enabledPluginCount: 1,
+    monitoringPreparationCapabilities: [],
+    temporalSkipEligible: true,
+    monitoringFastWakeEligible: true
+  });
+  processBlock(harness.processor);
+  assert.equal(tapState.position, 2168);
+  assert.equal(messagesOf(harness.posts, 'spectrumOverlay').length, 0);
 });
 
 test('guarded configuration preserves deliberate transport counters without a zero-output leak', async () => {

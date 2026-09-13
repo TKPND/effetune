@@ -19,7 +19,7 @@ an effect parameter such as `BitCrusher.seed`, whose catalog default is 11 and r
 
 ## Reproducible experiment
 
-v0.1 has no standard experiment-manifest API. This source owns the complete experiment
+The library has no standard experiment-manifest API. This source owns the complete experiment
 record: candidate wheel filename and twice-computed SHA-256, package and environment
 versions, input construction and SHA-256, stream mode, parameters, seeds, each ordered
 open/process/close operation, exact process block spans, and every output hash. It uses

@@ -61,6 +61,7 @@ test('rollout enables only shipped kernels with matching generated layouts', () 
     'LevelMeterPlugin',
     'NoteSpectrogramPlugin',
     'OscilloscopePlugin',
+    'PitchMeterPlugin',
     'SpectrogramPlugin',
     'SpectrumAnalyzerPlugin',
     'StereoMeterPlugin',

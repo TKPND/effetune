@@ -1,5 +1,5 @@
 # Categories definition
-# Categories are sorted alphabetically
+# Categories are sorted alphabetically by display name, with Others and Control last
 [categories]
 Analyzer: Analysis tools
 Basics: Basic audio effects
@@ -8,21 +8,22 @@ Dynamics: Dynamic range effects
 EQ: Equalization effects
 Lo-Fi: Lo-Fi audio effects
 Modulation: Modulation effects
-Others: Other audio tools and generators
 Resonator: Resonator effects
 Restoration: Audio restoration effects
 Reverb: Reverberation effects
 Saturation: Saturation and distortion effects
 Spatial: Spatial audio effects
+Others: Other audio tools and generators
 Control: Control tools
 
 # Plugin definitions
 # format: path: Display Name | Category | Class Name | Has CSS (optional)
-# Plugins are sorted by category, then alphabetically by path
+# Plugins are sorted by category, then alphabetically by display name, with Others and Control last
 [plugins]
 analyzer/level_meter: Level Meter | Analyzer | LevelMeterPlugin | css
 analyzer/note_spectrogram: Note Spectrogram | Analyzer | NoteSpectrogramPlugin
 analyzer/oscilloscope: Oscilloscope | Analyzer | OscilloscopePlugin | css
+analyzer/pitch_meter: Pitch Meter | Analyzer | PitchMeterPlugin
 analyzer/spectrogram: Spectrogram | Analyzer | SpectrogramPlugin | css
 analyzer/spectrum_analyzer: Spectrum Analyzer | Analyzer | SpectrumAnalyzerPlugin | css
 analyzer/stereo_meter: Stereo Meter | Analyzer | StereoMeterPlugin | css
@@ -94,7 +95,6 @@ modulation/pitch_shifter_hq: Pitch Shifter HQ | Modulation | PitchShifterHQPlugi
 modulation/rotary_speaker: Rotary Speaker | Modulation | RotarySpeakerPlugin
 modulation/tremolo: Tremolo | Modulation | TremoloPlugin
 modulation/wow_flutter: Wow Flutter | Modulation | WowFlutterPlugin
-others/oscillator: Oscillator | Others | OscillatorPlugin
 resonator/horn_resonator: Horn Resonator | Resonator | HornResonatorPlugin
 resonator/horn_resonator_plus: Horn Resonator Plus | Resonator | HornResonatorPlusPlugin
 resonator/modal_resonator: Modal Resonator | Resonator | ModalResonatorPlugin | css
@@ -121,4 +121,5 @@ spatial/ms_matrix: MS Matrix | Spatial | MSMatrixPlugin
 spatial/multiband_balance: Multiband Balance | Spatial | MultibandBalancePlugin | css
 spatial/phase_select_eq: Phase Select EQ | Spatial | PhaseSelectEqPlugin | css
 spatial/stereo_blend: Stereo Blend | Spatial | StereoBlendPlugin
+others/oscillator: Oscillator | Others | OscillatorPlugin
 control/section: Section | Control | SectionPlugin

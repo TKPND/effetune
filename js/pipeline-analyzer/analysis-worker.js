@@ -17,6 +17,7 @@ import {
     PIPELINE_ANALYZER_TSP_LENGTHS
 } from './mls.js';
 import { generateTspSequence } from './tsp.js';
+import '../../plugins/multires-spectrum.js';
 
 const PREPARATION_TIMEOUT_MS = 10000;
 const WORKLET_PROCESSOR_URL = new URL('../../plugins/audio-processor.js', import.meta.url).href;

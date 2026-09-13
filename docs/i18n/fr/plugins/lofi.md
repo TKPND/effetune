@@ -879,7 +879,7 @@ TV Audio Simulator fait passer la musique par la chaîne sonore d'une diffusion 
 - Choisissez d'abord le Standard recherché, puis commencez avec Signal à 35 dBµV, Tuning à 0 kHz, Multipath et Fading à 0, et Mix à 100 %.
 - Pour un son d'époque bien reçu, augmentez Signal et gardez Tuning centré. Processing densifie la voie analogique, mais pas la voie numérique NICAM principale.
 - Pour une réception analogique difficile, baissez Signal puis ajoutez Multipath ou un léger décalage de Tuning. Path Delay change la couleur de cette distorsion.
-- En B/G NICAM ou I NICAM, baissez progressivement Signal pour entendre la dégradation numérique puis le passage en FM mono. Video Buzz ajoute les tonalités de 50/60 Hz ; -80 dB les désactive.
+- En B/G NICAM ou I NICAM, baissez progressivement Signal pour entendre la dégradation numérique puis le passage en FM mono. Dans l'onglet Video Buzz, augmentez Buzz uniquement si vous souhaitez des tonalités liées à la fréquence du secteur et au balayage, comme celles de 50/60 Hz. Sa valeur minimale, -80 dB, désactive le bourdonnement.
 
 ### Préréglages système
 
@@ -894,11 +894,11 @@ Les neuf préréglages couvrent le Japon M/EIA-J, l'Amérique du Nord M/BTSC, la
 - **Signal** : Règle le niveau reçu de 0 à 70 dBµV. Le réduire ajoute du bruit ou des erreurs et peut provoquer le fallback.
 - **Tuning** : Décale l'accord de -200 à +200 kHz ; s'éloigner de 0 rétrécit et déforme la réception.
 - **IF Band** : Règle la bande du récepteur de 80 à 240 kHz. Une bande étroite rejette mieux le hors-accord, mais peut couper le programme.
-- **Multipath** : Ajoute un signal réfléchi retardé ; une valeur élevée renforce la coloration et l'instabilité stéréo.
+- **Multipath** (0–100 %) : Ajoute un signal réfléchi retardé ; une valeur élevée renforce la coloration et l'instabilité stéréo.
 - **Path Delay** : Règle le retard de la réflexion de 0,5 à 50 µs et l'espacement de ses bosses et creux.
 - **Fading** : Règle de 0 à 20 Hz la vitesse des variations de réception.
 - **Receive Mode** : `Auto` suit la voie disponible ; `Stereo`, `Main` et `Sub` demandent un programme précis.
-- **Video Buzz** : Règle le bourdonnement 50/60 Hz de -80 à -20 dB. -80 dB le désactive.
+- **Buzz** : Règle le bourdonnement 50/60 Hz de -80 à -20 dB. -80 dB le désactive.
 - **Output Gain** : Règle le niveau final de -24 à +24 dB.
 - **Mix** : Mélange le son original et le son télévisé de 0 à 100 %.
 

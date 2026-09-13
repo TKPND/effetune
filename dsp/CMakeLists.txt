@@ -278,6 +278,11 @@ if((BUILD_TESTING AND NOT EMSCRIPTEN) OR ET_NATIVE_TEST_WARNING_CHECK)
     effetune_dsp_spectrogram_tests
     SOURCES plugins/analyzer/spectrogram/native_test.cpp)
   et_add_dsp_test(
+    effetune_dsp_pitch_meter_tests
+    SOURCES plugins/analyzer/pitch_meter/native_test.cpp
+    INCLUDE_DIRS core
+    WRAP_MALLOC)
+  et_add_dsp_test(
     effetune_dsp_note_spectrogram_tests
     SOURCES plugins/analyzer/note_spectrogram/native_test.cpp
     INCLUDE_DIRS core

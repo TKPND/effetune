@@ -216,8 +216,12 @@ export class PowerPolicyController {
         this._lastSnapshot = null;
         this.pendingInputChangedEvent = false;
         this.dspUiActivityAllowed = true;
+        this.displayDspBypassed = false;
+        this.displayDspHidden = false;
         this.playerUiActivityAllowed = true;
         this.uiPowerGateInitialized = false;
+        this.displayDspBypassInitialized = false;
+        this.displayDspHiddenInitialized = false;
         this.dspUiSuppressionReasons = new Set();
     }
 
@@ -1098,6 +1102,7 @@ export class PowerPolicyController {
             topologyRevision: coordinator.tokens.topologyRevision,
             commandId,
             uiTelemetryEnabled: this.dspUiActivityAllowed === true,
+            displayDspBypassed: this.displayDspBypassed === true,
             silenceThresholdDb: this.settings.silenceThresholdDb,
             silenceDurationSeconds: 60,
             wakeGainMarginDb: finiteWakeBound ? bound.db : 0,
@@ -1886,6 +1891,9 @@ export class PowerPolicyController {
             this.currentPowerTopologySnapshot
         );
         const physicalOutputSuppressed = this.audioManager.masterBypass === true || structuralZero;
+        const displayDspHidden = hidden || this.dspUiSuppressionReasons.size !== 0;
+        const displayDspBypassed = this.settings.skipDisplayDspWhenHidden === true &&
+            displayDspHidden;
         const dspUiEnabled = state === AudioPowerState.ACTIVE &&
             directive !== ProcessingDirective.BYPASS_TRANSPORT &&
             directive !== ProcessingDirective.ZERO_OUTPUT_TRANSPORT &&
@@ -1894,11 +1902,19 @@ export class PowerPolicyController {
         const playerUiEnabled = state !== AudioPowerState.SUSPENDED && !hidden;
         const dspGateChanged = !this.uiPowerGateInitialized ||
             this.dspUiActivityAllowed !== dspUiEnabled;
+        const displayDspBypassChanged = !this.displayDspBypassInitialized ||
+            this.displayDspBypassed !== displayDspBypassed;
+        const displayDspHiddenChanged = !this.displayDspHiddenInitialized ||
+            this.displayDspHidden !== displayDspHidden;
         const playerGateChanged = !this.uiPowerGateInitialized ||
             this.playerUiActivityAllowed !== playerUiEnabled;
         this.dspUiActivityAllowed = dspUiEnabled;
+        this.displayDspBypassed = displayDspBypassed;
+        this.displayDspHidden = displayDspHidden;
         this.playerUiActivityAllowed = playerUiEnabled;
         this.uiPowerGateInitialized = true;
+        this.displayDspBypassInitialized = true;
+        this.displayDspHiddenInitialized = true;
         if (dspGateChanged) {
             this._broadcast({
                 type: 'setUiTelemetryEnabled',
@@ -1911,6 +1927,21 @@ export class PowerPolicyController {
                 if (!Array.isArray(pipeline)) continue;
                 for (const plugin of pipeline) plugin?.setPowerUiEnabled?.(dspUiEnabled);
             }
+        }
+        if (displayDspBypassChanged) {
+            this._broadcast({
+                type: 'setDisplayDspBypassed',
+                bypassed: displayDspBypassed,
+                commandId: ++this.commandSequence,
+                workletGraphGeneration: coordinator.tokens.workletGraphGeneration,
+                topologyRevision: coordinator.tokens.topologyRevision
+            });
+        }
+        if (displayDspBypassChanged || displayDspHiddenChanged) {
+            this.audioManager.updateDspTelemetryRate?.({
+                hidden: displayDspHidden,
+                displayDspBypassed
+            });
         }
         if (playerGateChanged) {
             this.audioManager.setPlayerPowerUiEnabled?.(playerUiEnabled);
@@ -2404,6 +2435,38 @@ export class PowerPolicyController {
         return true;
     }
 
+    _beginGestureOutputResume(gestureOperation, resumeKind) {
+        let contextPromise;
+        let bridgePromise;
+        try {
+            contextPromise = Promise.resolve(
+                this.audioManager.contextManager?.resumeForPowerPolicy?.(resumeKind) ?? true
+            ).then(result => {
+                if (gestureOperation.outputPromise === outputPromise &&
+                    result !== false && !gestureOperation.contextWasRunning &&
+                    this.audioManager.contextManager?.audioContext?.state === 'running') {
+                    this._freezeSuspendedTemporalElapsed();
+                }
+                return result;
+            });
+        } catch (error) {
+            contextPromise = Promise.reject(error);
+        }
+        try {
+            bridgePromise = Promise.resolve(
+                this.audioManager.ioManager?.playOutputBridgeForGesture?.() ?? true
+            );
+        } catch (error) {
+            bridgePromise = Promise.reject(error);
+        }
+        // Observe failures immediately, even if a gesture replaces these attempts
+        // before the serialized transaction starts waiting for its resources.
+        const outputPromise = Promise.allSettled([contextPromise, bridgePromise]);
+        gestureOperation.outputPromise = outputPromise;
+        gestureOperation.resourceVersion += 1;
+        gestureOperation.resourcesChanged?.();
+    }
+
     beginUserGestureResume(resumeKind = ResumeKind.UNEXPECTED_RECOVERY, inheritedRollback = null) {
         if (!this.enabled) return this.audioManager.contextManager?.resumeAudioContext?.();
         if (resumeKind === ResumeKind.UNEXPECTED_RECOVERY &&
@@ -2419,6 +2482,12 @@ export class PowerPolicyController {
         if (this.gestureResumePromise) {
             const currentOperation = this.gestureResumeOperation;
             if (currentOperation?.phase === 'collecting') {
+                // A lifecycle-triggered native resume can remain pending until a
+                // gesture retries it. Share input ownership and the DSP commit,
+                // but let activated calls reach the context and output bridge.
+                if (this.windowRef?.navigator?.userActivation?.isActive === true) {
+                    this._beginGestureOutputResume(currentOperation, resumeKind);
+                }
                 this._extendGestureResumeOperation(currentOperation, resumeKind);
                 return this.gestureResumePromise;
             }
@@ -2453,6 +2522,7 @@ export class PowerPolicyController {
             inputPromise: null,
             acquiredInputResource: null,
             resourceVersion: 0,
+            resourcesChanged: null,
             contextWasRunning: inheritedRollback?.contextWasRunning ??
                 this.audioManager.contextManager?.audioContext?.state === 'running',
             bridgeWasPaused: inheritedRollback?.bridgeWasPaused ??
@@ -2461,29 +2531,9 @@ export class PowerPolicyController {
             predecessorOperation: inheritedRollback?.operation || null,
             rollbackOwnershipTransferred: false,
             commitSucceeded: false,
-            contextPromise: null,
-            bridgePromise: null
+            outputPromise: null
         };
-        try {
-            gestureOperation.contextPromise = Promise.resolve(
-                this.audioManager.contextManager?.resumeForPowerPolicy?.(resumeKind) ?? true
-            ).then(result => {
-                if (result !== false && !gestureOperation.contextWasRunning &&
-                    this.audioManager.contextManager?.audioContext?.state === 'running') {
-                    this._freezeSuspendedTemporalElapsed();
-                }
-                return result;
-            });
-        } catch (error) {
-            gestureOperation.contextPromise = Promise.reject(error);
-        }
-        try {
-            gestureOperation.bridgePromise = Promise.resolve(
-                this.audioManager.ioManager?.playOutputBridgeForGesture?.() ?? true
-            );
-        } catch (error) {
-            gestureOperation.bridgePromise = Promise.reject(error);
-        }
+        this._beginGestureOutputResume(gestureOperation, resumeKind);
         this._extendGestureResumeOperation(gestureOperation, resumeKind);
         this.gestureResumeOperation = gestureOperation;
 
@@ -2492,11 +2542,16 @@ export class PowerPolicyController {
             let results;
             do {
                 resourceVersion = gestureOperation.resourceVersion;
-                results = await Promise.allSettled([
-                    gestureOperation.contextPromise,
-                    gestureOperation.bridgePromise,
-                    gestureOperation.inputPromise || Promise.resolve(null)
+                results = await Promise.race([
+                    Promise.all([
+                        gestureOperation.outputPromise,
+                        Promise.allSettled([gestureOperation.inputPromise || Promise.resolve(null)])
+                    ]).then(([outputs, [input]]) => [...outputs, input]),
+                    new Promise(resolve => {
+                        gestureOperation.resourcesChanged = () => resolve(null);
+                    })
                 ]);
+                gestureOperation.resourcesChanged = null;
             } while (resourceVersion !== gestureOperation.resourceVersion);
             return results;
         };

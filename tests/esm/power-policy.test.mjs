@@ -123,7 +123,7 @@ test('manual resume latch is dropped when no configured input remains to restore
 
 });
 
-test('power settings normalize to an immutable exact three-field policy object', () => {
+test('power settings normalize to an immutable exact policy object', () => {
   assert.deepEqual(normalizePowerSettings(), DEFAULT_POWER_SETTINGS);
   assert.deepEqual(normalizePowerSettings({ powerSaving: {
     mode: 'unknown',
@@ -139,7 +139,8 @@ test('power settings normalize to an immutable exact three-field policy object',
   }), {
     mode: PowerPolicy.MAXIMUM,
     silenceThresholdDb: -20,
-    fullSuspendDelaySeconds: 'never'
+    fullSuspendDelaySeconds: 'never',
+    skipDisplayDspWhenHidden: true
   });
   assert.deepEqual(SILENCE_THRESHOLD_DB_VALUES, [-90, -80, -70, -60, -50, -40, -30, -20]);
   assert.deepEqual(FULL_SUSPEND_DELAY_SECONDS_VALUES, [60, 300, 900, 'never']);
@@ -147,20 +148,23 @@ test('power settings normalize to an immutable exact three-field policy object',
   const current = {
     mode: PowerPolicy.CONTINUOUS,
     silenceThresholdDb: -70,
-    fullSuspendDelaySeconds: 900
+    fullSuspendDelaySeconds: 900,
+    skipDisplayDspWhenHidden: true
   };
-  const partial = { mode: PowerPolicy.MAXIMUM };
+  const partial = { mode: PowerPolicy.MAXIMUM, skipDisplayDspWhenHidden: false };
   assert.deepEqual(mergePowerSavingSettings(current, partial), {
     mode: PowerPolicy.MAXIMUM,
     silenceThresholdDb: -70,
-    fullSuspendDelaySeconds: 900
+    fullSuspendDelaySeconds: 900,
+    skipDisplayDspWhenHidden: false
   });
   assert.deepEqual(current, {
     mode: PowerPolicy.CONTINUOUS,
     silenceThresholdDb: -70,
-    fullSuspendDelaySeconds: 900
+    fullSuspendDelaySeconds: 900,
+    skipDisplayDspWhenHidden: true
   });
-  assert.deepEqual(partial, { mode: PowerPolicy.MAXIMUM });
+  assert.deepEqual(partial, { mode: PowerPolicy.MAXIMUM, skipDisplayDspWhenHidden: false });
 });
 
 test('route and routed-signal classification use the observed pipeline level regardless of source', () => {

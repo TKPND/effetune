@@ -1,4 +1,4 @@
-import { getPipelineAnalyzerActiveSlotCount } from './slot-policy.js';
+import { getPipelineAnalyzerOutputCapacity } from './slot-policy.js';
 import { normalizeMeasurementSettings } from './mls.js';
 import {
     getPluginExecutionChannelMode,
@@ -73,7 +73,7 @@ export function normalizeAnalyzerSlots(configuration, channelCount) {
         : Array.isArray(configuration?.slots) ? configuration.slots : [];
     const slots = [];
     const selectedChannels = new Set();
-    const activeSlotCount = getPipelineAnalyzerActiveSlotCount(channelCount);
+    const activeSlotCount = getPipelineAnalyzerOutputCapacity(channelCount);
     for (let index = 0; index < sourceSlots.length && index < activeSlotCount; index += 1) {
         const source = sourceSlots[index];
         if ((!usesOutputs && source?.enabled !== true) || !Number.isInteger(source.channel) ||

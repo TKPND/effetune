@@ -436,11 +436,6 @@ if (process.versions.electron?.startsWith('44.')) {
 // those explicit remote playback commands.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
-// Set up logging to file for debugging (disabled for release)
-function setupFileLogging() {
-  // Disabled for release
-}
-
 function presentMainWindow(mainWindow) {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   if (mainWindow.isMinimized()) mainWindow.restore();
@@ -535,11 +530,6 @@ function createWindow() {
     void openHomeControlHost?.setRendererUnavailable();
   });
 
-  // Enable file drag and drop for the window
-  mainWindow.webContents.session.on('will-download', (event, item, webContents) => {
-    // Download event handler
-  });
-  
   // Register keyboard shortcuts
   const { globalShortcut } = require('electron');
   
@@ -619,10 +609,6 @@ function createWindow() {
       
       // Store this in a global constant that can't be changed
       window.ORIGINAL_PIPELINE_STATE_LOADED = window.pipelineStateLoaded;
-      
-      // Instead of using Object.defineProperty which causes IPC cloning issues,
-      // we'll use a simple variable to track if changes should be allowed
-      window._allowPipelineStateChanges = false;
     `).catch(err => {
       console.error('Error setting initial zoom and flags:', err.message || String(err));
     });
@@ -661,26 +647,10 @@ function createWindow() {
     
     // 4. Handle file to open if specified via command line
     if (constants.getCommandLinePresetFile()) {
-      // Set pipelineStateLoaded to false immediately to prevent loading previous state
-      mainWindow.webContents.executeJavaScript(`
-        window.pipelineStateLoaded = false;
-      `).catch(err => {
-        console.error('Error setting pipelineStateLoaded flag:', err.message || String(err));
-      });
-      
       // Process files immediately after page load
       // Set a minimal timeout to ensure the app is ready to receive events
       setTimeout(() => {
         if (constants.getCommandLinePresetFile()) {
-          // Double-check that pipelineStateLoaded is still false
-          mainWindow.webContents.executeJavaScript(`
-            if (window.pipelineStateLoaded !== false) {
-              window.pipelineStateLoaded = false;
-            }
-          `).catch(err => {
-            console.error('Error checking pipelineStateLoaded flag:', err.message || String(err));
-          });
-          
           // Send the file path to the renderer process
           mainWindow.webContents.send('open-preset-file', constants.getCommandLinePresetFile());
           // Always reset commandLinePresetFile after use to prevent it from being loaded again on manual reload
@@ -691,16 +661,12 @@ function createWindow() {
         // Store music files for later sending when renderer is ready
         // Don't send them immediately to ensure pipeline is built first
         if (constants.getCommandLineMusicFiles().length > 0) {
-          // Debug logs removed for release
-          
           // Store the music files for later use
           constants.setPendingCommandLineMusicFiles([...constants.getCommandLineMusicFiles()]);
           
           // Reset command line music files after storing
           constants.clearCommandLineMusicFiles();
           constants.clearSavedCommandLineMusicFiles();
-          
-          // Debug logs removed for release
         }
         
         // Reset the splash reload flag if it was set
@@ -715,8 +681,6 @@ function createWindow() {
       }, 300);
     } else if (constants.getCommandLineMusicFiles().length > 0) {
       // If there's no preset file but there are music files, store them for later
-      // Debug logs removed for release
-      
       // Store the music files for later use
       constants.setPendingCommandLineMusicFiles([...constants.getCommandLineMusicFiles()]);
       
@@ -755,11 +719,6 @@ function createWindow() {
   ipcHandlers.createMenu();
   
   // Note: File opening from command line is now handled in the combined did-finish-load event handler
-
-  // Open DevTools in development mode
-  // if (process.env.NODE_ENV === 'development') {
-  //   mainWindow.webContents.openDevTools();
-  // }
 
   // Save window state when window is moved or resized
   mainWindow.on('resize', () => {
@@ -1295,9 +1254,6 @@ function createTray() {
 
 // Initialize the app
 async function initializeApp() {
-  // Set up file logging first to capture all logs
-  setupFileLogging();
-  
   // Get user data path
   const userDataPath = fileHandlers.getUserDataPath();
   const isPortable = userDataPath !== app.getPath('userData');
@@ -1404,13 +1360,9 @@ async function initializeApp() {
   
   // Register IPC handler for renderer-ready-for-music-files event
   ipcMain.on('renderer-ready-for-music-files', async (event) => {
-    // Debug logs removed for release
-    
     // Check if we have pending music files to send
     const pendingFiles = constants.getPendingCommandLineMusicFiles();
     if (pendingFiles && pendingFiles.length > 0) {
-      // Debug logs removed for release
-      
       // Send music files to the renderer process
       const mainWindow = constants.getMainWindow();
       if (mainWindow && mainWindow.webContents) {

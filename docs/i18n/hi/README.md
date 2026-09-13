@@ -313,6 +313,7 @@ PC पर Chromium ब्राउज़र चुने हुए संगी�
 | Analyzer  | Level Meter | peak hold के साथ audio level दिखाता है | [विवरण](plugins/analyzer.md#level-meter) |
 | Analyzer  | Note Spectrogram | समय के साथ अनुमानित pitch को piano roll में दिखाता है | [विवरण](plugins/analyzer.md#note-spectrogram) |
 | Analyzer  | Oscilloscope | waveform को real time में दिखाता है | [विवरण](plugins/analyzer.md#oscilloscope) |
+| Analyzer  | Pitch Meter | समय के साथ एक मूल आवृत्ति और उसकी tuning को ट्रैक करता है | [विवरण](plugins/analyzer.md#pitch-meter) |
 | Analyzer  | Spectrogram | समय के साथ frequency spectrum में बदलाव दिखाता है | [विवरण](plugins/analyzer.md#spectrogram) |
 | Analyzer  | Spectrum Analyzer | bass, mids और treble की strength real time में दिखाता है | [विवरण](plugins/analyzer.md#spectrum-analyzer) |
 | Analyzer  | Stereo Meter | stereo balance और channel correlation को visualize करता है | [विवरण](plugins/analyzer.md#stereo-meter) |
@@ -370,6 +371,7 @@ PC पर Chromium ब्राउज़र चुने हुए संगी�
 | Lo-Fi     | Simple Jitter | digital jitter simulation | [विवरण](plugins/lofi.md#simple-jitter) |
 | Lo-Fi     | SW Radio Simulator | संगीत को मॉडल की गई शॉर्टवेव प्रसारण, आयनमंडलीय पथ और रिसीवर शृंखला से गुजारता है | [विवरण](plugins/lofi.md#sw-radio-simulator) |
 | Lo-Fi     | Tape Artifacts | संगीत को मॉडल किए गए reel-to-reel टेप पर रिकॉर्ड करके वापस चलाता है | [विवरण](plugins/lofi.md#tape-artifacts) |
+| Lo-Fi     | TV Audio Simulator | संगीत को मॉडल किए गए एनालॉग और NICAM टेलीविजन ध्वनि पथों से गुजारता है | [विवरण](plugins/lofi.md#tv-audio-simulator) |
 | Lo-Fi     | Vinyl Artifacts | vinyl-style pops, crackle, hiss, rumble और stereo noise bleed जोड़ता है | [विवरण](plugins/lofi.md#vinyl-artifacts) |
 | Lo-Fi     | Vinyl Simulator | input को modeled groove में काटकर physical stylus model से चलाता है | [विवरण](plugins/lofi.md#vinyl-simulator) |
 | Modulation | Auto Filter | LFO या amplitude envelope से resonant filter को sweep करता है | [विवरण](plugins/modulation.md#auto-filter) |

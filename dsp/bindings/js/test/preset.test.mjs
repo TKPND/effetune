@@ -67,13 +67,75 @@ test('explicit legacy import converts long and short parameters and channels', (
   assert.ok(Math.abs(short.chain[0].parameters.pivotFrequency - 1000) < 1e-9);
 });
 
-test('legacy analyzer frequency scale display state is validated and discarded', () => {
+test('legacy Note Spectrogram discards display settings and preserves analysis settings', () => {
+  const parameters = {
+    cl: 'Rainbow', pr: 'High', ly: 'Vertical', vl: false, ts: 5,
+    mn: 36, mx: 84, nc: 4
+  };
+  for (const preset of [
+    { pipeline: [{ name: 'Note Spectrogram', parameters }] },
+    { plugins: [{ nm: 'Note Spectrogram', ...parameters }] }
+  ]) {
+    const document = importLegacyPreset(preset);
+    assert.equal(document.chain[0].type, 'NoteSpectrogram');
+    assert.deepEqual(document.chain[0].parameters, {
+      minimumMidi: 36, maximumMidi: 84, regularCandidates: 4
+    });
+  }
+  assert.equal(parameters.cl, 'Rainbow');
+  assert.throws(() => importLegacyPreset({
+    pipeline: [{ name: 'Note Spectrogram', parameters: { ...parameters, typo: 1 } }]
+  }), ValidationError);
+  assert.equal(importLegacyPreset({
+    pipeline: [{ name: 'Volume', parameters: { vl: -6 } }]
+  }).chain[0].parameters.volume, -6);
+});
+
+test('legacy Pitch Meter validates and discards its display layout', () => {
+  for (const layout of ['Vertical', 'Horizontal']) {
+    const document = importLegacyPreset({
+      pipeline: [{
+        name: 'Pitch Meter',
+        parameters: { rf: 442, mn: 40, mx: 88, ly: layout }
+      }]
+    });
+    assert.equal(document.chain[0].type, 'PitchMeter');
+    assert.deepEqual(document.chain[0].parameters, {
+      referenceA4: 442, minimumMidi: 40, maximumMidi: 88
+    });
+  }
+  assert.throws(() => importLegacyPreset({
+    pipeline: [{ name: 'Pitch Meter', parameters: { ly: 'Diagonal' } }]
+  }), ValidationError);
+});
+
+test('legacy analyzer frequency scale maps Log (HQ) and rejects conflicting HQ state', () => {
   for (const name of ['Spectrum Analyzer', 'Spectrogram']) {
     for (const scale of ['log', 'linear']) {
       const preset = importLegacyPreset({
         pipeline: [{ name, parameters: { sc: scale } }]
       });
       assert.equal(Object.hasOwn(preset.chain[0].parameters, 'sc'), false);
+      assert.equal(preset.chain[0].parameters.highQualityLog, false);
+    }
+    const hq = importLegacyPreset({
+      pipeline: [{ name, parameters: { sc: 'log-hq' } }]
+    });
+    assert.equal(hq.chain[0].parameters.highQualityLog, true);
+    for (const [scale, highQualityLog] of [
+      ['log', false], ['linear', false], ['log-hq', true]
+    ]) {
+      const consistent = importLegacyPreset({
+        pipeline: [{ name, parameters: { sc: scale, hq: highQualityLog } }]
+      });
+      assert.equal(consistent.chain[0].parameters.highQualityLog, highQualityLog);
+      assert.throws(
+        () => importLegacyPreset({
+          pipeline: [{ name, parameters: { sc: scale, hq: !highQualityLog } }]
+        }),
+        error => error instanceof ValidationError &&
+          error.message.includes('conflicting frequency scale and HQ settings')
+      );
     }
     assert.throws(
       () => importLegacyPreset({ pipeline: [{ name, parameters: { sc: 'invalid' } }] }),

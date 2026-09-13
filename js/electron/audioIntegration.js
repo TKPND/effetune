@@ -502,11 +502,16 @@ export async function showAudioConfigDialog(isElectron, audioPreferences, callba
         let applyResult = '';
         try {
           applyResult = await window.audioManager.applyGaplessPlaybackPreference(effectivePreferences);
+          if (applyResult) {
+            console.error('Failed to apply Gapless Playback preference:', applyResult);
+          }
         } catch (error) {
           console.error('Failed to apply Gapless Playback preference:', error);
-          applyResult = 'Audio Error: Failed to save audio preferences.';
+          applyResult = error || true;
         }
-        if (applyResult && window.uiManager) window.uiManager.setError(applyResult, true);
+        if (applyResult && window.uiManager) {
+          window.uiManager.setError('error.audioSettingsSaveFailed', true);
+        }
         if (!applyResult) callback?.(effectivePreferences);
         return;
       }
@@ -519,10 +524,7 @@ export async function showAudioConfigDialog(isElectron, audioPreferences, callba
           applyInPlace: 'gapless-playback'
         });
         if (!saved) {
-          window.uiManager?.setError?.(
-            'Audio Error: Gapless Playback could not be changed. Please apply the audio settings again.',
-            true
-          );
+          window.uiManager?.setError?.('error.audioSettingsSaveFailed', true);
           return;
         }
         window.audioPreferences = effectivePreferences;
@@ -540,12 +542,15 @@ export async function showAudioConfigDialog(isElectron, audioPreferences, callba
         let resetResult = '';
         try {
           resetResult = await window.audioManager.reset(preferences);
+          if (resetResult) {
+            console.error('Failed to apply audio preferences:', resetResult);
+          }
         } catch (error) {
           console.error('Failed to apply audio preferences:', error);
-          resetResult = `Audio Error: ${error.message}`;
+          resetResult = error || true;
         }
         if (resetResult && window.uiManager) {
-          window.uiManager.setError(resetResult, true);
+          window.uiManager.setError('error.audioResetFailed', true);
         }
         if (callback) {
           callback(preferences);
@@ -556,7 +561,7 @@ export async function showAudioConfigDialog(isElectron, audioPreferences, callba
       // Save and close
       const saved = await saveAudioPreferences(isElectron, preferences);
       if (!saved) {
-        window.uiManager?.setError?.('Audio Error: Failed to save audio preferences.', true);
+        window.uiManager?.setError?.('error.audioSettingsSaveFailed', true);
         return;
       }
       window.audioPreferences = preferences;

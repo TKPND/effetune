@@ -1291,8 +1291,8 @@ class FifteenBandPEQPlugin extends PluginBase {
     };
     
     reader.onerror = () => {
-      console.error('Error reading file');
-      alert('Error reading file. Please try again.');
+      console.error('Error reading EQ settings file:', reader.error);
+      window.uiManager?.showTransientMessage('error.failedToReadEqFile', true);
     };
     
     reader.readAsText(file);

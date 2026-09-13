@@ -8,17 +8,6 @@
     position: relative;
 }
 
-.tilt-eq-plugin-ui .tilt-eq-radio-label {
-    /* Keep specific radio label style if needed */
-    margin-right: 15px;
-    cursor: pointer;
-}
-
-.tilt-eq-plugin-ui .tilt-eq-radio-label input {
-    /* Keep specific radio label style if needed */
-    margin-right: 5px;
-}
-
 /* Keep graph specific styles */
 .tilt-eq-plugin-ui canvas {
     margin: 10px auto;

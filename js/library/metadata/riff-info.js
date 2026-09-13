@@ -63,34 +63,6 @@ export async function readRiffInfoTagsFromReader({ size, read } = {}) {
   return tags;
 }
 
-export function parseRiffInfoTagsFromBytes(data) {
-  const bytes = normalizeBytes(data);
-  if (!bytes || bytes.length < 12 || !isRiffWaveHeader(bytes)) return [];
-
-  const riffSize = readUint32LE(bytes, 4);
-  const scanEnd = Math.min(bytes.length, riffSize === 0xffffffff ? bytes.length : riffSize + 8);
-  const tags = [];
-  let offset = 12;
-  let chunkCount = 0;
-
-  while (offset + 8 <= scanEnd && chunkCount < MAX_RIFF_SCAN_CHUNKS) {
-    const chunkId = readAscii(bytes, offset, offset + 4);
-    const chunkSize = readUint32LE(bytes, offset + 4);
-    const dataOffset = offset + 8;
-    const nextOffset = dataOffset + chunkSize + (chunkSize % 2);
-    if (chunkSize < 0 || nextOffset <= offset || dataOffset + chunkSize > scanEnd) break;
-
-    if (chunkId === 'LIST' && chunkSize >= 4 && chunkSize <= MAX_RIFF_INFO_LIST_BYTES) {
-      tags.push(...parseRiffInfoListBytes(bytes.subarray(dataOffset, dataOffset + chunkSize)));
-    }
-
-    offset = nextOffset;
-    chunkCount += 1;
-  }
-
-  return tags;
-}
-
 /**
  * Strictly parses an ordinary integer-PCM RIFF/WAVE source.
  *

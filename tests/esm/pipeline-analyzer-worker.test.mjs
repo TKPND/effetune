@@ -24,6 +24,7 @@ import {
   collectPipelineAnalyzerTransferables
 } from '../../js/pipeline-analyzer/pipeline-snapshot.js';
 import { PipelineWorkletSync } from '../../js/ui/pipeline/pipeline-worklet-sync.js';
+import { parseTelemetryPacket } from '../../js/audio/telemetry-hub.js';
 
 const SAMPLE_RATE = 48000;
 const CHANNEL_COUNT = 8;
@@ -108,6 +109,50 @@ test('configured processing-state reset keeps the graph and registry but restore
   assert.equal(host.processor.pluginProcessors, registry);
   assert.equal(host.processor.plugins, plugins);
   assert.equal(processConstant(host, 0.25)[0][0], 1);
+});
+
+test('HQ analyzer worklets prepare before processing, publish owned frames and reprepare on reset', async () => {
+  for (const [type, file, frameType] of [
+    ['SpectrumAnalyzerPlugin', 'spectrum_analyzer', 4],
+    ['SpectrogramPlugin', 'spectrogram', 5]
+  ]) {
+    const scope = vm.createContext({ window: {}, PluginBase: class {} });
+    vm.runInContext(fs.readFileSync(new URL(`../../plugins/analyzer/${file}.js`, import.meta.url), 'utf8'), scope);
+    const host = await createPluginProcessorHost(SAMPLE_RATE, 2);
+    host.send({ type: 'registerProcessor', pluginType: type, processor: scope.window[type].processorFunction });
+    host.send({ type: 'dspEnableTypes', types: [] });
+    host.send({ type: 'updatePlugins', plugins: [pluginConfig({ type, parameters: { pt: 8, dr: -96, hq: true } })], masterBypass: false });
+    const prepared = host.processor.pluginContexts.get(1).multiresSpectrum;
+    assert.ok(prepared);
+    const delivered = [];
+    const heldPackets = [];
+    let returnPackets = true;
+    const post = host.processor.port.postMessage.bind(host.processor.port);
+    host.processor.port.postMessage = message => {
+      if (message.type === 'dspTelemetry') {
+        parseTelemetryPacket(message.packet, message.bytes, frame => delivered.push(structuredClone(frame)));
+        if (returnPackets) host.send({ type: 'dspTelemetryReturn', packet: message.packet });
+        else heldPackets.push(message.packet);
+      }
+      post(message);
+    };
+    for (let block = 0; block < 100; block++) processConstant(host, 0.25);
+    assert.ok(delivered.length > 5);
+    assert.ok(delivered.every(frame => globalThis.MultiresSpectrum.decode(frame, frameType)));
+    assert.ok(prepared.frames.filter(frame => frame.busy).length <= 1);
+    assert.equal(host.processor.messageQueue?.size ?? 0, 0);
+    returnPackets = false;
+    const beforeStall = delivered.length;
+    for (let block = 0; block < 100; block++) processConstant(host, 0.25);
+    assert.equal(delivered.length - beforeStall, 3, 'a stalled receiver retains at most three packets');
+    returnPackets = true;
+    for (const packet of heldPackets) host.send({ type: 'dspTelemetryReturn', packet });
+    host.send({ type: 'resetProcessingState', requestId: 91 });
+    assert.ok(host.processor.pluginContexts.get(1).multiresSpectrum);
+    const count = delivered.length;
+    for (let block = 0; block < 100; block++) processConstant(host, 0.25);
+    assert.ok(delivered.length > count + 5);
+  }
 });
 
 test('analysis worker measures a selected input/output through the shared JS processor', async () => {

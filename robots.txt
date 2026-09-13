@@ -10,11 +10,6 @@ Sitemap: https://effetune.frieve.com/sitemap.xml
 # Crawl-delay for politeness
 Crawl-delay: 1
 
-# Disallow development/test files
-Disallow: /dev/
-Disallow: /*.test.html
-Disallow: /*_test.html
-
 # Allow important pages explicitly
 Allow: /effetune.html
 Allow: /docs/

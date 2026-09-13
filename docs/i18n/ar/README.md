@@ -313,6 +313,7 @@
 | Analyzer | Level Meter | يعرض مستوى الصوت مع تثبيت الذروة | [تفاصيل](plugins/analyzer.md#level-meter) |
 | Analyzer | Note Spectrogram | يعرض درجات الصوت المقدرة عبر الزمن في مخطط piano roll | [تفاصيل](plugins/analyzer.md#note-spectrogram) |
 | Analyzer | Oscilloscope | يعرض شكل الموجة في الوقت الحقيقي | [تفاصيل](plugins/analyzer.md#oscilloscope) |
+| Analyzer | Pitch Meter | يتتبع ترددًا أساسيًا واحدًا وضبطه عبر الزمن | [تفاصيل](plugins/analyzer.md#pitch-meter) |
 | Analyzer | Spectrogram | يعرض تغير الطيف الترددي مع الوقت | [تفاصيل](plugins/analyzer.md#spectrogram) |
 | Analyzer | Spectrum Analyzer | يعرض قوة الجهير والوسط والعالي في الوقت الحقيقي | [تفاصيل](plugins/analyzer.md#spectrum-analyzer) |
 | Analyzer | Stereo Meter | يوضح توازن الستيريو وترابط القناتين | [تفاصيل](plugins/analyzer.md#stereo-meter) |
@@ -370,6 +371,7 @@
 | Lo-Fi | Simple Jitter | يحاكي jitter رقميًا | [تفاصيل](plugins/lofi.md#simple-jitter) |
 | Lo-Fi | SW Radio Simulator | يمرر الموسيقى عبر سلسلة مُنمذجة من بث الموجات القصيرة والمسار الأيونوسفيري والمستقبِل | [تفاصيل](plugins/lofi.md#sw-radio-simulator) |
 | Lo-Fi | Tape Artifacts | يسجل الموسيقى على شريط مغناطيسي مُنمذج ذي بكرتين ثم يعيد تشغيلها | [تفاصيل](plugins/lofi.md#tape-artifacts) |
+| Lo-Fi | TV Audio Simulator | يمرّر الموسيقى عبر مسارات صوت تلفزيوني تناظري وNICAM مُنمذجة | [تفاصيل](plugins/lofi.md#tv-audio-simulator) |
 | Lo-Fi | Vinyl Artifacts | يضيف طقطقات وفرقعة وهسيسًا ورمبلًا وتسرب ضوضاء ستيريو بطابع الفينيل | [تفاصيل](plugins/lofi.md#vinyl-artifacts) |
 | Lo-Fi | Vinyl Simulator | يقطع الإدخال في أخدود مُنمذج ثم يشغله بنموذج فيزيائي للإبرة | [تفاصيل](plugins/lofi.md#vinyl-simulator) |
 | Modulation | Auto Filter | يمسح مرشحًا رنّانًا بواسطة LFO أو غلاف مستوى الصوت | [تفاصيل](plugins/modulation.md#auto-filter) |

@@ -3,7 +3,7 @@
 Version: 0.9.0
 Python package: effetune
 npm package: @effetune/dsp
-Catalog entries: 101
+Catalog entries: 102
 
 Canonical resources:
 - https://effetune.frieve.com/dsp/
@@ -17,4 +17,4 @@ Canonical resources:
 - https://effetune.frieve.com/dsp/reference/graph-v1/
 - https://effetune.frieve.com/dsp/reference/compatibility/
 
-MCP, measurement, resampling, ffmpeg, integrated LUFS, and true-peak APIs are not implemented in v0.1.
+MCP, measurement, resampling, ffmpeg, integrated LUFS, and true-peak APIs are not implemented.

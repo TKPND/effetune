@@ -517,14 +517,14 @@ export class UIEventHandler {
                             } catch (error) {
                                 console.error('Failed to parse preset file:', error);
                                 if (window.uiManager) {
-                                    window.uiManager.setError('Invalid preset file format', true);
+                                    window.uiManager.setError('error.invalidPresetData', true);
                                 }
                             }
                         };
                         reader.onerror = (error) => {
                             console.error('Failed to read preset file:', error);
                             if (window.uiManager) {
-                                window.uiManager.setError('Failed to read preset file', true);
+                                window.uiManager.setError('error.failedToReadPresetFile', true);
                             }
                         };
                         reader.readAsText(presetFiles[0]);
@@ -750,7 +750,6 @@ export class UIEventHandler {
                     if (pipelineList && pipelineList.contains(mockDropEvent.target)) {
                          this.handlePluginReordering(mockDropEvent, sourceIndex);
                     } else {
-                         // console.warn("Touch drag ended outside pipelineList.");
                          // Even if dropped outside, ensure UI updates like removing 'dragging' class
                          requestAnimationFrame(() => {
                              if (this.core?.updatePipelineUI) {
@@ -760,7 +759,6 @@ export class UIEventHandler {
                     }
                 }
             } else {
-                 // console.warn("Missing draggingPluginInfo on touchend.");
                  // Ensure UI updates even if info is missing
                  requestAnimationFrame(() => {
                      if (this.core?.updatePipelineUI) {
@@ -878,7 +876,6 @@ export class UIEventHandler {
 
         // Prevent dropping onto itself (or the position immediately after itself before adjustment)
         if (adjustedTargetIndex === sourceIndex) {
-             // console.log("Drop target is the same as source, no reordering needed.");
              // Ensure UI is updated even if no reorder happens (e.g., remove dragging class)
              requestAnimationFrame(() => {
                  if (this.core?.updatePipelineUI) {
@@ -1041,7 +1038,7 @@ export class UIEventHandler {
         } catch (error) {
             console.error('Error handling user preset drop:', error);
             if (window.uiManager) {
-                window.uiManager.setError(`Error adding user preset: ${error.message}`, true);
+                window.uiManager.setError('error.failedToLoadPreset', true);
             }
         }
     }
@@ -1073,7 +1070,7 @@ export class UIEventHandler {
         } catch (error) {
             console.error('Error handling preset drop:', error);
             if (window.uiManager) {
-                window.uiManager.setError(`Error adding preset: ${error.message}`, true);
+                window.uiManager.setError('error.failedToLoadPreset', true);
             }
         }
     }

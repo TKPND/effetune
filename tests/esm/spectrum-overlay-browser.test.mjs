@@ -493,6 +493,7 @@ const layoutTargets = [
   { name: 'FiveBandDynamicEQ', path: 'eq/five_band_dynamic_eq', prefix: 'fbdyn-band' },
   { name: 'VinylSimulatorPlugin', path: 'lofi/vinyl_simulator', prefix: 'vinyl-simulator-tab', button: '.vinyl-simulator-tab' },
   { name: 'AMRadioSimulatorPlugin', path: 'lofi/am_radio_simulator', prefix: 'am-radio-simulator-tab', button: '.am-radio-simulator-tab' },
+  { name: 'TVAudioSimulatorPlugin', path: 'lofi/tv_audio_simulator', prefix: 'tv-audio-simulator-tab', button: '.tv-audio-simulator-tab' },
   { name: 'SWRadioSimulatorPlugin', path: 'lofi/sw_radio_simulator', prefix: 'sw-radio-simulator-tab', button: '.sw-radio-simulator-tab' },
   { name: 'TubeSimulatorPlugin', path: 'saturation/tube_simulator', prefix: 'tube-simulator-tab', button: '.tube-simulator-tab' },
   { name: 'RoomEqPlugin', path: 'eq/room_eq', prefix: 'room-eq-tab', button: '.room-eq-tab' }

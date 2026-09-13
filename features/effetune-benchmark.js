@@ -1,4 +1,5 @@
 import { buildDspPipelineDescriptor } from '../js/audio/dsp-pipeline-descriptor.js';
+import '../plugins/multires-spectrum.js';
 import { getPluginExecutionCapabilities } from '../js/audio/plugin-execution-capabilities.js';
 import { getDspRolloutConfig } from '../js/audio/dsp-rollout.js';
 import { instantiateDsp, loadDspModule } from '../js/audio/dsp-wasm-loader.js';
@@ -507,11 +508,16 @@ class JavascriptBenchmarkSession {
         this.plugin = plugin;
         this.parameters = preparePlugin(plugin, sampleRate, blockSize, channelCount);
         this.context = { sampleRate, initialized: false };
+        const type = getPluginType(plugin);
+        if (type === 'SpectrumAnalyzerPlugin' || type === 'SpectrogramPlugin') {
+            globalThis.MultiresSpectrum.prepare(this.context, sampleRate, type === 'SpectrumAnalyzerPlugin' ? 4 : 5);
+        }
         this.closed = false;
     }
 
     process(inputData, timeSeconds) {
         if (this.closed) throw new Error('JavaScript benchmark session is closed');
+        this.context.multiresSpectrum?.release(this.context.multiresFrame);
         return this.plugin.executeProcessor(
             this.context,
             inputData,

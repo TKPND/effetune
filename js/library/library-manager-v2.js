@@ -822,9 +822,6 @@ function aggregateScanResultCounts(results) {
   return totals;
 }
 
-export function createLibraryManagerV2(options) {
-  return new LibraryManagerV2(options);
-}
 
 function supportsWebFolderControls(client) {
   return ['addFolder', 'requestFolderAccess', 'removeFolder', 'scanFolders', 'cancelScan']

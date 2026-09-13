@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "type": "SpectrumAnalyzerPlugin",
+  "id": "hq-stereo-noise",
+  "stimulus": "noise",
+  "sampleRate": 48000,
+  "channels": 2,
+  "frameCount": 2049,
+  "blockSize": 128,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 6,
+  "seed": "0xeffe7a58",
+  "params": {
+    "dr": -96,
+    "pt": 8,
+    "hq": true,
+    "sc": "log-hq"
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.000001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "634bec1422830d0de15f9b0f7ff172b04b7316594f56ed2d32de09211cfc4c79",
+  "outputFloats": 4098,
+  "byteLength": 16392,
+  "binary": "case-007.f32"
+}

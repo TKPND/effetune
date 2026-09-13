@@ -63,13 +63,14 @@ exclude:
   - dist/
   - dsp/
   - electron/
+  - experiments/
   - extension/
   - eslint.config.mjs
+  - native/
   - node_modules/
   - out/
   - package-lock.json
   - scripts/
-  - server.py
   - tests/
   - tmp/
   - tools/

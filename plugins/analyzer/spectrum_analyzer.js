@@ -24,6 +24,9 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this.dr = -96;
         this.pt = 12;
         this.sc = 'log';
+        this.hqGeneration = -1;
+        this.hqFrameIndex = -1;
+        this.hqReceiver = null;
         this.kb = false;
         this.dm = 'line';
         const fftSize = 1 << this.pt; // Using bit shift for power of 2
@@ -40,7 +43,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this._dspTelemetryHub = null;
         this._dspTelemetryTapId = null;
         this._dspTelemetryUnsubscribe = null;
-        this._boundDspSpectrumTelemetry = frame => this.handleDspSpectrumTelemetry(frame);
+        this._boundDspSpectrumTelemetry = (frame, producer) => this.handleDspSpectrumTelemetry(frame, producer);
 
         // dB correction factors for 0dBFS scaling (assuming 1/N FFT normalization & Hann window)
         this.correctionAC = 10 * Math.log10(16); // For AC components (approx. +12.04dB)
@@ -74,6 +77,20 @@ class SpectrumAnalyzerPlugin extends PluginBase {
     }
 
     static processorFunction = `
+        if (parameters.hq === true || parameters.sc === 'log-hq') {
+            const analyzer = context.multiresSpectrum;
+            if (!analyzer) throw new Error('Spectrum analysis must be prepared before processing');
+            const frame = analyzer.process(data, parameters);
+            data.measurements = frame ? frame.measurements : null;
+            context.multiresFrame = frame;
+            return data;
+        }
+        if (context.multiresSpectrum) {
+            const frame = context.multiresSpectrum.captureLegacy(data, parameters, time);
+            data.measurements = frame ? frame.measurements : null;
+            context.multiresFrame = frame;
+            return data;
+        }
         // Reuse result buffer from context
         let result = context.resultBuffer;
         if (!result || result.length !== data.length) {
@@ -177,6 +194,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         if (newPoints === this.pt) return;
         
         this.pt = newPoints; // Update pt first
+        if (this.sc === 'log-hq') this.resetHqDisplay();
         const fftSize = 1 << newPoints;
         
         this.spectrum = new Float32Array(fftSize >> 1).fill(-144);
@@ -213,11 +231,21 @@ class SpectrumAnalyzerPlugin extends PluginBase {
     }
 
     setFrequencyScale(value) {
-        const scale = value === 'linear' ? 'linear' : 'log';
+        const scale = value === 'linear' || value === 'log-hq' ? value : 'log';
         if (scale === this.sc) return;
+        if (scale === 'log-hq' || this.sc === 'log-hq') this.resetHqDisplay();
         this.sc = scale;
         this.updateParameters();
         this.drawGraph();
+    }
+
+    resetHqDisplay() {
+        // Retain the received watermark: parameter changes can coalesce while audio is paused.
+        this.hqFrameIndex = -1;
+        this.spectrum = new Float32Array(1 << (this.pt - 1)).fill(-240);
+        this.peaks = new Float32Array(1 << (this.pt - 1)).fill(-240);
+        this.dspSpectrumSnapshot = null;
+        this.peakReceivedAt = null;
     }
 
     setDisplayMode(value) {
@@ -254,6 +282,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             pt: this.pt,
             kb: this.kb,
             sc: this.sc,
+            hq: this.sc === 'log-hq',
             dm: this.dm
         };
     }
@@ -264,6 +293,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         if (params.pt !== undefined) this.setPoints(params.pt);
         if (params.kb !== undefined) this.setKeyboardVisible(params.kb);
         if (params.sc !== undefined) this.setFrequencyScale(params.sc);
+        else if (params.hq === true) this.setFrequencyScale('log-hq');
+        else if (params.hq === false && this.sc === 'log-hq') this.setFrequencyScale('log');
         if (params.dm !== undefined) this.setDisplayMode(params.dm);
         this.updateParameters();
     }
@@ -325,6 +356,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
     }
 
     parseDspSpectrumTelemetryFrame(frame) {
+        if (frame?.formatVersion === 2) return globalThis.MultiresSpectrum?.decode(frame, SPECTRUM_TAP_FRAME) ?? null;
         if (frame?.frameType !== SPECTRUM_TAP_FRAME ||
             frame.formatVersion !== SPECTRUM_TELEMETRY_VERSION) {
             return null;
@@ -381,9 +413,17 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         return { sampleRate, binCount, points, flags, binsTruncated, current, peaks };
     }
 
-    handleDspSpectrumTelemetry(frame) {
+    handleDspSpectrumTelemetry(frame, producer = this._dspTelemetryHub?.port ?? null) {
         const snapshot = this.parseDspSpectrumTelemetryFrame(frame);
         if (!snapshot || !this.enabled || !this._sectionEnabled) return;
+        if (snapshot.highQuality) {
+            if (this.sc !== 'log-hq' || snapshot.points !== this.pt ||
+                producer !== (this._dspTelemetryHub?.port ?? null)) return;
+            this.hqReceiver ??= new globalThis.MultiresSpectrum.FrameReceiver();
+            if (!this.hqReceiver.accept(snapshot, producer)) return;
+            this.hqGeneration = snapshot.generation;
+            this.hqFrameIndex = snapshot.frameIndex;
+        } else if (this.sc === 'log-hq') return;
         this.sampleRate = snapshot.sampleRate;
         this.spectrum = snapshot.current;
         this.peaks = snapshot.peaks;
@@ -402,6 +442,11 @@ class SpectrumAnalyzerPlugin extends PluginBase {
     }
 
     process(message) {
+        if (message?.measurements?.hqFrame) {
+            this.handleDspSpectrumTelemetry(message.measurements.hqFrame);
+            return;
+        }
+        if (this.sc === 'log-hq') return;
         if (!message?.measurements?.buffer) {
             return;
         }
@@ -537,6 +582,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             'Frequency Scale',
             [
                 { value: 'log', label: 'Log' },
+                { value: 'log-hq', label: 'Log (HQ)' },
                 { value: 'linear', label: 'Linear' }
             ],
             this.sc,
@@ -972,7 +1018,10 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         const elapsedCapped = this.getPeakDecayElapsed(now);
         
         for (let i = 0; i < binCount; i++) {
-            const freq = (i * this.sampleRate) / fftSize; // Correct bin frequency calculation
+            const hq = this.dspSpectrumSnapshot?.highQuality;
+            if (hq && (i < this.dspSpectrumSnapshot.firstValidIndex ||
+                i >= this.dspSpectrumSnapshot.firstValidIndex + this.dspSpectrumSnapshot.validCellCount)) continue;
+            const freq = hq ? (i === binCount - 1 ? 40000 : 20 * Math.exp(i * Math.log(2000) / (binCount - 1))) : (i * this.sampleRate) / fftSize;
 
             if (freq < minDisplayFreq || freq > maxDisplayFreq) continue;
 

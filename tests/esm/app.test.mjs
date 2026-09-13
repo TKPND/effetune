@@ -133,6 +133,7 @@ async function withAppModule(options = {}, callback) {
   };
   const windowObject = {
     __EFFECTUNE_DISABLE_APP_AUTO_START__: true,
+    ...(options.pointerEventSupported ? { PointerEvent: class PointerEvent {} } : {}),
     listeners: new Map(),
     addEventListener(type, listener) {
       if (!this.listeners.has(type)) this.listeners.set(type, []);
@@ -310,6 +311,9 @@ function createDependencies(calls, options = {}) {
     updateURL() { calls.push(['ui.updateURL']); },
     updatePipelineToggleButton() { calls.push(['ui.updatePipelineToggleButton']); },
     setError(message, isError, params) { calls.push(['ui.setError', message, isError, params]); },
+    showTransientMessage(message, isError, params, duration) {
+      calls.push(['ui.showTransientMessage', message, isError, params, duration]);
+    },
     clearError() { calls.push(['ui.clearError']); },
     parsePipelineState() {
       calls.push(['ui.parsePipelineState']);
@@ -731,7 +735,11 @@ test('App initialize handles success, audio warnings, and initialization failure
     assert.equal(calls.some(call => call[0] === 'audio.fadeInOutput'), true);
     assert.ok(calls.findIndex(call => call[0] === 'audio.waitForDspActivationBeforeOutput') <
       calls.findIndex(call => call[0] === 'audio.fadeInOutput'));
-    assert.equal(calls.some(call => call[0] === 'ui.setError' && call[1] === 'error.microphoneAccessDenied'), true);
+    assert.equal(calls.some(call =>
+      call[0] === 'ui.showTransientMessage' &&
+      call[1] === 'error.microphoneAccessDenied' &&
+      call[4] === 3000
+    ), true);
     assert.ok(calls.findIndex(call => call[0] === 'pluginManager.loadPlugins') <
       calls.findIndex(call => call[0] === 'ui.initPluginList'));
     assert.equal(calls.some(call => call[0] === 'ui.showLibraryView' && call[1]?.focusSearch === false), true);
@@ -765,7 +773,8 @@ test('App initialize handles success, audio warnings, and initialization failure
     const app = new mod.App(deps);
     await app.initialize();
     assert.equal(app.initialized, true);
-    assert.equal(calls.some(call => call[0] === 'ui.setError' && call[1] === 'load plugins failed'), true);
+    assert.equal(calls.some(call => call[0] === 'ui.setError' && call[1] === 'error.initializationFailed'), true);
+    assert.equal(calls.some(call => call.includes('load plugins failed') && call[0] === 'ui.setError'), false);
     assert.equal(calls.some(call => call[0] === 'ui.setOpenHomeRemoteRuntimeReady'), false);
   });
 
@@ -1127,7 +1136,7 @@ test('feature navigation snapshots and restores both pipelines before startup po
         calls.find(call => call[0] === 'ui.setError'),
         [
           'ui.setError',
-          'Frequency Response Measurement could not be opened because the current effect pipeline could not be saved. Please try again.',
+          'error.featureNavigationFailed',
           true,
           undefined
         ],
@@ -1817,7 +1826,7 @@ test('event listeners and update notifications stay recoverable', async () => {
 });
 
 test('app activation and user interaction resume power-managed audio through one route-aware entry point', async () => {
-  await withAppModule({}, async ({ calls, document, mod, window }) => {
+  await withAppModule({ pointerEventSupported: true }, async ({ calls, document, mod, window }) => {
     const deps = createDependencies(calls);
     deps.audioManager.powerPolicyController = {
       enabled: true,
@@ -1832,7 +1841,13 @@ test('app activation and user interaction resume power-managed audio through one
     const app = new mod.App(deps);
     app.setupEventListeners();
 
-    document.dispatch('pointerdown');
+    document.dispatch('pointerdown', { pointerType: 'touch' });
+    assert.equal(calls.filter(call => call[0] === 'power.resumeFromInteraction').length, 0);
+    document.dispatch('pointerup', { pointerType: 'touch' });
+    document.dispatch('touchend');
+    assert.equal(calls.filter(call => call[0] === 'power.resumeFromInteraction').length, 1);
+    document.dispatch('pointerdown', { pointerType: 'mouse' });
+    document.dispatch('pointerup', { pointerType: 'mouse' });
     document.dispatch('keydown', { key: 'x' });
     window.dispatch('focus');
     document.hidden = true;
@@ -1843,7 +1858,7 @@ test('app activation and user interaction resume power-managed audio through one
     window.dispatch('pageshow', { persisted: true });
     await flushMicrotasks();
 
-    assert.equal(calls.filter(call => call[0] === 'power.resumeFromInteraction').length, 6);
+    assert.equal(calls.filter(call => call[0] === 'power.resumeFromInteraction').length, 7);
     assert.deepEqual(calls.filter(call => call[0] === 'power.lifecycle').map(call => call[1]), [
       'startup',
       'visibilitychange',
@@ -1851,6 +1866,27 @@ test('app activation and user interaction resume power-managed audio through one
       'resume',
       'pageshow'
     ]);
+  });
+});
+
+test('app uses touchend as the audio-resume fallback without Pointer Events', async () => {
+  await withAppModule({}, async ({ calls, document, mod }) => {
+    const deps = createDependencies(calls);
+    deps.audioManager.powerPolicyController = {
+      enabled: true,
+      handlePageLifecycleEvent() {},
+      requestResumeFromUserInteraction() {
+        calls.push(['power.resumeFromInteraction']);
+        return Promise.resolve(true);
+      }
+    };
+    const app = new mod.App(deps);
+    app.setupEventListeners();
+
+    document.dispatch('pointerup', { pointerType: 'touch' });
+    assert.equal(calls.filter(call => call[0] === 'power.resumeFromInteraction').length, 0);
+    document.dispatch('touchend');
+    assert.equal(calls.filter(call => call[0] === 'power.resumeFromInteraction').length, 1);
   });
 });
 

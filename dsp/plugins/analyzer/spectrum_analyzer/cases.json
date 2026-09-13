@@ -53,6 +53,12 @@
         { "frame": 267, "params": { "dr": -120, "pt": 8 } },
         { "frame": 534, "params": { "dr": -60, "pt": 14 } }
       ]
+    },
+    {
+      "id": "hq-stereo-noise",
+      "stimulus": "noise",
+      "frames": 2049,
+      "params": { "pt": 8, "hq": true, "sc": "log-hq" }
     }
   ]
 }

@@ -3643,6 +3643,7 @@ export class LibraryView {
       operationKind: 'play',
       targetName,
       start: async () => {
+        this.uiManager.beginPlaybackSelectionGestureResume?.();
         let contextToken = null;
         const releaseContext = async () => {
           if (!contextToken) return;

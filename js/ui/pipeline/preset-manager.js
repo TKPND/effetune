@@ -428,7 +428,7 @@ export class PresetManager {
 
     async renamePreset(oldName, newName) {
         if (this.externalHost) {
-            window.uiManager?.showTransientMessage('Renaming presets is unavailable here. Save a new preset instead.', true, {}, 3000);
+            window.uiManager?.showTransientMessage('error.presetRenameUnavailable', true, {}, 3000);
             return false;
         }
         const attemptRevision = ++this.presetMutationAttemptRevision;

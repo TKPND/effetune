@@ -903,7 +903,7 @@ TV Audio Simulator는 음악을 아날로그 텔레비전 방송 또는 NICAM �
 - 원하는 Standard를 선택하고 Signal 35 dBµV, Tuning 0 kHz, Multipath와 Fading 0, Mix 100%에서 시작합니다.
 - 수신이 좋은 시대별 TV 소리에는 Signal을 높이고 Tuning을 중앙에 둡니다. Processing은 아날로그 경로의 밀도를 높이지만 NICAM 디지털 주 경로에는 적용되지 않습니다.
 - 불량한 아날로그 수신은 먼저 Signal을 낮춘 뒤 Multipath나 작은 Tuning 오프셋을 더합니다. Path Delay로 왜곡의 성격이 달라집니다.
-- B/G NICAM 또는 I NICAM에서 Signal을 천천히 낮추면 디지털 손상과 FM 모노 fallback을 들을 수 있습니다. Video Buzz는 50/60 Hz 성분을 더하며 -80 dB에서 꺼집니다.
+- B/G NICAM 또는 I NICAM에서 Signal을 천천히 낮추면 디지털 손상과 FM 모노 fallback을 들을 수 있습니다. Video Buzz 탭에서 전원 주파수와 스캔에 관련된 50/60 Hz 성분이 필요할 때만 Buzz를 올립니다. 최솟값인 -80 dB에서는 버즈가 꺼집니다.
 
 ### 시스템 프리셋
 
@@ -918,11 +918,11 @@ TV Audio Simulator는 음악을 아날로그 텔레비전 방송 또는 NICAM �
 - **Signal**: 수신 강도를 0~70 dBµV로 설정합니다. 낮추면 잡음이나 오류가 증가하고 fallback이 일어날 수 있습니다.
 - **Tuning**: 동조를 -200~+200 kHz 이동합니다. 0에서 멀어질수록 대역이 좁아지고 왜곡됩니다.
 - **IF Band**: 수신 대역을 80~240 kHz로 설정합니다. 좁히면 동조 밖 신호를 더 막지만 프로그램 대역도 잘릴 수 있습니다.
-- **Multipath**: 지연된 반사파를 더합니다. 높일수록 음색 변화와 스테레오 불안정성이 커집니다.
+- **Multipath** (0–100%): 지연된 반사파를 더합니다. 높일수록 음색 변화와 스테레오 불안정성이 커집니다.
 - **Path Delay**: 반사파 지연을 0.5~50 µs로 설정해 피크와 딥의 간격을 바꿉니다.
 - **Fading**: 수신 레벨 변화 속도를 0~20 Hz로 설정합니다.
 - **Receive Mode**: `Auto`는 가능한 경로를 따르고 `Stereo`, `Main`, `Sub`는 특정 프로그램을 요청합니다.
-- **Video Buzz**: 50/60 Hz 버즈를 -80~-20 dB로 설정합니다. -80 dB에서 꺼집니다.
+- **Buzz**: 50/60 Hz 버즈를 -80~-20 dB로 설정합니다. -80 dB에서 꺼집니다.
 - **Output Gain**: 최종 레벨을 -24~+24 dB로 조정합니다.
 - **Mix**: 원음과 TV 음성을 0~100%로 혼합합니다.
 

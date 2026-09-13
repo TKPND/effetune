@@ -235,10 +235,18 @@ class CombFilterPlugin extends PluginBase {
         feedbackRadio.addEventListener("change", updateCombType);
         feedforwardRadio.addEventListener("change", updateCombType);
         
-        radioGroup.appendChild(feedbackRadio);
-        radioGroup.appendChild(feedbackLabel);
-        radioGroup.appendChild(feedforwardRadio);
-        radioGroup.appendChild(feedforwardLabel);
+        const feedbackOption = document.createElement("span");
+        feedbackOption.className = "radio-option";
+        feedbackOption.appendChild(feedbackRadio);
+        feedbackOption.appendChild(feedbackLabel);
+
+        const feedforwardOption = document.createElement("span");
+        feedforwardOption.className = "radio-option";
+        feedforwardOption.appendChild(feedforwardRadio);
+        feedforwardOption.appendChild(feedforwardLabel);
+
+        radioGroup.appendChild(feedbackOption);
+        radioGroup.appendChild(feedforwardOption);
         combTypeRow.appendChild(radioGroup);
 
         // Create Feedback Gain row (updated range)

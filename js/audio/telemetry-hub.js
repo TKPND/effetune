@@ -21,7 +21,8 @@ export const TelemetryFrameType = Object.freeze({
     TAP_SW_RADIO_SIMULATOR: 18,
     TAP_TUBE_SIMULATOR: 19,
     TAP_PHASE_SELECT_MAP: 20,
-    TAP_TV_AUDIO_SIMULATOR: 25
+    TAP_TV_AUDIO_SIMULATOR: 25,
+    TAP_PITCH_METER: 26
 });
 
 function defaultWarning(message) {
@@ -164,14 +165,19 @@ export class TelemetryHub {
         this.subscribers.clear();
     }
 
-    _dispatch(frame) {
+    _dispatch(frame, sourcePort) {
+        const highQuality = frame.formatVersion === 2 &&
+            (frame.frameType === TelemetryFrameType.TAP_SPECTRUM ||
+                frame.frameType === TelemetryFrameType.TAP_SPECTROGRAM_COL);
+        if (highQuality && sourcePort !== this.port) return;
         this.stats.frames += 1;
         if ((frame.flags & 1) !== 0) this.stats.framesWithDropFlag += 1;
         const callbacks = this.subscribers.get(this._key(frame.tapId, frame.frameType));
         if (!callbacks) return;
         for (const callback of [...callbacks]) {
             try {
-                callback(frame);
+                if (highQuality) callback(frame, sourcePort);
+                else callback(frame);
             } catch (error) {
                 this.stats.subscriberErrors += 1;
                 this.warning(`[dsp-wasm] telemetry subscriber failed: ${error?.message || String(error)}`);
@@ -191,7 +197,7 @@ export class TelemetryHub {
         }
     }
 
-    handleMessage(message) {
+    handleMessage(message, sourcePort = this.port) {
         if (!message || message.type !== 'dspTelemetry') return false;
         const packet = message.packet;
         this.stats.packets += 1;
@@ -199,7 +205,7 @@ export class TelemetryHub {
             this.stats.coreDroppedFrames += message.droppedFrames;
         }
         try {
-            const result = parseTelemetryPacket(packet, message.bytes, frame => this._dispatch(frame));
+            const result = parseTelemetryPacket(packet, message.bytes, frame => this._dispatch(frame, sourcePort));
             if (!result.ok) {
                 this.stats.malformedPackets += 1;
                 this.warning(`[dsp-wasm] ignored malformed telemetry packet: ${result.error}`);

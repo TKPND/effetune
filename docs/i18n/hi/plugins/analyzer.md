@@ -1,6 +1,6 @@
 ---
 title: "विश्लेषण प्लगइन - EffeTune"
-description: "Level Meter, Note Spectrogram, Oscilloscope, Spectrogram, Spectrum Analyzer और Stereo Meter सहित ऑडियो विश्लेषण प्लगइन।"
+description: "Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer और Stereo Meter सहित ऑडियो विश्लेषण प्लगइन।"
 lang: hi
 ---
 
@@ -13,6 +13,7 @@ lang: hi
 - [Level Meter](#level-meter) - digital signal level और संभावित clipping दिखाता है
 - [Note Spectrogram](#note-spectrogram) - समय के साथ अनुमानित pitch को piano roll में दिखाता है
 - [Oscilloscope](#oscilloscope) - waveform को real time में दिखाता है
+- [Pitch Meter](#pitch-meter) - समय के साथ एक मूल आवृत्ति और उसकी tuning को ट्रैक करता है
 - [Spectrogram](#spectrogram) - आपके संगीत से सुंदर visual patterns बनाता है
 - [Spectrum Analyzer](#spectrum-analyzer) - संगीत की अलग-अलग frequencies दिखाता है
 - [Stereo Meter](#stereo-meter) - stereo balance और phase relationships को visualize करता है
@@ -103,6 +104,31 @@ lang: hi
 ### वेवफॉर्म डिस्प्ले पर नोट
 displayed waveform captured points को time order में जोड़ता है। लंबे Display Time पर हर interval अपने पहले और आखिरी sample के साथ minimum और maximum samples तथा उनकी original positions भी सुरक्षित रखता है। इससे display resolution की सीमा में continuity और छोटे peaks बने रहते हैं। इसे exact measurement tool के बजाय visual guide की तरह इस्तेमाल करें।
 
+## Pitch Meter
+
+ऑडियो को बदले बिना, दो सेकंड के scrolling piano roll में एक समय पर एक मूल आवृत्ति (F0) को ट्रैक करता है। किसी एकल आवाज़ या वाद्य की tuning और pitch में होने वाले बदलाव देखने के लिए इसका उपयोग करें।
+
+### विज़ुअलाइज़ेशन गाइड
+
+- **Horizontal** (डिफ़ॉल्ट) में नीची notes बाईं ओर और ऊँची notes दाईं ओर रहती हैं। नवीनतम अनुमान keyboard के ऊपर आता है और history ऊपर की ओर चलता है।
+- **Vertical** में नीची notes नीचे और ऊँची notes ऊपर रहती हैं। नवीनतम अनुमान दाईं ओर के keyboard के पास आता है और history बाईं ओर चलता है।
+- Line की स्थिति semitones के बीच की pitch भी दिखाती है। अधिक भरोसेमंद अनुमान अधिक गहरा दिखता है; input बहुत धीमा होने या कोई स्थिर single pitch न मिलने पर line टूट जाती है।
+- मौजूदा label निकटतम note और cents में अंतर दिखाता है। धनात्मक मान note से ऊँची और ऋणात्मक मान नीची pitch बताता है। भरोसेमंद अनुमान न होने पर label गायब हो जाता है।
+
+### उपयोग गाइड
+
+- पहले एक note को लगातार बजाएँ और देखें कि line note के बीच में रहती है या ऊपर-नीचे जाती है।
+- Vibrato और pitch bend note की पंक्तियों के बीच सहज गति के रूप में दिखते हैं।
+- यह analyzer एक प्रमुख pitch को ट्रैक करता है। Chord, घना mix, percussion, noise या अस्पष्ट आवर्ती sound line को तोड़ सकती है या गलत octave दिखा सकती है।
+
+### पैरामीटर
+
+- **Layout** - **Horizontal** (डिफ़ॉल्ट) या **Vertical** चुनता है।
+- **Reference A4** (400 से 480 Hz) - note के नाम और cents के लिए उपयोग होने वाला tuning reference सेट करता है। डिफ़ॉल्ट: 440 Hz।
+- **Lowest Note** - दिखाई और analyze की जाने वाली range की निचली सीमा सेट करता है। डिफ़ॉल्ट: C2। सबसे नीची उपलब्ध setting A0 है।
+- **Highest Note** - दिखाई और analyze की जाने वाली range की ऊपरी सीमा सेट करता है। डिफ़ॉल्ट: C7। सबसे ऊँची उपलब्ध setting C8 है।
+- Stereo input का analysis पहले दो channels का average लेकर किया जाता है; mono input सीधे उपयोग होता है। बहुत अधिक विपरीत polarity वाला content average में cancel हो सकता है और pitch line गायब हो सकती है।
+
 ## Spectrogram
 
 रंगीन पैटर्न बनाता है जो दिखाते हैं कि आपका संगीत समय के साथ कैसे बदलता है। रंग बताते हैं कि हर ध्वनि कितनी मजबूत है, और ऊर्ध्व स्थिति उसकी आवृत्ति दिखाती है।
@@ -133,8 +159,9 @@ displayed waveform captured points को time order में जोड़त�
 - **Points** - display के लिए उपयोग होने वाला FFT size (256 से 16384)
   - अधिक numbers: अधिक frequency detail, लेकिन time updates धीमे
   - कम numbers: तेज़ movement, लेकिन कम frequency detail
-- **Frequency Scale** - **Log** कम आवृत्तियों को display पर अधिक जगह देता है; **Linear** समान आवृत्ति चौड़ाइयों को समान अंतराल पर दिखाता है।
-- **Keyboard** - ग्राफ़ के दाईं ओर एक स्थिर पियानो-कीबोर्ड गाइड दिखाता है, जो स्वरों को उनकी आवृत्तियों से जोड़ता है। इससे विश्लेषण या ऑडियो नहीं बदलता। कुंजियों की स्थिति **Log** या **Linear** के अनुसार बदलती है; **Linear** में कम आवृत्ति वाली कुंजियाँ अधिक संकरी दिखती हैं।
+  - **Log (HQ)** में Points छोटी analysis window तय करता है; चार गुना लंबी window कम आवृत्तियों का विभाजन बेहतर करती है।
+- **Frequency Scale** - **Log** कम आवृत्तियों को display पर अधिक जगह देता है। **Log (HQ)** ऊँची आवृत्तियों के लिए छोटी measurement रखते हुए, पास-पास के bass frequencies को अधिक स्पष्टता से अलग करने के लिए लंबी measurement जोड़ता है। इसमें अधिक processing लगती है और bass में बदलाव दिखने या मिटने में अधिक समय लग सकता है, लेकिन audio नहीं बदलता। **Linear** समान आवृत्ति चौड़ाइयों को समान अंतराल पर दिखाता है।
+- **Keyboard** - ग्राफ़ के दाईं ओर एक स्थिर पियानो-कीबोर्ड गाइड दिखाता है, जो स्वरों को उनकी आवृत्तियों से जोड़ता है। इससे विश्लेषण या ऑडियो नहीं बदलता। कुंजियों की स्थिति **Log**, **Log (HQ)** या **Linear** के अनुसार बदलती है; **Log (HQ)** में **Log** जैसा ही logarithmic spacing होता है और **Linear** में कम आवृत्ति वाली कुंजियाँ अधिक संकरी दिखती हैं।
 - analyzer left और right channels का average उपयोग करता है। Mono input सीधे analyze होता है।
 
 ## Spectrum Analyzer
@@ -148,7 +175,7 @@ displayed waveform captured points को time order में जोड़त�
 - ऊंचे peaks का मतलब उन frequencies की stronger presence है
 - darker green line मौजूदा sound दिखाती है
 - brighter green line recent peaks का अनुसरण करती है और उनके fade होने पर धीरे-धीरे नीचे आती है
-- **Bar** display में, हर bar display के बराबर चौड़ाई वाले हिस्से में सबसे ऊँचा level दिखाती है। **Log** में बराबर octave widths और **Linear** में बराबर frequency widths उपयोग होती हैं।
+- **Bar** display में, हर bar display के बराबर चौड़ाई वाले हिस्से में सबसे ऊँचा level दिखाती है। **Log** और **Log (HQ)** में बराबर octave widths और **Linear** में बराबर frequency widths उपयोग होती हैं।
 - bar के ऊपर का पतला निशान उसका recent peak दिखाता है और धीरे-धीरे नीचे आता है।
 - देखें कि अलग-अलग instruments कैसे अलग patterns बनाते हैं
 
@@ -165,11 +192,12 @@ displayed waveform captured points को time order में जोड़त�
 - **Points** - display nearby frequencies को कितनी बारीकी से अलग करता है (256 से 16384)
   - अधिक numbers: अधिक frequency detail, updates धीमे
   - कम numbers: तेज़ updates, कम frequency detail
-- **Frequency Scale** - **Log** कम आवृत्तियों को display पर अधिक जगह देता है; **Linear** समान आवृत्ति चौड़ाइयों को समान अंतराल पर दिखाता है।
+  - **Log (HQ)** में Points छोटी analysis window तय करता है; चार गुना लंबी window कम आवृत्तियों का विभाजन बेहतर करती है।
+- **Frequency Scale** - **Log** कम आवृत्तियों को display पर अधिक जगह देता है। **Log (HQ)** ऊँची आवृत्तियों के लिए छोटी measurement रखते हुए, पास-पास के bass frequencies को अधिक स्पष्टता से अलग करने के लिए लंबी measurement जोड़ता है। इसमें अधिक processing लगती है और bass में बदलाव दिखने या मिटने में अधिक समय लग सकता है, लेकिन audio नहीं बदलता। **Linear** समान आवृत्ति चौड़ाइयों को समान अंतराल पर दिखाता है।
 - **Display** - केवल spectrum का रूप बदलता है; analysis या audio नहीं बदलता।
   - **Line** (default): spectrum को continuous lines के रूप में दिखाता है।
   - **Bar**: हर display band का सबसे ऊँचा level bar के रूप में दिखाता है।
-- **Keyboard** - ग्राफ़ के नीचे एक स्थिर पियानो-कीबोर्ड गाइड दिखाता है, जो स्वरों को उनकी आवृत्तियों से जोड़ता है। इससे विश्लेषण या ऑडियो नहीं बदलता। कुंजियों की स्थिति **Log** या **Linear** के अनुसार बदलती है; **Linear** में कम आवृत्ति वाली कुंजियाँ अधिक संकरी दिखती हैं।
+- **Keyboard** - ग्राफ़ के नीचे एक स्थिर पियानो-कीबोर्ड गाइड दिखाता है, जो स्वरों को उनकी आवृत्तियों से जोड़ता है। इससे विश्लेषण या ऑडियो नहीं बदलता। कुंजियों की स्थिति **Log**, **Log (HQ)** या **Linear** के अनुसार बदलती है; **Log (HQ)** में **Log** जैसा ही logarithmic spacing होता है और **Linear** में कम आवृत्ति वाली कुंजियाँ अधिक संकरी दिखती हैं।
 - analyzer left और right channels का average उपयोग करता है। Mono input सीधे analyze होता है।
 
 ### इन टूल का उपयोग करने के मज़ेदार तरीके

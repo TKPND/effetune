@@ -469,7 +469,54 @@ class PresetAndAssetTests(unittest.TestCase):
         self.assertEqual(chain.effects[0].parameters["ratio"], 4)
         self.assertTrue(report.warnings)
 
-    def test_legacy_analyzer_frequency_scale_display_state_is_validated_and_discarded(
+    def test_legacy_note_spectrogram_discards_display_settings(self) -> None:
+        parameters = {
+            "cl": "Rainbow", "pr": "High", "ly": "Vertical", "vl": False, "ts": 5,
+            "mn": 36, "mx": 84, "nc": 4,
+        }
+        for preset in (
+            {"pipeline": [{"name": "Note Spectrogram", "parameters": parameters}]},
+            {"plugins": [{"nm": "Note Spectrogram", **parameters}]},
+        ):
+            with self.subTest(preset=preset):
+                document, _ = presets.import_legacy_preset(preset)
+                self.assertEqual(document["chain"][0]["type"], "NoteSpectrogram")
+                self.assertEqual(document["chain"][0]["parameters"], {
+                    "minimumMidi": 36, "maximumMidi": 84, "regularCandidates": 4,
+                })
+        self.assertEqual(parameters["cl"], "Rainbow")
+        with self.assertRaises(effetune.ValidationError):
+            presets.import_legacy_preset({"pipeline": [{
+                "name": "Note Spectrogram", "parameters": {**parameters, "typo": 1},
+            }]})
+        document, _ = presets.import_legacy_preset({"pipeline": [{
+            "name": "Volume", "parameters": {"vl": -6},
+        }]})
+        self.assertEqual(document["chain"][0]["parameters"]["volume"], -6)
+
+    def test_legacy_pitch_meter_validates_and_discards_layout(self) -> None:
+        for layout in ("Vertical", "Horizontal"):
+            with self.subTest(layout=layout):
+                document, _ = presets.import_legacy_preset({
+                    "pipeline": [{
+                        "name": "Pitch Meter",
+                        "parameters": {"rf": 442, "mn": 40, "mx": 88, "ly": layout},
+                    }]
+                })
+                self.assertEqual(document["chain"][0]["type"], "PitchMeter")
+                self.assertEqual(document["chain"][0]["parameters"], {
+                    "referenceA4": 442,
+                    "minimumMidi": 40,
+                    "maximumMidi": 88,
+                })
+        with self.assertRaises(effetune.ValidationError):
+            presets.import_legacy_preset({
+                "pipeline": [{
+                    "name": "Pitch Meter", "parameters": {"ly": "Diagonal"},
+                }]
+            })
+
+    def test_legacy_analyzer_frequency_scale_maps_hq_and_rejects_conflicts(
         self,
     ) -> None:
         for name in ("Spectrum Analyzer", "Spectrogram"):
@@ -479,6 +526,51 @@ class PresetAndAssetTests(unittest.TestCase):
                         {"pipeline": [{"name": name, "parameters": {"sc": scale}}]}
                     )
                     self.assertNotIn("sc", chain.effects[0].parameters)
+                    self.assertFalse(chain.effects[0].parameters["highQualityLog"])
+            chain, _ = effetune.Chain.from_legacy_preset(
+                {"pipeline": [{"name": name, "parameters": {"sc": "log-hq"}}]}
+            )
+            self.assertTrue(chain.effects[0].parameters["highQualityLog"])
+            for scale, high_quality_log in (
+                ("log", False),
+                ("linear", False),
+                ("log-hq", True),
+            ):
+                with self.subTest(name=name, scale=scale, hq=high_quality_log):
+                    chain, _ = effetune.Chain.from_legacy_preset(
+                        {
+                            "pipeline": [
+                                {
+                                    "name": name,
+                                    "parameters": {
+                                        "sc": scale,
+                                        "hq": high_quality_log,
+                                    },
+                                }
+                            ]
+                        }
+                    )
+                    self.assertEqual(
+                        chain.effects[0].parameters["highQualityLog"],
+                        high_quality_log,
+                    )
+                    with self.assertRaisesRegex(
+                        effetune.ValidationError,
+                        r"conflicting frequency scale and HQ settings",
+                    ):
+                        effetune.Chain.from_legacy_preset(
+                            {
+                                "pipeline": [
+                                    {
+                                        "name": name,
+                                        "parameters": {
+                                            "sc": scale,
+                                            "hq": not high_quality_log,
+                                        },
+                                    }
+                                ]
+                            }
+                        )
             with self.subTest(name=name, scale="invalid"):
                 with self.assertRaisesRegex(
                     effetune.ValidationError,

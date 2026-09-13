@@ -6,15 +6,6 @@
     margin-bottom: 20px;
 }
 
-.five-band-peq-plugin-ui .five-band-peq-radio-label {
-    margin-right: 10px;
-    cursor: pointer;
-}
-
-.five-band-peq-plugin-ui .five-band-peq-radio-label input {
-    margin-right: 4px;
-}
-
 .five-band-peq-plugin-ui .five-band-peq-graph {
     position: relative;
     width: 100%;

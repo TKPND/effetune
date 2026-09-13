@@ -131,12 +131,6 @@ async function loadPipelineState(forceLoad = false) {
         // Parse pipeline state
         const pipelineState = JSON.parse(result.content);
         
-        // Handle dual pipeline format
-        if (pipelineState.pipelineA && pipelineState.pipelineB !== undefined) {
-            return pipelineState;
-        }
-        
-        // Handle old single pipeline format (backward compatibility)
         return pipelineState;
     } catch (error) {
         console.error('Error loading pipeline state:', error);
@@ -396,10 +390,7 @@ class App {
             } catch (cleanupError) {
                 console.warn('Failed to clear incomplete feature pipeline state:', cleanupError);
             }
-            this.uiManager.setError(
-                'Frequency Response Measurement could not be opened because the current effect pipeline could not be saved. Please try again.',
-                true
-            );
+            this.uiManager.setError('error.featureNavigationFailed', true);
             return;
         }
         window.location.href = path;
@@ -526,7 +517,6 @@ class App {
 
             // Signal to the main process that we're ready to receive music files
             if (window.electronAPI && window.electronAPI.signalReadyForMusicFiles) {
-                // Debug logs removed for release
                 window.electronAPI.signalReadyForMusicFiles();
             }
             
@@ -544,7 +534,7 @@ class App {
             await this.applyStartupViewPreference();
         } catch (error) {
             console.error('Initialization error:', error);
-            this.uiManager.setError(error.message, true);
+            this.uiManager.setError('error.initializationFailed', true);
             return;
         } finally {
             await Promise.allSettled([presentationReady, this.startupViewPreferencePromise]);
@@ -739,7 +729,6 @@ class App {
         // If a command line preset file was specified, load it instead of the previous state
         if (commandLinePresetFile) {
             this._handledCommandLinePresetAtStartup = true;
-            // Debug logs removed for release
             
             // Set pipeline state flags to false to prevent loading previous state
             window.pipelineStateLoaded = false;
@@ -750,7 +739,6 @@ class App {
             
             // Check if there's an audio player active
             const hasAudioPlayer = this.uiManager && this.uiManager.audioPlayer;
-            // Debug logs removed for release
             
             if (window.electronIntegration) {
                 try {
@@ -794,7 +782,6 @@ class App {
                     this.uiManager.loadPreset(presetData);
                     
                     // Rebuild the pipeline to ensure audio processing works correctly
-                    // Debug logs removed for release
                     
                     // Force disconnect all existing connections first
                     if (this.audioManager.workletNode) {
@@ -802,22 +789,18 @@ class App {
                             this.audioManager.workletNode.disconnect();
                         } catch (e) {
                             // Ignore errors if already disconnected
-                            // Debug logs removed for release
                         }
                     }
                     
                     // Rebuild pipeline with force flag to ensure complete rebuild
                     const rebuildResult = await this.audioManager.rebuildPipeline(true);
-                    // Debug logs removed for release
                     
                     // If there was an audio player, make sure it's properly connected to the new pipeline
                     if (hasAudioPlayer && this.uiManager.audioPlayer) {
-                        // Debug logs removed for release
                         // Force reconnection of the audio player to the new pipeline
                         if (this.uiManager.audioPlayer.contextManager) {
                             try {
                                 this.uiManager.audioPlayer.contextManager.connectToAudioContext();
-                                // Debug logs removed for release
                             } catch (reconnectError) {
                                 console.error('Error reconnecting audio player:', reconnectError);
                             }
@@ -1235,7 +1218,17 @@ class App {
 
         // Start recovery while transient user activation is still available.
         // The controller returns immediately when the required resources are active.
-        document.addEventListener('pointerdown', resumeAudioFromInteraction, { passive: true });
+        // Touch and pen acquire activation on release, unlike mouse pointerdown.
+        document.addEventListener('pointerdown', event => {
+            if (event.pointerType === 'mouse') resumeAudioFromInteraction();
+        }, { passive: true });
+        if (typeof window.PointerEvent === 'function') {
+            document.addEventListener('pointerup', event => {
+                if (event.pointerType !== 'mouse') resumeAudioFromInteraction();
+            }, { passive: true });
+        } else {
+            document.addEventListener('touchend', resumeAudioFromInteraction, { passive: true });
+        }
         document.addEventListener('keydown', resumeAudioFromInteraction);
         window.addEventListener?.('focus', resumeAudioFromInteraction, true);
 
@@ -1291,8 +1284,7 @@ class App {
         if (this.hasAudioError) {
             // Show a non-blocking warning message to the user, then auto-clear
             // after 3 s so the warning does not linger indefinitely.
-            this.uiManager.setError('error.microphoneAccessDenied', false);
-            setTimeout(() => window.uiManager.clearError(), 3000);
+            this.uiManager.showTransientMessage('error.microphoneAccessDenied', false, {}, 3000);
         }
     }
 
@@ -1532,14 +1524,11 @@ class App {
         const isElectron = window.electronIntegration && window.electronIntegration.isElectron;
         if (!isElectron) return;
 
-        // Debug logs removed for release
-
         // We no longer need to process preset files here as they are handled in initializeAndBuildPipeline
         // This prevents double-loading of preset files
 
         // Process command line music files if specified
         if (window.pendingMusicFiles && window.pendingMusicFiles.length > 0) {
-            // Debug logs removed for release
             
             // Set useInputWithPlayer to false for command line music files
             if (window.electronIntegration && window.electronIntegration.audioPreferences) {
@@ -1553,7 +1542,6 @@ class App {
             
             // Use the UIManager to create an audio player and load the files
             if (this.uiManager) {
-                // Debug logs removed for release
                 
                 const playbackDescriptors = window.pendingMusicFiles.filter(item =>
                     item && typeof item === 'object' && typeof item.path === 'string' &&
@@ -1561,7 +1549,6 @@ class App {
                 );
                 if (playbackDescriptors.length > 0) {
                     try {
-                        window._commandLineMusicFilesNoInput = true;
                         await this.uiManager.createAudioPlayer(playbackDescriptors, false);
                         setTimeout(() => {
                             if (this.uiManager.audioPlayer) this.uiManager.audioPlayer.play();

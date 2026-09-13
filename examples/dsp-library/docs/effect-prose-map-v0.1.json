@@ -11,6 +11,7 @@
     "LevelMeter": ["docs/plugins/analyzer.md", "Level Meter"],
     "NoteSpectrogram": ["docs/plugins/analyzer.md", "Note Spectrogram"],
     "Oscilloscope": ["docs/plugins/analyzer.md", "Oscilloscope"],
+    "PitchMeter": ["docs/plugins/analyzer.md", "Pitch Meter"],
     "Spectrogram": ["docs/plugins/analyzer.md", "Spectrogram"],
     "SpectrumAnalyzer": ["docs/plugins/analyzer.md", "Spectrum Analyzer"],
     "StereoMeter": ["docs/plugins/analyzer.md", "Stereo Meter"],

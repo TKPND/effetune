@@ -263,8 +263,6 @@ export function parseM3U(text) {
   return { entries };
 }
 
-export const parseM3U8 = parseM3U;
-
 export function serializeM3U8(entries) {
   const lines = ['#EXTM3U'];
 
@@ -277,8 +275,6 @@ export function serializeM3U8(entries) {
 
   return `${lines.join('\n')}\n`;
 }
-
-export const serializeM3U = serializeM3U8;
 
 export function parsePLS(text) {
   const byIndex = new Map();
@@ -484,11 +480,4 @@ export function parsePlaylist(input, options = {}) {
     encoding: decoded.encoding,
     entries: result.entries
   };
-}
-
-export function serializePlaylist(entries, options = {}) {
-  const format = options.format ?? detectPlaylistFormat(options.fileName ?? options.extension ?? '') ?? 'm3u8';
-  if (format === 'pls') return serializePLS(entries);
-  if (format === 'xspf') return serializeXSPF(entries, options);
-  return serializeM3U8(entries);
 }

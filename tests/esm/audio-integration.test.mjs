@@ -21,6 +21,18 @@ async function withMutedConsole(method, callback) {
   }
 }
 
+async function withCapturedConsole(method, callback) {
+  const original = console[method];
+  const calls = [];
+  console[method] = (...args) => calls.push(args);
+  try {
+    await callback();
+    return calls;
+  } finally {
+    console[method] = original;
+  }
+}
+
 function createWindowEventTarget(base = {}) {
   const listeners = new Map();
   return {
@@ -309,7 +321,7 @@ test('showAudioConfigDialog disables unsupported Web output selection and resets
     window: {
       isSecureContext: false,
       audioManager: {
-        reset: async preferences => resetCalls.push(preferences)
+        reset: async preferences => { resetCalls.push(preferences); }
       }
     }
   });
@@ -503,7 +515,7 @@ test('showAudioConfigDialog keeps Web output preferences aligned with available 
       isSecureContext: true,
       HTMLMediaElement: function HTMLMediaElement() {},
       audioManager: {
-        reset: async preferences => resetCalls.push(preferences)
+        reset: async preferences => { resetCalls.push(preferences); }
       }
     }
   });
@@ -873,7 +885,7 @@ test('showAudioConfigDialog persists only the Gapless field when no AudioManager
   assert.equal(document.body.children.length, 0);
 });
 
-test('showAudioConfigDialog reports the Gapless guidance when the field cannot be stored', async () => {
+test('showAudioConfigDialog reports localized guidance when the Gapless field cannot be stored', async () => {
   const preferences = {
     inputDeviceId: 'mic1',
     outputDeviceId: 'out1',
@@ -902,12 +914,121 @@ test('showAudioConfigDialog reports the Gapless guidance when the field cannot b
   });
   assert.deepEqual(harness.uiCalls, [[
     'setError',
-    'Audio Error: Gapless Playback could not be changed. Please apply the audio settings again.',
+    'error.audioSettingsSaveFailed',
     true
   ]]);
   assert.equal(harness.window.electronIntegration.audioPreferences, preferences);
   assert.equal(preferences.gaplessPlayback, true);
   assert.equal(document.body.children.length, 1);
+});
+
+test('showAudioConfigDialog keeps Gapless failure details in the console', async () => {
+  const preferences = {
+    inputDeviceId: 'mic1',
+    outputDeviceId: 'out1',
+    inputDeviceLabel: 'Mic One',
+    outputDeviceLabel: 'Out One',
+    sampleRate: 96000,
+    useInputWithPlayer: false,
+    lowLatencyOutput: false,
+    useWasmDsp: true,
+    gaplessPlayback: true,
+    outputChannels: 2,
+    latencyHint: 'interactive'
+  };
+  const failures = [
+    {
+      detail: 'Audio Error: internal persistence detail',
+      apply: async () => 'Audio Error: internal persistence detail'
+    },
+    {
+      detail: 'private exception detail',
+      apply: async () => { throw new Error('private exception detail'); }
+    }
+  ];
+
+  for (const failure of failures) {
+    const harness = createAudioHarness({
+      window: {
+        audioManager: {
+          applyGaplessPlaybackPreference: failure.apply
+        }
+      }
+    });
+    const document = createFakeDocument();
+    const diagnostics = await withCapturedConsole('error', async () => {
+      await withGlobals({ window: harness.window, document, navigator: {} }, async () => {
+        await withMutedConsole('log', async () => {
+          await showAudioConfigDialog(true, preferences);
+          document.getElementById('gapless-playback').checked = false;
+          await document.getElementById('apply-button').dispatchEvent('click');
+          await flushMicrotasks();
+        });
+      });
+    });
+
+    assert.deepEqual(harness.uiCalls, [[
+      'setError',
+      'error.audioSettingsSaveFailed',
+      true
+    ]]);
+    assert.equal(harness.uiCalls.flat().includes(failure.detail), false);
+    assert.ok(diagnostics.some(call => call.some(value => String(value?.message || value).includes(failure.detail))));
+  }
+});
+
+test('showAudioConfigDialog localizes reset and general save failures', async () => {
+  const resetFailures = [
+    {
+      detail: 'Audio Error: backend device detail',
+      reset: async () => 'Audio Error: backend device detail'
+    },
+    {
+      detail: 'private reset exception',
+      reset: async () => { throw new Error('private reset exception'); }
+    }
+  ];
+  for (const failure of resetFailures) {
+    const resetHarness = createAudioHarness({
+      window: {
+        audioManager: {
+          reset: failure.reset
+        }
+      }
+    });
+    const resetDocument = createFakeDocument();
+    const diagnostics = await withCapturedConsole('error', async () => {
+      await withGlobals({ window: resetHarness.window, document: resetDocument, navigator: {} }, async () => {
+        await withMutedConsole('log', async () => {
+          await showAudioConfigDialog(false, {});
+          await resetDocument.getElementById('apply-button').dispatchEvent('click');
+          await flushMicrotasks();
+        });
+      });
+    });
+    assert.deepEqual(resetHarness.uiCalls, [[
+      'setError',
+      'error.audioResetFailed',
+      true
+    ]]);
+    assert.equal(resetHarness.uiCalls.flat().includes(failure.detail), false);
+    assert.ok(diagnostics.some(call => call.some(value => String(value?.message || value).includes(failure.detail))));
+  }
+
+  const saveHarness = createAudioHarness({ saveResult: { success: false } });
+  const saveDocument = createFakeDocument();
+  await withGlobals({ window: saveHarness.window, document: saveDocument, navigator: {} }, async () => {
+    await withMutedConsole('log', async () => {
+      await showAudioConfigDialog(true, {});
+      await saveDocument.getElementById('apply-button').dispatchEvent('click');
+      await flushMicrotasks();
+    });
+  });
+  assert.deepEqual(saveHarness.uiCalls, [[
+    'setError',
+    'error.audioSettingsSaveFailed',
+    true
+  ]]);
 });
 
 test('showAudioConfigDialog applies first-use Gapless Playback without resetting audio', async () => {

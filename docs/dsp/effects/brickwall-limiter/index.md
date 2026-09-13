@@ -11,7 +11,7 @@ Semantic type: `BrickwallLimiter` · Category: dynamics
 
 Restricts peaks to a configured ceiling with look-ahead limiting.
 
-This type has catalog telemetry metadata but no public observation API in v0.1. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).
+This type has catalog telemetry metadata but no public observation API. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).
 
 ## Contract
 
@@ -19,7 +19,7 @@ This type has catalog telemetry metadata but no public observation API in v0.1. 
 - Catalog sample rates: **not declared; this does not mean unsupported**
 - Assets: **none**
 - Catalog-declared latency: **dynamic**; depends on lookahead, oversampling, sampleRate
-- Telemetry: **catalog metadata only; observation API unavailable in v0.1**
+- Telemetry: **catalog metadata only; no public observation API**
 
 | Semantic name | Python constructor keyword | Type / count | Default | Unit | Range or values |
 |---|---|---:|---|---|---|

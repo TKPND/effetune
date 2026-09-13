@@ -129,7 +129,13 @@ async function withStateGlobals(options, callback) {
   await withGlobals({
     document: documentRef,
     window: windowRef,
-    navigator: { userAgent: options.userAgent ?? 'Mozilla/5.0' }
+    navigator: { userAgent: options.userAgent ?? 'Mozilla/5.0' },
+    console: {
+      ...console,
+      error(...args) {
+        calls.push(['console.error', ...args]);
+      }
+    }
   }, async () => callback({ calls, documentRef, windowRef }));
 }
 
@@ -286,7 +292,7 @@ test('settings menu reset item reloads the web page with translated and fallback
   });
 });
 
-test('settings menu reset item reports audioManager reset outcomes without reloading', async () => {
+test('settings menu reset item reports audioManager reset outcomes without exposing diagnostics', async () => {
   await withStateGlobals({
     uiManager: {
       t(key) {
@@ -307,13 +313,21 @@ test('settings menu reset item reports audioManager reset outcomes without reloa
     assert.deepEqual(calls.filter(call => call[0] === 'reload'), []);
   });
 
-  await withStateGlobals({}, async ({ calls, documentRef }) => {
+  await withStateGlobals({
+    uiManager: {
+      t(key) {
+        return key === 'error.audioResetFailed' ? 'Check audio devices and try again' : key;
+      }
+    }
+  }, async ({ calls, documentRef }) => {
     const manager = new StateManager({
       reset: async () => 'Audio Error: reset failed'
     });
     await manager.resetAudioSettingsButton.click();
 
-    assert.equal(documentRef.elements.get('errorDisplay').textContent, 'Audio Error: reset failed');
+    assert.equal(documentRef.elements.get('errorDisplay').textContent, 'Check audio devices and try again');
+    assert.ok(calls.some(call => call[0] === 'console.error' &&
+      call[1] === 'Audio reset failed:' && call[2] === 'Audio Error: reset failed'));
     assert.deepEqual(calls.filter(call => call[0] === 'reload'), []);
   });
 });

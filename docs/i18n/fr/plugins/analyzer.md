@@ -1,6 +1,6 @@
 ---
 title: "Plugins d'analyse - EffeTune"
-description: "Plugins de visualisation audio, dont Level Meter, Note Spectrogram, Oscilloscope, Spectrogram, Spectrum Analyzer et Stereo Meter."
+description: "Plugins de visualisation audio, dont Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer et Stereo Meter."
 lang: fr
 ---
 
@@ -13,6 +13,7 @@ Une collection de plugins qui vous permettent de visualiser votre musique de man
 - [Level Meter](#level-meter) - Affiche le niveau du signal numérique et les risques de clipping
 - [Note Spectrogram](#note-spectrogram) - Affiche les hauteurs estimées au fil du temps sous forme de piano roll
 - [Oscilloscope](#oscilloscope) - Affiche la visualisation de la forme d'onde en temps réel
+- [Pitch Meter](#pitch-meter) - Suit une fréquence fondamentale et son accord au fil du temps
 - [Spectrogram](#spectrogram) - Crée de magnifiques motifs visuels à partir de votre musique
 - [Spectrum Analyzer](#spectrum-analyzer) - Affiche les différentes fréquences de votre musique
 - [Stereo Meter](#stereo-meter) - Visualise l'équilibre stéréo et la corrélation entre canaux
@@ -103,6 +104,31 @@ Affiche la forme de l'onde sonore en temps réel, afin de voir les impacts, les 
 ### Note sur l'Affichage de la Forme d'Onde
 La forme d'onde relie les points capturés dans l'ordre chronologique. Pour les durées d'affichage longues, chaque intervalle conserve son premier et son dernier échantillon, ainsi que les échantillons minimum et maximum à leur position d'origine. La continuité et les pics brefs sont ainsi préservés dans les limites de la résolution d'affichage. Utilisez-la comme guide visuel plutôt que comme outil de mesure exact.
 
+## Pitch Meter
+
+Suit une fréquence fondamentale (F0) à la fois dans un piano roll défilant sur deux secondes, sans modifier le son. Utilisez-le pour vérifier l'accord et les variations de hauteur d'une voix ou d'un instrument seul.
+
+### Guide de visualisation
+
+- **Horizontal** (par défaut) place les notes graves à gauche et les aiguës à droite. La dernière estimation apparaît au-dessus du clavier et l'historique défile vers le haut.
+- **Vertical** place les notes graves en bas et les aiguës en haut. La dernière estimation apparaît près du clavier à droite et l'historique avance vers la gauche.
+- La position de la ligne indique la hauteur entre les demi-tons. Une estimation plus fiable apparaît plus nettement ; la ligne s'interrompt si l'entrée est trop faible ou si aucune hauteur unique et stable n'est trouvée.
+- L'étiquette actuelle indique la note la plus proche et l'écart en cents. Une valeur positive est au-dessus de la note, une valeur négative en dessous. L'étiquette disparaît en l'absence d'estimation fiable.
+
+### Guide d'utilisation
+
+- Commencez par une seule note tenue, puis observez si la ligne reste centrée sur la note ou dérive vers l'aigu ou le grave.
+- Le vibrato et les pitch bends apparaissent comme des mouvements fluides entre les rangées de notes.
+- Cet analyseur suit une hauteur dominante. Les accords, les mixages denses, les percussions, le bruit ou les sons périodiques indistincts peuvent interrompre la ligne ou produire une octave erronée.
+
+### Paramètres
+
+- **Layout** - Sélectionne **Horizontal** (par défaut) ou **Vertical**.
+- **Reference A4** (400 à 480 Hz) - Règle la référence d'accord utilisée pour le nom des notes et l'écart en cents. Valeur par défaut : 440 Hz.
+- **Lowest Note** - Définit la limite basse de la plage affichée et analysée. Valeur par défaut : C2. Le réglage minimal est A0.
+- **Highest Note** - Définit la limite haute de la plage affichée et analysée. Valeur par défaut : C7. Le réglage maximal est C8.
+- L'entrée stéréo est analysée en faisant la moyenne des deux premiers canaux ; une entrée mono est utilisée directement. Un contenu de polarité fortement opposée peut s'annuler dans cette moyenne et ne laisser aucune trace de hauteur.
+
 ## Spectrogram
 
 Crée des motifs colorés qui montrent comment votre musique change au fil du temps. Les couleurs indiquent l'intensité de chaque son, tandis que la position verticale indique sa fréquence.
@@ -133,8 +159,9 @@ Le graphique défile de droite à gauche à vitesse constante, avec un repère c
 - **Points** - Taille FFT utilisée pour l'affichage (256 à 16384)
   - Nombres plus hauts : plus de détail en fréquence, mais mises à jour temporelles plus lentes
   - Nombres plus bas : mouvement plus rapide, mais moins de détail en fréquence
-- **Frequency Scale** - **Log** accorde davantage d'espace aux basses fréquences ; **Linear** répartit uniformément des largeurs de fréquence égales.
-- **Keyboard** - Affiche à droite du graphique un clavier statique qui met en relation les notes et les fréquences. Il ne modifie ni l'analyse ni le son. La disposition des touches suit **Log** ou **Linear** ; avec **Linear**, les touches des basses fréquences paraissent plus étroites.
+  - Avec **Log (HQ)**, Points définit la fenêtre d'analyse courte ; une fenêtre quatre fois plus longue améliore la séparation des basses fréquences.
+- **Frequency Scale** - **Log** accorde davantage d'espace aux basses fréquences. **Log (HQ)** ajoute une mesure plus longue pour mieux séparer les graves proches tout en conservant la mesure courte pour les aigus. Il demande davantage de traitement et les changements dans le grave peuvent apparaître ou disparaître plus lentement, sans modifier le son. **Linear** répartit uniformément des largeurs de fréquence égales.
+- **Keyboard** - Affiche à droite du graphique un clavier statique qui met en relation les notes et les fréquences. Il ne modifie ni l'analyse ni le son. La disposition des touches suit **Log**, **Log (HQ)** ou **Linear** ; **Log (HQ)** conserve le même espacement logarithmique que **Log**, tandis qu'avec **Linear**, les touches graves paraissent plus étroites.
 - L'analyseur utilise la moyenne des canaux gauche et droit. Une entrée mono est analysée directement.
 
 ## Spectrum Analyzer
@@ -147,7 +174,7 @@ Crée un affichage visuel en temps réel des fréquences de votre musique, des b
 - La droite montre les hautes fréquences (cymbales, brillance, air)
 - La ligne vert foncé montre le son actuel
 - La ligne vert clair suit les pics récents et descend progressivement lorsqu’ils s’estompent
-- Dans l'affichage **Bar**, chaque barre indique le niveau le plus élevé dans une partie de largeur égale de l'affichage. **Log** utilise des largeurs d'octave égales ; **Linear** utilise des largeurs de fréquence égales.
+- Dans l'affichage **Bar**, chaque barre indique le niveau le plus élevé dans une partie de largeur égale de l'affichage. **Log** et **Log (HQ)** utilisent des largeurs d'octave égales ; **Linear** utilise des largeurs de fréquence égales.
 - Le fin repère au-dessus d'une barre indique son pic récent et descend progressivement.
 - Les pics plus hauts indiquent une présence plus forte de ces fréquences
 - Observez comment différents instruments créent différents motifs
@@ -165,11 +192,12 @@ Crée un affichage visuel en temps réel des fréquences de votre musique, des b
 - **Points** - Finesse avec laquelle l'affichage sépare les fréquences proches (256 à 16384)
   - Nombres plus hauts : plus de détail en fréquence, avec des mises à jour plus lentes
   - Nombres plus bas : mises à jour plus rapides, avec moins de détail en fréquence
-- **Frequency Scale** - **Log** accorde davantage d'espace aux basses fréquences ; **Linear** répartit uniformément des largeurs de fréquence égales.
+  - Avec **Log (HQ)**, Points définit la fenêtre d'analyse courte ; une fenêtre quatre fois plus longue améliore la séparation des basses fréquences.
+- **Frequency Scale** - **Log** accorde davantage d'espace aux basses fréquences. **Log (HQ)** ajoute une mesure plus longue pour mieux séparer les graves proches tout en conservant la mesure courte pour les aigus. Il demande davantage de traitement et les changements dans le grave peuvent apparaître ou disparaître plus lentement, sans modifier le son. **Linear** répartit uniformément des largeurs de fréquence égales.
 - **Display** - Change uniquement l'apparence du spectre ; il ne modifie ni l'analyse ni le son.
   - **Line** (par défaut) : Affiche le spectre sous forme de lignes continues.
   - **Bar** : Affiche sous forme de barre le niveau le plus élevé de chaque bande affichée.
-- **Keyboard** - Affiche sous le graphique un clavier statique qui met en relation les notes et les fréquences. Il ne modifie ni l'analyse ni le son. La disposition des touches suit **Log** ou **Linear** ; avec **Linear**, les touches des basses fréquences paraissent plus étroites.
+- **Keyboard** - Affiche sous le graphique un clavier statique qui met en relation les notes et les fréquences. Il ne modifie ni l'analyse ni le son. La disposition des touches suit **Log**, **Log (HQ)** ou **Linear** ; **Log (HQ)** conserve le même espacement logarithmique que **Log**, tandis qu'avec **Linear**, les touches graves paraissent plus étroites.
 - L'analyseur utilise la moyenne des canaux gauche et droit. Une entrée mono est analysée directement.
 
 ### Façons Amusantes d'Utiliser Ces Outils

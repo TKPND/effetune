@@ -1,5 +1,5 @@
 # Categories definition
-# Categories are sorted alphabetically
+# Categories are sorted alphabetically by display name, with 4ch and Others last
 [categories]
 Amp Sim.: Simulation of amplifier characteristics
 Lo-Fi: Vintage and lo-fi sounds
@@ -14,7 +14,7 @@ Others: Other presets
 
 # Preset definitions
 # format: path: Display Name | Category | Description
-# Presets are sorted by category, then alphabetically by path
+# Presets are sorted by category, then alphabetically by display name, with 4ch and Others last
 [presets]
 amp_sim/tube_amp: Tube Amplifier | Amp Sim. | Distortion per rated output of a tube amplifier and the effect of a low damping factor
 lofi/authentic_vinyl: Authentic Vinyl | Lo-Fi | Reproduces the sound of vinyl, including various noises

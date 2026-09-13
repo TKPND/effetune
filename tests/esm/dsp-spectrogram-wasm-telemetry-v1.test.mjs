@@ -36,7 +36,7 @@ for (const artifact of ['effetune-dsp.wasm', 'effetune-dsp.simd.wasm']) {
 
       const packer = DSP_PARAM_PACKERS.get('SpectrogramPlugin');
       assert.ok(packer);
-      assert.equal(packer.hash, 0xc99dcc20);
+      assert.equal(packer.hash, 0x3e6e0819);
       assert.equal(binding.instanceSetParams(
         instanceId,
         packer.pack({ dr: -96, pt: 8 }),

@@ -9,10 +9,11 @@ namespace effetune::generated {
 struct SpectrogramPluginParams {
   float dBRange;
   float points;
-  static constexpr std::uint32_t kHash = 0xc99dcc20u;
-  static constexpr std::uint32_t kFloatCount = 2u;
+  float highQualityLog;
+  static constexpr std::uint32_t kHash = 0x3e6e0819u;
+  static constexpr std::uint32_t kFloatCount = 3u;
 };
-static_assert(2u == 0u || sizeof(SpectrogramPluginParams) == sizeof(float) * 2u);
+static_assert(3u == 0u || sizeof(SpectrogramPluginParams) == sizeof(float) * 3u);
 
 } // namespace effetune::generated
 

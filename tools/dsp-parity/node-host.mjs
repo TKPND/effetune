@@ -112,14 +112,19 @@ function createSandbox({ quiet = true } = {}) {
 async function readReferenceSources(definition, repoRoot) {
   const basePath = path.join(repoRoot, 'plugins', 'plugin-base.js');
   const pluginPath = path.join(repoRoot, 'plugins', `${definition.path}.js`);
+  const helperPath = definition.type === 'SpectrumAnalyzerPlugin' || definition.type === 'SpectrogramPlugin'
+    ? path.join(repoRoot, 'plugins', 'multires-spectrum.js') : null;
   try {
-    const [baseSource, pluginSource] = await Promise.all([
+    const [baseSource, pluginSource, helperSource] = await Promise.all([
       fs.readFile(basePath, 'utf8'),
-      fs.readFile(pluginPath, 'utf8')
+      fs.readFile(pluginPath, 'utf8'),
+      helperPath ? fs.readFile(helperPath, 'utf8') : null
     ]);
     return {
       basePath,
       pluginPath,
+      helperPath,
+      helperSource: helperSource?.replace(/\r\n?/g, '\n'),
       baseSource: baseSource.replace(/\r\n?/g, '\n'),
       pluginSource: pluginSource.replace(/\r\n?/g, '\n')
     };
@@ -138,6 +143,9 @@ export async function loadReferencePlugin(typeOrName, {
   const context = vm.createContext(sandbox, { name: `dsp-parity:${definition.type}` });
   try {
     vm.runInContext(sources.baseSource, context, { filename: sources.basePath });
+    if (sources.helperSource) {
+      vm.runInContext(sources.helperSource, context, { filename: sources.helperPath });
+    }
     vm.runInContext(sources.pluginSource, context, { filename: sources.pluginPath });
   } catch (error) {
     throw new Error(`Failed to evaluate JS reference ${definition.type}: ${error.message}`, { cause: error });
@@ -146,11 +154,12 @@ export async function loadReferencePlugin(typeOrName, {
   if (typeof PluginClass !== 'function') {
     throw new Error(`Plugin file ${sources.pluginPath} did not register window.${definition.type}`);
   }
-  // jsEngineHash covers the plugin source only, so edits to the shared
+  // jsEngineHash covers the plugin and its analyzer helper, so edits to the shared
   // plugins/plugin-base.js do not churn every golden metadata file. Drift in
   // the shared base is guarded by dsp/plugins/golden-base-hash.json instead.
   const jsEngineHash = crypto.createHash('sha256')
     .update(sources.pluginSource)
+    .update(sources.helperSource ?? '')
     .digest('hex');
   const baseSourceHash = crypto.createHash('sha256')
     .update(sources.baseSource)
@@ -232,6 +241,10 @@ export async function createReferenceSession(typeOrName, {
       events = []
     }) {
       assertAudioShape(input, frames, channels);
+      if (loaded.sandbox.MultiresSpectrum) {
+        loaded.sandbox.MultiresSpectrum.prepare(state, sampleRate,
+          loaded.definition.type === 'SpectrumAnalyzerPlugin' ? 4 : 5);
+      }
       const output = new Float32Array(input.length);
       const parameterEvents = normalizeEvents(events);
       let eventIndex = 0;
@@ -263,6 +276,7 @@ export async function createReferenceSession(typeOrName, {
         state.sampleRate = sampleRate;
         state.currentFrame = startFrame;
         const errorsBefore = loaded.sandbox.errors.length;
+        state.multiresSpectrum?.release(state.multiresFrame);
         const processed = plugin.executeProcessor(state, block, parameters, startFrame / sampleRate);
         if (loaded.sandbox.errors.length > errorsBefore) {
           throw new Error(`JS reference ${loaded.definition.type} reported: ${loaded.sandbox.errors.at(-1)}`);

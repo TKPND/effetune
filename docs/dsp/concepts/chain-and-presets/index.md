@@ -19,7 +19,7 @@ one serial path in the app and export it again, or reproduce the branching in th
 around separate Chains.
 
 App presets containing `FIR Crossover`, `5Band FIR PEQ`, `Group Delay EQ`,
-`Group Delay PEQ`, `Room EQ`, or `IR Reverb` cannot be imported in v0.1: the library
+`Group Delay PEQ`, `Room EQ`, or `IR Reverb` cannot be imported: the library
 drives these six effects from a caller-supplied precomputed impulse-response asset
 instead of the app's filter-design parameters, so those parameters have no conversion
 and the importer rejects the node with an `EffectError` naming the effect. Construct

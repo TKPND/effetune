@@ -1,6 +1,7 @@
 #include "effetune/kernel.h"
 #include "SpectrogramPluginParams.h"
 #include "binary_io.h"
+#include "effetune/dsp/multires_spectrum.h"
 #include "effetune/dsp/pffft_incremental.h"
 #include "effetune/dsp/stage_scheduler.h"
 
@@ -114,6 +115,7 @@ template <std::size_t Count>
 
 class SpectrogramKernel final : public PluginKernel {
   EFFETUNE_PARAMS(generated::SpectrogramPluginParams)
+  friend class ::effetune::dsp::MultiresSpectrum;
 
 public:
   ~SpectrogramKernel() override { releaseResources(); }
@@ -122,9 +124,10 @@ public:
     releaseResources();
     sample_rate_ = info.sampleRate > 0.0F ? info.sampleRate : 48000.0F;
 
-    if (stage_schedule_ == nullptr) {
-      stage_schedule_.reset(new (std::nothrow) StageSchedule());
+    for (auto &schedule : stage_schedules_) {
+      schedule.reset(new (std::nothrow) StageSchedule());
     }
+    hq_.reset(new (std::nothrow)::effetune::dsp::MultiresSpectrum());
 
     ring_ = allocateFloats(kMaximumFftSize * 2u);
     fft_input_ = allocateFloats(kMaximumFftSize);
@@ -134,16 +137,17 @@ public:
     spectrum_ = allocateFloats(kMaximumBinCount);
     published_columns_.resize(kPendingColumnCapacity);
     for (std::vector<std::uint8_t> &column : published_columns_) {
-      column.resize(kPayloadBytes);
+      column.resize(48u + kCellCount);
     }
-    staging_column_.resize(kPayloadBytes);
+    staging_column_.resize(48u + kCellCount);
 
-    ready_ = stage_schedule_ != nullptr && ring_ != nullptr && fft_input_ != nullptr &&
-             fft_output_ != nullptr && fft_work_ != nullptr && windows_ != nullptr &&
-             spectrum_ != nullptr && published_columns_.size() == kPendingColumnCapacity &&
-             staging_column_.size() == kPayloadBytes;
+    ready_ = hq_ != nullptr && hq_->prepare(sample_rate_, true) && ring_ != nullptr &&
+             fft_input_ != nullptr && fft_output_ != nullptr && fft_work_ != nullptr &&
+             windows_ != nullptr && spectrum_ != nullptr &&
+             published_columns_.size() == kPendingColumnCapacity &&
+             staging_column_.size() == 48u + kCellCount;
     for (const std::vector<std::uint8_t> &column : published_columns_) {
-      ready_ = ready_ && column.size() == kPayloadBytes;
+      ready_ = ready_ && column.size() == 48u + kCellCount;
     }
     for (std::uint32_t index = 0u; index < kSetupCount; ++index) {
       const std::uint32_t fft_size = 1u << (kMinimumPoints + index);
@@ -153,14 +157,21 @@ public:
             new (std::nothrow)::effetune::dsp::PffftOrderedRealForward(real_setups_[index],
                                                                        kTransformWorkBudget));
       }
-      if (real_setups_[index] == nullptr || incremental_transforms_[index] == nullptr ||
-          !incremental_transforms_[index]->valid()) {
+      if (stage_schedules_[index] == nullptr || real_setups_[index] == nullptr ||
+          incremental_transforms_[index] == nullptr || !incremental_transforms_[index]->valid()) {
         ready_ = false;
       }
     }
     if (ready_) {
       prepareWindows();
       prepareDisplayFrequencies();
+      for (std::uint32_t points = kMinimumPoints; points <= kMaximumPoints; ++points) {
+        initializeAnalysis(points);
+        if (!buildStageSchedule()) {
+          ready_ = false;
+          break;
+        }
+      }
     }
     parameter_state_initialized_ = false;
     reset();
@@ -179,6 +190,15 @@ public:
     }
     synchronizeParameters();
 
+    if (active_hq_) {
+      for (std::uint32_t frame = 0u; frame < frame_count; ++frame) {
+        const float left = audio[frame];
+        const float right = channel_count > 1u ? audio[frame_count + frame] : left;
+        hq_->push((left + right) * 0.5F, *this);
+      }
+      return;
+    }
+
     std::uint32_t frame = 0u;
     while (frame < frame_count) {
       std::uint32_t run = frame_count - frame;
@@ -194,6 +214,9 @@ public:
         const float right = channel_count > 1u ? audio[frame_count + frame] : left;
         ring_[write_position_] = (left + right) * 0.5F;
         write_position_ = (write_position_ + 1u) & ring_mask_;
+        if (valid_samples_ < fft_size_) {
+          ++valid_samples_;
+        }
       }
 
       samples_until_frame_ -= run;
@@ -217,8 +240,9 @@ public:
     }
     while (pending_column_count_ != 0u) {
       const std::uint8_t *payload = published_columns_[pending_read_column_].data();
-      if (!writer.write(kTapSpectrogramColumn, kTelemetryVersion, payload,
-                        static_cast<std::uint16_t>(kPayloadBytes))) {
+      if (!writer.write(
+              kTapSpectrogramColumn, active_hq_ ? 2u : kTelemetryVersion, payload,
+              static_cast<std::uint16_t>(active_hq_ ? 48u + kCellCount : kPayloadBytes))) {
         return;
       }
       pending_read_column_ = (pending_read_column_ + 1u) % kPendingColumnCapacity;
@@ -239,6 +263,7 @@ private:
   }
 
   void releaseResources() noexcept {
+    hq_.reset();
     for (auto &transform : incremental_transforms_) {
       transform.reset();
     }
@@ -310,23 +335,24 @@ private:
       requested_points = static_cast<int>(kMaximumPoints);
     }
     const std::uint32_t points = static_cast<std::uint32_t>(requested_points);
-    if (points != active_points_) {
+    const bool high_quality = params_.highQualityLog > 0.5F;
+    if (points != active_points_ || high_quality != active_hq_) {
+      active_hq_ = high_quality;
       initializeAnalysis(points);
     }
   }
 
   void initializeAnalysis(std::uint32_t points) noexcept {
     resetStagedJob();
-    if (stage_schedule_ != nullptr) {
-      stage_schedule_->clear();
-    }
     active_points_ = points;
+    stage_schedule_ = stage_schedules_[points - kMinimumPoints].get();
     fft_size_ = 1u << active_points_;
     ring_size_ = fft_size_ * 2u;
     ring_mask_ = ring_size_ - 1u;
     active_transform_ = incremental_transforms_[active_points_ - kMinimumPoints].get();
     window_ = windows_ == nullptr ? nullptr : windows_ + fft_size_ - (1u << kMinimumPoints);
     write_position_ = 0u;
+    valid_samples_ = 0u;
     samples_until_frame_ = fft_size_ >> 1u;
     slot_count_ = samples_until_frame_ / kSlotSamples;
     if (slot_count_ == 0u) {
@@ -338,23 +364,8 @@ private:
     pending_write_column_ = 0u;
     pending_column_count_ = 0u;
     parameter_state_initialized_ = true;
-    if (!ready_) {
-      return;
-    }
-    for (std::uint32_t index = 0u; index < ring_size_; ++index) {
-      ring_[index] = 0.0F;
-    }
-    for (std::uint32_t index = 0u; index < fft_size_; ++index) {
-      fft_input_[index] = 0.0F;
-      fft_output_[index] = 0.0F;
-      fft_work_[index] = 0.0F;
-    }
-    for (std::uint32_t bin = 0u; bin < (fft_size_ >> 1u); ++bin) {
-      spectrum_[bin] = static_cast<float>(kMinimumLevelDb);
-    }
-    std::fill(staging_column_.begin(), staging_column_.end(), std::uint8_t{0});
-    if (!buildStageSchedule()) {
-      ready_ = false;
+    if (active_hq_ && hq_ != nullptr) {
+      hq_->reset(points);
     }
   }
 
@@ -438,8 +449,12 @@ private:
       const std::uint32_t odd_source = job_origin_ + odd_index < ring_size_
                                            ? job_origin_ + odd_index
                                            : job_origin_ + odd_index - ring_size_;
-      fft_input_[even_index] = ring_[even_source] * job_window_[even_index];
-      fft_input_[odd_index] = ring_[odd_source] * job_window_[odd_index];
+      fft_input_[even_index] = even_index + job_valid_samples_ < job_fft_size_
+                                   ? 0.0F
+                                   : ring_[even_source] * job_window_[even_index];
+      fft_input_[odd_index] = odd_index + job_valid_samples_ < job_fft_size_
+                                  ? 0.0F
+                                  : ring_[odd_source] * job_window_[odd_index];
     }
   }
 
@@ -545,6 +560,7 @@ private:
     job_origin_ = (write_position_ + ring_size_ - fft_size_) & ring_mask_;
     job_points_ = active_points_;
     job_fft_size_ = fft_size_;
+    job_valid_samples_ = valid_samples_;
     job_db_range_ = active_db_range_;
     job_normalization_db_ = -20.0 * std::log10(static_cast<double>(job_fft_size_));
     job_frame_time_ = frame_time;
@@ -560,6 +576,32 @@ private:
     }
     job_active_ = true;
   }
+
+  void hqBegin(const ::effetune::dsp::MultiresSpectrumFrame &frame) noexcept {
+    job_db_range_ = active_db_range_;
+    std::uint8_t *payload = staging_column_.data();
+    writeF32(payload, sample_rate_);
+    writeU16(payload + 4u, static_cast<std::uint16_t>(frame.points));
+    writeU16(payload + 6u, 0u);
+    writeU32(payload + 8u, frame.hopSamples);
+    writeU32(payload + 12u, frame.generation);
+    writeU32(payload + 16u, static_cast<std::uint32_t>(frame.captureEndSample));
+    writeU32(payload + 20u, static_cast<std::uint32_t>(frame.captureEndSample >> 32u));
+    writeU32(payload + 24u, frame.frameIndex);
+    writeU32(payload + 28u, frame.cellCount);
+    writeF32(payload + 32u, 20.0F);
+    writeF32(payload + 36u, 40000.0F);
+    writeU32(payload + 40u, frame.firstValidIndex);
+    writeU32(payload + 44u, frame.validCellCount);
+  }
+
+  void hqCell(std::uint32_t index, float level) noexcept {
+    double intensity = (static_cast<double>(level) - job_db_range_) / -job_db_range_;
+    intensity = intensity < 0.0 ? 0.0 : (intensity > 1.0 ? 1.0 : intensity);
+    staging_column_[48u + index] = static_cast<std::uint8_t>(intensity * 255.0 + 0.5);
+  }
+
+  void hqCommit() noexcept { commitColumn(); }
 
   std::array<PFFFT_Setup *, kSetupCount> real_setups_{};
   std::array<std::unique_ptr<::effetune::dsp::PffftOrderedRealForward>, kSetupCount>
@@ -587,6 +629,8 @@ private:
   std::uint32_t ring_size_ = 1u << 13u;
   std::uint32_t ring_mask_ = (1u << 13u) - 1u;
   std::uint32_t write_position_ = 0u;
+  std::uint32_t valid_samples_ = 0u;
+  std::uint32_t job_valid_samples_ = 0u;
   std::uint32_t samples_until_frame_ = 1u << 11u;
   std::uint32_t slot_count_ = 1u;
   std::uint32_t job_slot_ = 0u;
@@ -600,8 +644,11 @@ private:
   bool ready_ = false;
   bool job_active_ = false;
   bool parameter_state_initialized_ = false;
+  bool active_hq_ = false;
+  std::unique_ptr<::effetune::dsp::MultiresSpectrum> hq_;
   using StageSchedule = ::effetune::dsp::StageSchedule<kStageCapacity, kMaximumSlots>;
-  std::unique_ptr<StageSchedule> stage_schedule_;
+  std::array<std::unique_ptr<StageSchedule>, kSetupCount> stage_schedules_;
+  StageSchedule *stage_schedule_ = nullptr;
 };
 
 static_assert(sizeof(SpectrogramKernel) <= 8192u);

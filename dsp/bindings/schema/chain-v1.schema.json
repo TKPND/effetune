@@ -75,6 +75,9 @@
           "$ref": "#/$defs/Oscilloscope"
         },
         {
+          "$ref": "#/$defs/PitchMeter"
+        },
+        {
           "$ref": "#/$defs/Spectrogram"
         },
         {
@@ -529,6 +532,55 @@
         }
       }
     },
+    "PitchMeter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "PitchMeter"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "channel": {
+          "$ref": "#/$defs/channel"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "referenceA4": {
+              "type": "number",
+              "minimum": 400,
+              "maximum": 480,
+              "default": 440
+            },
+            "minimumMidi": {
+              "type": "integer",
+              "minimum": 21,
+              "maximum": 108,
+              "default": 36
+            },
+            "maximumMidi": {
+              "type": "integer",
+              "minimum": 21,
+              "maximum": 108,
+              "default": 96
+            }
+          }
+        }
+      }
+    },
     "Spectrogram": {
       "type": "object",
       "additionalProperties": false,
@@ -568,6 +620,10 @@
               "minimum": 8,
               "maximum": 14,
               "default": 12
+            },
+            "highQualityLog": {
+              "type": "boolean",
+              "default": false
             }
           }
         }
@@ -612,6 +668,10 @@
               "minimum": 8,
               "maximum": 14,
               "default": 12
+            },
+            "highQualityLog": {
+              "type": "boolean",
+              "default": false
             }
           }
         }

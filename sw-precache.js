@@ -1,4 +1,4 @@
-self.EFFECTUNE_CACHE_VERSION = "effetune-v2.10.0-50d1bfa5cabf0f63";
+self.EFFECTUNE_CACHE_VERSION = "effetune-v2.10.0-df3b9091215f6de3";
 self.EFFECTUNE_PRECACHE_URLS = [
   "./effetune-library.css",
   "./effetune-mobile.css",
@@ -11,6 +11,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./images/bus_function.png",
   "./images/favicon.ico",
   "./images/icon.png",
+  "./images/icon_128x128.png",
   "./images/icon_180x180.png",
   "./images/icon_192x192.png",
   "./images/icon_512x512.png",
@@ -174,7 +175,6 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/room-eq/designer.js",
   "./js/room-eq/group-delay-analysis.js",
   "./js/room-eq/wasm-fft.js",
-  "./js/script-loader.js",
   "./js/startup.js",
   "./js/theme-boot.js",
   "./js/theme-registry.mjs",
@@ -269,6 +269,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./plugins/analyzer/note_spectrogram.js",
   "./plugins/analyzer/oscilloscope.css",
   "./plugins/analyzer/oscilloscope.js",
+  "./plugins/analyzer/pitch_meter.js",
   "./plugins/analyzer/spectrogram.css",
   "./plugins/analyzer/spectrogram.js",
   "./plugins/analyzer/spectrum_analyzer.css",
@@ -388,6 +389,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./plugins/modulation/rotary_speaker.js",
   "./plugins/modulation/tremolo.js",
   "./plugins/modulation/wow_flutter.js",
+  "./plugins/multires-spectrum.js",
   "./plugins/others/oscillator.js",
   "./plugins/plugin-base.js",
   "./plugins/plugins.txt",

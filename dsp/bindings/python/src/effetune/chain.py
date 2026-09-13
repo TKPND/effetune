@@ -70,7 +70,7 @@ def _canonicalize_processing_parameters(
 ) -> dict[str, Any]:
     canonical = dict(parameters)
     if (
-        effect_type == "NoteSpectrogram"
+        effect_type in ("NoteSpectrogram", "PitchMeter")
         and canonical["minimumMidi"] > canonical["maximumMidi"]
     ):
         canonical["minimumMidi"], canonical["maximumMidi"] = (

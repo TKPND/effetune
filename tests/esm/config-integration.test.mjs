@@ -196,7 +196,8 @@ test('loadConfig returns web settings outside Electron and empty objects on fail
     powerSaving: {
       mode: 'balanced',
       silenceThresholdDb: -80,
-      fullSuspendDelaySeconds: 300
+      fullSuspendDelaySeconds: 300,
+      skipDisplayDspWhenHidden: true
     }
   });
 
@@ -211,7 +212,8 @@ test('loadConfig returns web settings outside Electron and empty objects on fail
       powerSaving: {
         mode: 'balanced',
         silenceThresholdDb: -80,
-        fullSuspendDelaySeconds: 300
+        fullSuspendDelaySeconds: 300,
+        skipDisplayDspWhenHidden: true
       }
     });
   });
@@ -268,7 +270,8 @@ test('loadConfig returns loaded config and saveConfig persists in Electron or lo
     powerSaving: {
       mode: 'balanced',
       silenceThresholdDb: -80,
-      fullSuspendDelaySeconds: 300
+      fullSuspendDelaySeconds: 300,
+      skipDisplayDspWhenHidden: true
     }
   });
 });
@@ -280,7 +283,8 @@ test('web power-saving storage preserves a complete nested object while generic 
       powerSaving: {
         mode: 'balanced',
         silenceThresholdDb: -90,
-        fullSuspendDelaySeconds: 900
+        fullSuspendDelaySeconds: 900,
+        skipDisplayDspWhenHidden: true
       }
     })
   });
@@ -289,7 +293,8 @@ test('web power-saving storage preserves a complete nested object while generic 
     assert.deepEqual(await saveWebPowerSavingSettings({ mode: 'maximum' }), {
       mode: 'maximum',
       silenceThresholdDb: -90,
-      fullSuspendDelaySeconds: 900
+      fullSuspendDelaySeconds: 900,
+      skipDisplayDspWhenHidden: true
     });
     assert.deepEqual(await loadWebAppConfig(), {
       language: 'ja',
@@ -297,19 +302,22 @@ test('web power-saving storage preserves a complete nested object while generic 
       powerSaving: {
         mode: 'maximum',
         silenceThresholdDb: -90,
-        fullSuspendDelaySeconds: 900
+        fullSuspendDelaySeconds: 900,
+        skipDisplayDspWhenHidden: true
       }
     });
 
     assert.deepEqual(await saveWebPowerSavingSettings({ fullSuspendDelaySeconds: 'never' }), {
       mode: 'maximum',
       silenceThresholdDb: -90,
-      fullSuspendDelaySeconds: 'never'
+      fullSuspendDelaySeconds: 'never',
+      skipDisplayDspWhenHidden: true
     });
     assert.deepEqual((await loadWebAppConfig()).powerSaving, {
       mode: 'maximum',
       silenceThresholdDb: -90,
-      fullSuspendDelaySeconds: 'never'
+      fullSuspendDelaySeconds: 'never',
+      skipDisplayDspWhenHidden: true
     });
 
     const beforeInvalidUpdate = localStorage.snapshot().effetune_app_config;
@@ -324,7 +332,8 @@ test('web power-saving storage preserves a complete nested object while generic 
       powerSaving: {
         mode: 'continuous',
         silenceThresholdDb: -80,
-        fullSuspendDelaySeconds: 300
+        fullSuspendDelaySeconds: 300,
+        skipDisplayDspWhenHidden: true
       }
     });
   });
@@ -488,7 +497,8 @@ test('Electron power saving rolls back and reports a failed config save', async 
   const initialPowerSaving = {
     mode: 'balanced',
     silenceThresholdDb: -80,
-    fullSuspendDelaySeconds: 300
+    fullSuspendDelaySeconds: 300,
+    skipDisplayDspWhenHidden: true
   };
   const powerCalls = [];
   const errors = [];
@@ -547,7 +557,8 @@ test('Electron power rollback preserves previous settings when readback fails', 
   const initialPowerSaving = {
     mode: 'maximum',
     silenceThresholdDb: -90,
-    fullSuspendDelaySeconds: 'never'
+    fullSuspendDelaySeconds: 'never',
+    skipDisplayDspWhenHidden: true
   };
   const powerCalls = [];
   const harness = createConfigHarness({
@@ -868,7 +879,8 @@ test('Web power-saving controls use the AudioManager facade and preserve hidden 
   const initialPowerSaving = {
     mode: 'maximum',
     silenceThresholdDb: -90,
-    fullSuspendDelaySeconds: 900
+    fullSuspendDelaySeconds: 900,
+    skipDisplayDspWhenHidden: true
   };
   const powerCalls = [];
   const localStorage = createLocalStorage({
@@ -902,6 +914,9 @@ test('Web power-saving controls use the AudioManager facade and preserve hidden 
     const threshold = harness.document.getElementById('power-silence-threshold');
     const delayRow = harness.document.getElementById('power-full-suspend-delay-row');
     const delay = harness.document.getElementById('power-full-suspend-delay');
+    const skipDisplayDsp = harness.document.getElementById(
+      'power-skip-display-dsp-when-hidden'
+    );
 
     assert.equal(modeGroup.getAttribute('role'), 'radiogroup');
     assert.equal(modeGroup.getAttribute('aria-labelledby'), 'power-saving-title');
@@ -922,6 +937,19 @@ test('Web power-saving controls use the AudioManager facade and preserve hidden 
     assert.equal(delay.value, '900');
     assert.equal(delay.disabled, false);
     assert.equal(delayRow.hidden, false);
+    assert.equal(skipDisplayDsp.checked, true);
+    assert.equal(
+      skipDisplayDsp.getAttribute('aria-describedby'),
+      'power-skip-display-dsp-when-hidden-help'
+    );
+
+    skipDisplayDsp.checked = false;
+    await skipDisplayDsp.dispatchEvent('change');
+    assert.deepEqual(powerCalls.at(-1), [
+      'updatePowerSettings',
+      { skipDisplayDspWhenHidden: false }
+    ]);
+    assert.equal(skipDisplayDsp.checked, false);
 
     continuous.checked = true;
     await continuous.dispatchEvent('change');
@@ -1007,17 +1035,30 @@ test('Web power-saving controls normalize defaults and roll back a failed facade
     const balanced = harness.document.getElementById('power-mode-balanced');
     const threshold = harness.document.getElementById('power-silence-threshold');
     const delay = harness.document.getElementById('power-full-suspend-delay');
+    const skipDisplayDsp = harness.document.getElementById(
+      'power-skip-display-dsp-when-hidden'
+    );
 
     assert.equal(balanced.checked, true);
     assert.equal(threshold.value, '-80');
     assert.equal(delay.value, '300');
+    assert.equal(skipDisplayDsp.checked, true);
+
+    skipDisplayDsp.checked = false;
+    await withMutedConsole('error', async () => {
+      await skipDisplayDsp.dispatchEvent('change');
+    });
+    assert.equal(skipDisplayDsp.checked, true);
 
     continuous.checked = true;
     await withMutedConsole('error', async () => {
       await continuous.dispatchEvent('change');
     });
 
-    assert.deepEqual(powerCalls, [['updatePowerSettings', { mode: 'continuous' }]]);
+    assert.deepEqual(powerCalls, [
+      ['updatePowerSettings', { skipDisplayDspWhenHidden: false }],
+      ['updatePowerSettings', { mode: 'continuous' }]
+    ]);
     assert.equal(balanced.checked, true);
     assert.equal(continuous.checked, false);
     assert.equal(threshold.disabled, false);
@@ -1029,7 +1070,8 @@ test('Electron power-saving controls render, apply, and persist the full nested 
   const initialPowerSaving = {
     mode: 'maximum',
     silenceThresholdDb: -90,
-    fullSuspendDelaySeconds: 900
+    fullSuspendDelaySeconds: 900,
+    skipDisplayDspWhenHidden: true
   };
   const powerCalls = [];
   const harness = createConfigHarness({
@@ -1048,6 +1090,10 @@ test('Electron power-saving controls render, apply, and persist the full nested 
     assert.equal(maximum.checked, true);
     assert.equal(harness.document.getElementById('power-silence-threshold').value, '-90');
     assert.equal(harness.document.getElementById('power-full-suspend-delay').value, '900');
+    assert.equal(
+      harness.document.getElementById('power-skip-display-dsp-when-hidden').checked,
+      true
+    );
 
     balanced.checked = true;
     await balanced.dispatchEvent('change');
@@ -1061,17 +1107,20 @@ test('Electron power-saving controls render, apply, and persist the full nested 
     assert.deepEqual(savedConfigs.at(-1)[1].powerSaving, {
       mode: 'balanced',
       silenceThresholdDb: -90,
-      fullSuspendDelaySeconds: 900
+      fullSuspendDelaySeconds: 900,
+      skipDisplayDspWhenHidden: true
     });
     assert.deepEqual(harness.window.appConfig.powerSaving, {
       mode: 'balanced',
       silenceThresholdDb: -90,
-      fullSuspendDelaySeconds: 900
+      fullSuspendDelaySeconds: 900,
+      skipDisplayDspWhenHidden: true
     });
     assert.deepEqual(harness.window.electronIntegration.config.powerSaving, {
       mode: 'balanced',
       silenceThresholdDb: -90,
-      fullSuspendDelaySeconds: 900
+      fullSuspendDelaySeconds: 900,
+      skipDisplayDspWhenHidden: true
     });
   });
 });
@@ -1526,6 +1575,8 @@ test('all locales include the Web power-saving settings copy', () => {
     'dialog.config.powerSaving.advanced',
     'dialog.config.powerSaving.silenceThreshold',
     'dialog.config.powerSaving.fullSuspendDelay',
+    'dialog.config.powerSaving.skipDisplayDspWhenHidden',
+    'dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp',
     'dialog.config.powerSaving.delay.1m',
     'dialog.config.powerSaving.delay.5m',
     'dialog.config.powerSaving.delay.15m',

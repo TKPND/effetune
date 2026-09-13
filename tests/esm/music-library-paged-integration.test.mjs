@@ -4901,7 +4901,10 @@ test('paged card Play uses a scoped session selection and releases its context',
   manager.releaseContext = async contextToken => {
     calls.push(['releaseContext', contextToken]);
   };
-  const view = new LibraryView({ manager, uiManager: {} });
+  const view = new LibraryView({
+    manager,
+    uiManager: { beginPlaybackSelectionGestureResume: () => calls.push(['resume']) }
+  });
   view.pagedActionController = {
     track: async request => {
       calls.push(['track', request.clientRequestId, request.operationKind, request.targetName]);
@@ -4915,6 +4918,7 @@ test('paged card Play uses a scoped session selection and releases its context',
   });
   assert.deepEqual(calls, [
     ['track', undefined, 'play', 'Album One'],
+    ['resume'],
     ['createContext', {
       endpoint: 'tracks', query: '', sort: 'album', direction: 'asc', scope: { albumKey: 'album-1' }
     }],

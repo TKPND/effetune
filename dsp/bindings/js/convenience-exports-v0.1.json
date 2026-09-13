@@ -4,6 +4,7 @@
     {"type":"LevelMeter","class":"LevelMeter","factory":"createLevelMeter"},
     {"type":"NoteSpectrogram","class":"NoteSpectrogram","factory":"createNoteSpectrogram"},
     {"type":"Oscilloscope","class":"Oscilloscope","factory":"createOscilloscope"},
+    {"type":"PitchMeter","class":"PitchMeter","factory":"createPitchMeter"},
     {"type":"Spectrogram","class":"Spectrogram","factory":"createSpectrogram"},
     {"type":"SpectrumAnalyzer","class":"SpectrumAnalyzer","factory":"createSpectrumAnalyzer"},
     {"type":"StereoMeter","class":"StereoMeter","factory":"createStereoMeter"},

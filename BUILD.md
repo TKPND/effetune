@@ -296,7 +296,6 @@ With the full `npm run dev` command, open:
 - `http://localhost:8000/` for the local documentation site home
 - `http://localhost:8000/dsp/` for the DSP library documentation
 - `http://localhost:8000/docs/i18n/ja/` for a localized documentation page
-- `http://localhost:8000/dev/effetune_test.html` for the development test page
 
 The development server first builds the DSP browser package, builds `_site` with GitHub
 Pages 232 in the production environment, and stages the complete DSP site snapshot under

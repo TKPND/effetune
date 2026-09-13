@@ -164,7 +164,6 @@ async function savePipelineStateToFile(pipelineState, options) {
 function processCommandLineArgs(argv) {
   // Skip processing during splash screen (first launch)
   if (constants.getIsFirstLaunch()) {
-    // Debug logs removed for release
     return;
   }
   
@@ -172,8 +171,6 @@ function processCommandLineArgs(argv) {
   // In packaged apps, the first argument is the app path
   // In development, the first two arguments are electron and the script path
   const args = process.defaultApp ? argv.slice(2) : argv.slice(1);
-  
-  // Debug logs removed for release
   
   if (args.length > 0) {
     // Clear previous music files
@@ -218,21 +215,14 @@ function processCommandLineArgs(argv) {
       // Check if the argument is a music file
       else if (arg && isSupportedPlaybackAudioPath(arg)) {
         try {
-          // Debug logs removed for release
-          
           // Check if file exists
           if (fs.existsSync(arg)) {
-            // Debug logs removed for release
-            
             // Add to music files array
             constants.addCommandLineMusicFile(arg);
             
             // Also store in savedCommandLineMusicFiles for splash reload
             const absolutePath = path.resolve(arg);
-            // Debug logs removed for release
             constants.addSavedCommandLineMusicFile(absolutePath); // Use absolute path
-          } else {
-            // Debug logs removed for release
           }
         } catch (error) {
           console.error('Error checking music file:', error);

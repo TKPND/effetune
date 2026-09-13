@@ -32,6 +32,7 @@ function createHarness({
   const sessionValues = new Map();
   const events = [];
   const posted = [];
+  const telemetryRateUpdates = [];
   const inputState = input || {
     state: 'not-configured',
     inputAvailability: 'unknown',
@@ -269,6 +270,7 @@ function createHarness({
     getStructuralZeroOutputProof() { return structuralProof; },
     getPowerChannelFanInBound() { return 1; },
     broadcastToActiveWorklets(message) { port.postMessage(message); },
+    updateDspTelemetryRate(state) { telemetryRateUpdates.push({ ...state }); },
     dispatchEvent(name, event) { events.push({ name, event }); },
     adoptPowerMutation() {},
     setPlayerPowerUiEnabled() {},
@@ -341,6 +343,7 @@ function createHarness({
     events,
     inputState,
     posted,
+    telemetryRateUpdates,
     get bridgePauseCount() { return bridgePauseCount; },
     emitHostVisibility(hidden) {
       hostVisibilitySnapshot = { hidden };
@@ -684,12 +687,28 @@ test('named DSP UI suppression pauses analyzers until every suppression reason i
     constructor: { name: 'AnalyzerPlugin' },
     setPowerUiEnabled(value) { gates.push(value); }
   };
-  const harness = createHarness({ pipeline: [analyzer] });
+  const harness = createHarness({
+    settings: {
+      mode: 'balanced',
+      silenceThresholdDb: -80,
+      fullSuspendDelaySeconds: 300,
+      skipDisplayDspWhenHidden: true
+    },
+    pipeline: [analyzer]
+  });
 
   await harness.controller.start();
   harness.controller.setDspUiSuppressed('mini-player', true);
   assert.equal(harness.controller.getDspUiActivityAllowed(), false);
+  assert.equal(harness.controller.displayDspBypassed, true);
   assert.equal(gates.at(-1), false);
+  assert.ok(harness.posted.some(message =>
+    message.type === 'setDisplayDspBypassed' && message.bypassed === true
+  ));
+  assert.deepEqual(harness.telemetryRateUpdates.at(-1), {
+    hidden: true,
+    displayDspBypassed: true
+  });
 
   harness.controller.setDspUiSuppressed('hidden-panel', true);
   harness.controller.setDspUiSuppressed('mini-player', false);
@@ -697,7 +716,42 @@ test('named DSP UI suppression pauses analyzers until every suppression reason i
 
   harness.controller.setDspUiSuppressed('hidden-panel', false);
   assert.equal(harness.controller.getDspUiActivityAllowed(), true);
+  assert.equal(harness.controller.displayDspBypassed, false);
   assert.equal(gates.at(-1), true);
+  assert.deepEqual(harness.telemetryRateUpdates.at(-1), {
+    hidden: false,
+    displayDspBypassed: false
+  });
+});
+
+test('display DSP remains active when hidden optimization is disabled', async () => {
+  const harness = createHarness({
+    settings: {
+      mode: 'balanced',
+      silenceThresholdDb: -80,
+      fullSuspendDelaySeconds: 300,
+      skipDisplayDspWhenHidden: false
+    },
+    hostVisibility: { hidden: false }
+  });
+  await harness.controller.start();
+  harness.posted.length = 0;
+
+  harness.emitHostVisibility(true);
+  await harness.flush();
+
+  assert.equal(harness.controller.getDspUiActivityAllowed(), false);
+  assert.equal(harness.controller.displayDspBypassed, false);
+  assert.ok(harness.posted.some(message =>
+    message.type === 'setUiTelemetryEnabled' && message.enabled === false
+  ));
+  assert.equal(harness.posted.some(message =>
+    message.type === 'setDisplayDspBypassed' && message.bypassed === true
+  ), false);
+  assert.deepEqual(harness.telemetryRateUpdates.at(-1), {
+    hidden: true,
+    displayDspBypassed: false
+  });
 });
 
 test('must-process blocks no-route demotion and reports degraded health', async () => {
@@ -1014,12 +1068,14 @@ test('configuration carries the current UI gate across worklet graph identities'
   let configuration = harness.posted.findLast(message =>
     message.type === 'configurePowerPolicy');
   assert.equal(configuration.uiTelemetryEnabled, false);
+  assert.equal(configuration.displayDspBypassed, true);
 
   harness.posted.length = 0;
   harness.controller.handleWorkletGraphReplacement();
   configuration = harness.posted.findLast(message =>
     message.type === 'configurePowerPolicy');
   assert.equal(configuration.uiTelemetryEnabled, false);
+  assert.equal(configuration.displayDspBypassed, true);
 
   harness.emitHostVisibility(false);
   await harness.flush();
@@ -1028,6 +1084,7 @@ test('configuration carries the current UI gate across worklet graph identities'
   configuration = harness.posted.findLast(message =>
     message.type === 'configurePowerPolicy');
   assert.equal(configuration.uiTelemetryEnabled, true);
+  assert.equal(configuration.displayDspBypassed, false);
 });
 
 test('hidden web startup configures telemetry off without an Electron visibility API', async () => {
@@ -1863,6 +1920,95 @@ test('gesture begin and ensureActive share one in-flight context and input acqui
   resumeContext();
   assert.equal(await begun, true);
   assert.equal(harness.inputState.state, 'live');
+});
+
+test('an activated retry unblocks pending output resources without duplicating input or DSP commit', { timeout: 2000 }, async () => {
+  const harness = createHarness({
+    contextState: 'suspended',
+    input: {
+      state: 'released', inputAvailability: 'unknown', inputAvailabilityRevision: 1,
+      inputGeneration: 4, inputResourceId: null, inputConfigured: true,
+      inputSourcePresent: false, trackState: 'ended'
+    }
+  });
+  harness.controller.effectiveState = 'SUSPENDED';
+  const activation = { isActive: false };
+  harness.controller.windowRef.navigator = { userActivation: activation };
+  let contextResumeCount = 0;
+  let bridgeResumeCount = 0;
+  let inputAcquireCount = 0;
+  let mutationCount = 0;
+  let commitCount = 0;
+  let rejectOldContext;
+  let rejectOldBridge;
+  let finishInput;
+  const originalAcquire = harness.audioManager.ioManager.beginReacquireAudioInput.bind(harness.audioManager.ioManager);
+  const originalApply = harness.controller._applyWorkletState.bind(harness.controller);
+  harness.audioManager.contextManager.resumeForPowerPolicy = () => {
+    contextResumeCount++;
+    if (contextResumeCount === 1) return new Promise((_resolve, reject) => { rejectOldContext = reject; });
+    harness.context.state = 'running';
+    return Promise.resolve(true);
+  };
+  harness.audioManager.ioManager.playOutputBridgeForGesture = () => {
+    bridgeResumeCount++;
+    return bridgeResumeCount === 1
+      ? new Promise((_resolve, reject) => { rejectOldBridge = reject; })
+      : Promise.resolve(true);
+  };
+  harness.audioManager.ioManager.beginReacquireAudioInput = () => {
+    inputAcquireCount++;
+    return new Promise(resolve => { finishInput = () => resolve(originalAcquire()); });
+  };
+  harness.audioManager.adoptPowerMutation = () => { mutationCount++; };
+  harness.controller._applyWorkletState = (...args) => {
+    if (args[2]?.restoreOnFailure) commitCount++;
+    return originalApply(...args);
+  };
+
+  const pending = harness.controller.beginUserGestureResume('mixed-play');
+  await harness.flush();
+  assert.strictEqual(harness.controller.ensureActive('mixed-play'), pending);
+  assert.equal(contextResumeCount, 1, 'non-activated events still coalesce');
+  activation.isActive = true;
+  const retried = harness.controller.beginUserGestureResume('dedicated-input');
+  assert.strictEqual(retried, pending, 'the input and DSP transaction is retained');
+  assert.equal(contextResumeCount, 2, 'resume must reach the context synchronously in the new gesture');
+  assert.equal(bridgeResumeCount, 2);
+  assert.equal(inputAcquireCount, 1);
+  finishInput();
+  assert.equal(await retried, true, 'old unresolved output promises must not block commit');
+  assert.equal(commitCount, 1);
+  assert.equal(mutationCount, 1);
+  assert.equal(harness.inputState.state, 'live');
+  rejectOldContext(new Error('stale context attempt'));
+  rejectOldBridge(new Error('stale bridge attempt'));
+  await harness.flush();
+  assert.equal(harness.context.state, 'running');
+  assert.equal(harness.inputState.state, 'live');
+  assert.equal(harness.bridgePauseCount, 0);
+  assert.equal(harness.controller.gestureResumeInProgress, 0);
+});
+
+test('output retries observe failures superseded before the shared transaction starts', async () => {
+  const harness = createHarness({ contextState: 'suspended' });
+  harness.controller.effectiveState = 'SUSPENDED';
+  const activation = { isActive: false };
+  harness.controller.windowRef.navigator = { userActivation: activation };
+  harness.audioManager.contextManager.resumeForPowerPolicy = () => {
+    if (!activation.isActive) throw new Error('context activation required');
+    harness.context.state = 'running';
+    return Promise.resolve(true);
+  };
+  harness.audioManager.ioManager.playOutputBridgeForGesture = () => {
+    if (!activation.isActive) throw new Error('bridge activation required');
+    return Promise.resolve(true);
+  };
+  const pending = harness.controller.beginUserGestureResume('player-only-play');
+  activation.isActive = true;
+  assert.strictEqual(harness.controller.beginUserGestureResume('player-only-play'), pending);
+  assert.equal(await pending, true);
+  await new Promise(resolve => setImmediate(resolve));
 });
 
 test('different resume kinds merge into one gesture transaction without duplicate mutation', async () => {

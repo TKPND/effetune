@@ -168,6 +168,47 @@
       "sourceGenerating": false
     },
     {
+      "type": "PitchMeter",
+      "parameters": [
+        {
+          "name": "referenceA4",
+          "type": "number",
+          "count": 1,
+          "default": 440,
+          "minimum": 400,
+          "maximum": 480
+        },
+        {
+          "name": "minimumMidi",
+          "type": "integer",
+          "count": 1,
+          "default": 36,
+          "minimum": 21,
+          "maximum": 108
+        },
+        {
+          "name": "maximumMidi",
+          "type": "integer",
+          "count": 1,
+          "default": 96,
+          "minimum": 21,
+          "maximum": 108
+        }
+      ],
+      "seeded": false,
+      "telemetry": [
+        "pitch"
+      ],
+      "latency": {
+        "kind": "zero"
+      },
+      "assets": [],
+      "displayName": "Pitch Meter",
+      "category": "analyzer",
+      "summary": "Passes audio through while exposing one detected fundamental pitch, cents offset, confidence, and level.",
+      "sourceGenerating": false
+    },
+    {
       "type": "Spectrogram",
       "parameters": [
         {
@@ -186,11 +227,18 @@
           "default": 12,
           "minimum": 8,
           "maximum": 14
+        },
+        {
+          "name": "highQualityLog",
+          "type": "boolean",
+          "count": 1,
+          "default": false
         }
       ],
       "seeded": false,
       "telemetry": [
-        "spectrogram"
+        "spectrogram",
+        "spectrogramHq"
       ],
       "latency": {
         "kind": "zero"
@@ -220,11 +268,18 @@
           "default": 12,
           "minimum": 8,
           "maximum": 14
+        },
+        {
+          "name": "highQualityLog",
+          "type": "boolean",
+          "count": 1,
+          "default": false
         }
       ],
       "seeded": false,
       "telemetry": [
-        "spectrum"
+        "spectrum",
+        "spectrumHq"
       ],
       "latency": {
         "kind": "zero"
@@ -8028,7 +8083,7 @@
     }
   ],
   "contractDigests": {
-    "publicCatalogSha256": "84f5784c0aa678e570e6ed3a5efdd8542a77f4434c2d74fe33e76e50ff762143",
-    "privateLayoutSha256": "20d5f91eb56f8fe42683e7d07c7d77daf019b885a9f5770e655cdca0a7a9c426"
+    "publicCatalogSha256": "33699aef3c5e5cd794683287d75764d4b1c233a5bb961a8543adf7ee1806d75b",
+    "privateLayoutSha256": "90541227a97596a51d47ec770a1e32b817bcf9b96bda7591f0a96a8c5e65ad84"
   }
 }

@@ -19,7 +19,7 @@ Use the opt-in decoded telemetry callback or subscription API to observe this an
 - Catalog sample rates: **not declared; this does not mean unsupported**
 - Assets: **none**
 - Catalog-declared latency: **zero**
-- Analyzer telemetry: **decoded semantic observations are available in v0.1**
+- Analyzer telemetry: **decoded semantic observations are available**
 
 This effect has no semantic parameters.
 

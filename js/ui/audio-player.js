@@ -323,10 +323,7 @@ export class AudioPlayer {
     this.wakeLockManager?.dispose();
     this.recentlyPlayedTracker?.destroy();
     this.audioManager?.powerPolicyController?.detachPlayer?.(this);
-    
-    // Clear state manager
-    this.stateManager.clearStateHistory();
-    
+
     // Clean up references
     this.audioElement = null;
     if (window.uiManager) {
@@ -337,24 +334,4 @@ export class AudioPlayer {
     return true;
   }
   
-  /**
-   * Get debug information
-   * @returns {Object} Debug info
-   */
-  getDebugInfo() {
-    return {
-      stateManager: this.stateManager.getDebugInfo(),
-      playbackManager: {
-        currentTrackIndex: this.stateManager.getCurrentTrackIndex(),
-        playlistLength: this.playbackManager.playlist.length,
-        state: this.stateManager.getStateSnapshot()
-      },
-      contextManager: {
-        currentPlaybackMode: this.contextManager.currentPlaybackMode,
-        isUsingBufferPlayback: this.contextManager.isUsingBufferPlayback(),
-        hasNextTrackBuffer: !!this.contextManager.nextTrackBuffer,
-        isTransitioning: this.contextManager.isTransitioning
-      }
-    };
-  }
 }

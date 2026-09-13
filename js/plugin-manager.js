@@ -66,6 +66,7 @@ export class PluginManager {
                 'plugins/plugin-base.js',
                 'plugins/graph-point-interaction.js',
                 'plugins/spectrum-overlay.js',
+                'plugins/multires-spectrum.js',
                 'plugins/theme-palette.js'
             ]
                 .map(url => this.withDevelopmentCacheBuster(url, devCacheToken));
@@ -146,6 +147,8 @@ export class PluginManager {
                 console.error('Error loading spectrum overlay:', error);
             }
             
+            await loadScriptWithProgress(jsUrls.shift());
+
             // Load remaining JS files in parallel with error handling
             try {
                 // Create batches of JS files to load in parallel (6 at a time to respect browser connection limits)

@@ -117,8 +117,10 @@ input[type="checkbox"] + label::before {
 
 .radio-group {
     display: flex;
-    gap: 20px;
+    column-gap: 20px;
+    row-gap: 4px;
     flex-wrap: wrap;
+    align-items: center;
 }
 
 .radio-group label {
@@ -127,6 +129,17 @@ input[type="checkbox"] + label::before {
     color: var(--et-surface-89);
     margin-top: 2px;
     margin-bottom: 2px;
+}
+
+/* A radio and its caption are one wrapping unit. Giving every unit the normal
+   row height also keeps wrapped lines on the same vertical rhythm as the
+   surrounding parameter rows. */
+.radio-group > :has(> input[type="radio"]) {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    min-height: 26px;
+    white-space: nowrap;
 }
 
 .header-button {
@@ -796,13 +809,6 @@ body.layout-mobile #pipelineStats {
     font-size: 16px;
 }
 
-.pipeline-header-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-right: 10px;
-}
-
 .preset-select {
     appearance: none;
     -webkit-appearance: none;
@@ -1310,6 +1316,15 @@ body.layout-mobile #pipelineStats {
     margin: 2px 0;
 }
 
+.plugin-parameter-ui .parameter-row.radio-group {
+    column-gap: 20px;
+    row-gap: 4px;
+}
+
+.plugin-parameter-ui .parameter-row:has(> .radio-group) {
+    row-gap: 4px;
+}
+
 body.layout-mobile .plugin-parameter-ui .parameter-row {
     min-height: var(--et-mobile-control-height);
 }
@@ -1319,13 +1334,11 @@ body.layout-mobile .plugin-parameter-ui .parameter-row {
     margin-bottom: 0;
 }
 
-/* Keep wrapped setting labels within the standard control height. */
+/* Clamp long setting labels to two lines without shrinking the font's line box. */
 .plugin-parameter-ui .parameter-row:has(> input[type="number"], > input[type="range"], > select) > label:first-child {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    line-height: 13px;
-    max-height: 26px;
     overflow: hidden;
 }
 
@@ -1513,19 +1526,6 @@ body.layout-mobile .plugin-parameter-ui .spectrum-overlay-axis-title {
     color: var(--et-surface-51);
     font-size: 12px;
     text-align: right;
-}
-
-.error-details {
-    margin-left: 20px;
-    font-size: 0.9em;
-    color: var(--et-surface-90);
-}
-
-.error-suggestion {
-    margin-left: 20px;
-    font-size: 0.9em;
-    color: var(--et-success);
-    margin-top: 4px;
 }
 
 @keyframes fadeIn {
@@ -2000,7 +2000,6 @@ body.layout-mini-player {
 
 body.layout-mini-player .title-container > :not(#errorDisplay),
 body.layout-mini-player .subtitle-container,
-body.layout-mini-player .header,
 body.layout-mini-player .main-container,
 body.layout-mini-player #libraryView,
 body.layout-mini-player .library-recovery-shell {
@@ -3512,8 +3511,6 @@ input[type="radio"]:disabled {
 
 .radio-group label,
 .checkbox-row label,
-.fifteen-band-peq-radio-label,
-.fifteen-band-geq-radio-label,
 .plugin-parameter-ui .radio-label {
     color: var(--et-text-secondary);
     cursor: pointer;
@@ -3878,6 +3875,7 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .fbdyn-band-tabs,
     .room-eq-tabs,
     .am-radio-simulator-tabs,
+    .tv-audio-simulator-tabs,
     .sw-radio-simulator-tabs,
     .vinyl-simulator-tabs,
     .modal-resonator-tabs,
@@ -3899,6 +3897,7 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .fbdyn-band-tab,
     .room-eq-tab,
     .am-radio-simulator-tab,
+    .tv-audio-simulator-tab,
     .sw-radio-simulator-tab,
     .vinyl-simulator-tab,
     .modal-resonator-tab,
@@ -3938,6 +3937,7 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .fbdyn-band-tab,
     .room-eq-tab,
     .am-radio-simulator-tab,
+    .tv-audio-simulator-tab,
     .sw-radio-simulator-tab,
     .vinyl-simulator-tab,
     .modal-resonator-tab,
@@ -3958,6 +3958,7 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .fbdyn-band-tab,
     .room-eq-tab,
     .am-radio-simulator-tab,
+    .tv-audio-simulator-tab,
     .sw-radio-simulator-tab,
     .vinyl-simulator-tab,
     .modal-resonator-tab,
@@ -3978,6 +3979,7 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .fbdyn-band-tab,
     .room-eq-tab,
     .am-radio-simulator-tab,
+    .tv-audio-simulator-tab,
     .sw-radio-simulator-tab,
     .vinyl-simulator-tab,
     .modal-resonator-tab,
@@ -3996,6 +3998,7 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .fbdyn-band-tab,
     .room-eq-tab,
     .am-radio-simulator-tab,
+    .tv-audio-simulator-tab,
     .sw-radio-simulator-tab,
     .vinyl-simulator-tab,
     .modal-resonator-tab,
@@ -4015,6 +4018,7 @@ body :is(
     .fbdyn-band-tab,
     .room-eq-tab,
     .am-radio-simulator-tab,
+    .tv-audio-simulator-tab,
     .sw-radio-simulator-tab,
     .vinyl-simulator-tab,
     .modal-resonator-tab,
@@ -4055,6 +4059,7 @@ body.layout-mobile :is(
     .fbdyn-band-contents,
     .vinyl-simulator-tab-contents,
     .am-radio-simulator-tab-contents,
+    .tv-audio-simulator-tab-contents,
     .sw-radio-simulator-tab-contents,
     .tube-simulator-tab-contents,
     .room-eq-tab-contents
@@ -4071,6 +4076,7 @@ body.layout-mobile :is(
     .fbdyn-band-content,
     .vinyl-simulator-tab-content,
     .am-radio-simulator-tab-content,
+    .tv-audio-simulator-tab-content,
     .sw-radio-simulator-tab-content,
     .tube-simulator-tab-content,
     .room-eq-tab-content
@@ -4097,6 +4103,7 @@ body.layout-mobile :is(
 .vinyl-simulator-tab-content:not(.active),
 :is(
     .am-radio-simulator-tab-content,
+    .tv-audio-simulator-tab-content,
     .sw-radio-simulator-tab-content,
     .tube-simulator-tab-content,
     .room-eq-tab-content

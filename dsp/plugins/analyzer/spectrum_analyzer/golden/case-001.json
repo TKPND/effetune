@@ -13,14 +13,15 @@
   "seed": "0xeffe7a5e",
   "params": {
     "dr": -96,
-    "pt": 12
+    "pt": 12,
+    "hq": false
   },
   "events": [],
   "tolerance": {
     "abs": 0.000001,
     "policy": "per-sample"
   },
-  "jsEngineHash": "442871de1b7833d224574b67facd479d703868d8c41ef066eef19bbfe96c7f41",
+  "jsEngineHash": "634bec1422830d0de15f9b0f7ff172b04b7316594f56ed2d32de09211cfc4c79",
   "outputFloats": 24000,
   "byteLength": 96000,
   "binary": "case-001.f32"

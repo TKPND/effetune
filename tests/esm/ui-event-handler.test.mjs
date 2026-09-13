@@ -635,7 +635,7 @@ test('initDragAndDrop handles browser and Electron files, presets, music, errors
         files: [createFile('bad.effetune_preset', { text: '{bad' })]
       })
     });
-    assert.ok(harness.calls.some(call => call[0] === 'setError' && call[1] === 'Invalid preset file format'));
+    assert.ok(harness.calls.some(call => call[0] === 'setError' && call[1] === 'error.invalidPresetData'));
 
     harness.documentRef.dispatch('drop', {
       target: harness.pipeline,
@@ -644,7 +644,7 @@ test('initDragAndDrop handles browser and Electron files, presets, music, errors
         files: [createFile('bad.effetune_preset', { failRead: true })]
       })
     });
-    assert.ok(harness.calls.some(call => call[0] === 'setError' && call[1] === 'Failed to read preset file'));
+    assert.ok(harness.calls.some(call => call[0] === 'setError' && call[1] === 'error.failedToReadPresetFile'));
 
     harness.documentRef.dispatch('drop', {
       target: harness.pipeline,
@@ -1090,8 +1090,7 @@ test('new plugin and preset drops handle JSON, creation, missing dependencies, a
     const handler = createHandler(harness);
     await handler.handleUserPresetDrop({ clientX: 1, clientY: 2 }, 'User');
     await handler.handlePresetDrop({ clientX: 1, clientY: 2 }, 'System');
-    assert.ok(harness.calls.some(call => call[0] === 'setError' && String(call[1]).includes('user failed')));
-    assert.ok(harness.calls.some(call => call[0] === 'setError' && String(call[1]).includes('system failed')));
+    assert.equal(harness.calls.filter(call => call[0] === 'setError' && call[1] === 'error.failedToLoadPreset').length, 2);
   });
 
   await withUIEventGlobals({

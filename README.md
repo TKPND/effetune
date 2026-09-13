@@ -321,6 +321,7 @@ If the problem persists, report it through [GitHub Issues](https://github.com/Fr
 | Analyzer  | Level Meter | Displays audio level with peak hold | [Details](docs/plugins/analyzer.md#level-meter) |
 | Analyzer  | Note Spectrogram | Shows estimated pitches over time as a scrolling piano roll | [Details](docs/plugins/analyzer.md#note-spectrogram) |
 | Analyzer  | Oscilloscope | Real-time waveform visualization | [Details](docs/plugins/analyzer.md#oscilloscope) |
+| Analyzer  | Pitch Meter | Tracks one fundamental pitch and its tuning over time | [Details](docs/plugins/analyzer.md#pitch-meter) |
 | Analyzer  | Spectrogram | Shows frequency spectrum changes over time | [Details](docs/plugins/analyzer.md#spectrogram) |
 | Analyzer  | Spectrum Analyzer | Shows the strength of bass, mids, and treble in real time | [Details](docs/plugins/analyzer.md#spectrum-analyzer) |
 | Analyzer  | Stereo Meter | Visualizes stereo balance and channel correlation | [Details](docs/plugins/analyzer.md#stereo-meter) |
@@ -378,6 +379,7 @@ If the problem persists, report it through [GitHub Issues](https://github.com/Fr
 | Lo-Fi     | Simple Jitter | Digital jitter simulation | [Details](docs/plugins/lofi.md#simple-jitter) |
 | Lo-Fi     | SW Radio Simulator | Passes music through a modeled shortwave broadcast, ionospheric path, and receiver chain | [Details](docs/plugins/lofi.md#sw-radio-simulator) |
 | Lo-Fi     | Tape Artifacts | Records music onto a modeled reel-to-reel tape and plays it back | [Details](docs/plugins/lofi.md#tape-artifacts) |
+| Lo-Fi     | TV Audio Simulator | Passes music through modeled analogue and NICAM television broadcast sound paths | [Details](docs/plugins/lofi.md#tv-audio-simulator) |
 | Lo-Fi     | Vinyl Artifacts | Adds vinyl-style pops, crackle, hiss, rumble, and stereo noise bleed | [Details](docs/plugins/lofi.md#vinyl-artifacts) |
 | Lo-Fi     | Vinyl Simulator | Cuts the input into a modeled groove and plays it back with a physical stylus model | [Details](docs/plugins/lofi.md#vinyl-simulator) |
 | Modulation | Auto Filter | Sweeps a resonant filter with an LFO or the music's amplitude envelope | [Details](docs/plugins/modulation.md#auto-filter) |

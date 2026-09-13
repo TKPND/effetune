@@ -19,6 +19,7 @@ import {
   LoPassFilter,
   Matrix,
   Oscilloscope,
+  PitchMeter,
   Phaser,
   Spectrogram,
   NoteSpectrogram,
@@ -153,8 +154,8 @@ test('generated effects import and the public catalog stays semantic', async () 
   const compressor = new generated.Compressor({ threshold: -18 });
   assert.equal(compressor.type, 'Compressor');
   assert.equal(compressor.parameters.threshold, -18);
-  assert.equal(EFFECT_TYPES.length, 101);
-  assert.equal(EFFECT_CATALOG.effects.length, 101);
+  assert.equal(EFFECT_TYPES.length, 102);
+  assert.equal(EFFECT_CATALOG.effects.length, 102);
   assert.deepEqual(EFFECT_CATALOG.channels, [
     'all', 'stereo', 'left', 'right',
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16',
@@ -176,6 +177,21 @@ test('dependent cross-field rules match across constructors, JSON, and partial e
     {
       type: 'NoteSpectrogram',
       EffectClass: NoteSpectrogram,
+      supplied: { minimumMidi: 91, maximumMidi: 28 },
+      canonical: { minimumMidi: 28, maximumMidi: 91 },
+      updates: { minimumMidi: 21, maximumMidi: 108 },
+      canonicalize(parameters) {
+        const values = { ...parameters };
+        if (values.minimumMidi > values.maximumMidi) {
+          [values.minimumMidi, values.maximumMidi] =
+            [values.maximumMidi, values.minimumMidi];
+        }
+        return values;
+      }
+    },
+    {
+      type: 'PitchMeter',
+      EffectClass: PitchMeter,
       supplied: { minimumMidi: 91, maximumMidi: 28 },
       canonical: { minimumMidi: 28, maximumMidi: 91 },
       updates: { minimumMidi: 21, maximumMidi: 108 },
@@ -855,6 +871,23 @@ test('all analyzer telemetry decoders expose semantic observations', async t => 
       }
     },
     {
+      effect: new PitchMeter({ id: 'pitch' }),
+      kind: 'pitch',
+      verify(frame) {
+        assert.equal(frame.sampleRate, 48000);
+        assert.ok(frame.timeSeconds > 0);
+        assert.ok(frame.hopSeconds > 0);
+        assert.ok(frame.frameIndex > 0);
+        assert.ok(frame.generation > 0);
+        assert.equal(frame.voiced, true);
+        assert.ok(frame.f0Hz > 0);
+        assert.ok(frame.midi >= 21 && frame.midi <= 108);
+        assert.ok(frame.cents >= -50 && frame.cents <= 50);
+        assert.ok(frame.confidence > 0 && frame.confidence <= 1);
+        assert.ok(Number.isFinite(frame.levelDb));
+      }
+    },
+    {
       effect: new SpectrumAnalyzer({ id: 'spectrum', points: 10 }),
       kind: 'spectrum',
       verify(frame) {
@@ -867,6 +900,30 @@ test('all analyzer telemetry decoders expose semantic observations', async t => 
         assert.ok(frame.peakDb.every(Number.isFinite));
         assert.ok(Math.max(...frame.currentDb) > -20);
         assert.ok(Math.max(...frame.currentDb) - Math.min(...frame.currentDb) > 20);
+      }
+    },
+    {
+      effect: new SpectrumAnalyzer({
+        id: 'spectrum-hq', points: 10, highQualityLog: true
+      }),
+      kind: 'spectrumHq',
+      verify(frame) {
+        assert.equal(frame.sampleRate, 48000);
+        assert.equal(frame.points, 10);
+        assert.equal(frame.hop, 1600);
+        assert.ok(frame.generation > 0);
+        assert.equal(typeof frame.captureEnd, 'bigint');
+        assert.ok(frame.captureEnd > 0n);
+        assert.ok(frame.frameIndex > 0);
+        assert.equal(frame.cellCount, 2048);
+        assert.equal(frame.minFrequency, 20);
+        assert.equal(frame.maxFrequency, 40000);
+        assert.equal(frame.firstValidIndex, 0);
+        assert.ok(frame.validCellCount > 0 && frame.validCellCount < frame.cellCount);
+        assert.equal(frame.currentDb.length, frame.cellCount);
+        assert.equal(frame.peakDb.length, frame.cellCount);
+        assert.ok(frame.currentDb.every(Number.isFinite));
+        assert.ok(frame.peakDb.every(Number.isFinite));
       }
     },
     {
@@ -898,6 +955,29 @@ test('all analyzer telemetry decoders expose semantic observations', async t => 
         assert.equal(frame.intensities.length, 256);
         assert.ok(frame.intensities.every(value => value >= 0 && value <= 255));
         assert.ok(Math.max(...frame.intensities) > 0);
+      }
+    },
+    {
+      effect: new Spectrogram({
+        id: 'spectrogram-hq', points: 10, highQualityLog: true
+      }),
+      kind: 'spectrogramHq',
+      verify(frame) {
+        assert.equal(frame.sampleRate, 48000);
+        assert.equal(frame.points, 10);
+        assert.equal(frame.hop, 512);
+        assert.ok(frame.generation > 0);
+        assert.equal(typeof frame.captureEnd, 'bigint');
+        assert.ok(frame.captureEnd > 0n);
+        assert.ok(frame.frameIndex > 0);
+        assert.equal(frame.cellCount, 256);
+        assert.equal(frame.minFrequency, 20);
+        assert.equal(frame.maxFrequency, 40000);
+        assert.ok(frame.firstValidIndex > 0);
+        assert.ok(frame.validCellCount > 0 && frame.validCellCount < frame.cellCount);
+        assert.equal(frame.firstValidIndex + frame.validCellCount, frame.cellCount);
+        assert.equal(frame.intensities.length, frame.cellCount);
+        assert.ok(frame.intensities.every(value => value >= 0 && value <= 255));
       }
     },
     {

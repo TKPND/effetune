@@ -1502,8 +1502,61 @@ test('AudioManager delivers compiled modules or cloned bytes with rollout and te
     assert.notEqual(delivered, bytes);
     assert.deepEqual([...new Uint8Array(delivered)], [...new Uint8Array(bytes)]);
     assert.equal(messageOf(bytesNode.port, 'dspSetTelemetryRate').message.hz, 15);
+
+    manager.powerPolicyController = {
+      hostHidden: true,
+      dspUiSuppressionReasons: new Set(),
+      displayDspBypassed: true
+    };
+    const bypassedNode = createNode('bypassed');
+    assert.equal(manager.postDspModuleToWorklet(bypassedNode), true);
+    assert.equal(messageOf(bypassedNode.port, 'dspSetTelemetryRate').message.hz, 0);
+
+    manager.powerPolicyController.displayDspBypassed = false;
+    const hiddenActiveNode = createNode('hidden-active');
+    assert.equal(manager.postDspModuleToWorklet(hiddenActiveNode), true);
+    assert.equal(messageOf(hiddenActiveNode.port, 'dspSetTelemetryRate').message.hz, 15);
+
+    globalThis.document.hidden = false;
+    manager.powerPolicyController.hostHidden = false;
+    manager.powerPolicyController.dspUiSuppressionReasons.add('mini-player');
+    manager.powerPolicyController.displayDspBypassed = true;
+    const miniPlayerNode = createNode('mini-player');
+    assert.equal(manager.postDspModuleToWorklet(miniPlayerNode), true);
+    assert.equal(messageOf(miniPlayerNode.port, 'dspSetTelemetryRate').message.hz, 0);
+
+    manager.powerPolicyController.dspUiSuppressionReasons.clear();
+    manager.powerPolicyController.displayDspBypassed = false;
+    const foregroundNode = createNode('foreground');
+    assert.equal(manager.postDspModuleToWorklet(foregroundNode), true);
+    assert.equal(messageOf(foregroundNode.port, 'dspSetTelemetryRate').message.hz, 60);
     assert.equal(manager.postDspModuleToWorklet(null), false);
   });
+});
+
+test('AudioManager sends one telemetry rate to every current worklet', () => {
+  const manager = createManager();
+  const contextNode = createNode('context');
+  const primaryNode = createNode('primary');
+  const parallelNode = createNode('parallel');
+  manager.contextManager = { workletNode: contextNode };
+  manager.workletNode = primaryNode;
+  manager._parallelWorkletB = parallelNode;
+
+  manager.updateDspTelemetryRate({ hidden: true, displayDspBypassed: true });
+  manager.updateDspTelemetryRate({ hidden: true, displayDspBypassed: false });
+  manager.updateDspTelemetryRate({ hidden: false, displayDspBypassed: false });
+
+  for (const node of [contextNode, primaryNode, parallelNode]) {
+    assert.deepEqual(
+      node.port.messages.map(entry => entry.message),
+      [
+        { type: 'dspSetTelemetryRate', hz: 0 },
+        { type: 'dspSetTelemetryRate', hz: 15 },
+        { type: 'dspSetTelemetryRate', hz: 60 }
+      ]
+    );
+  }
 });
 
 test('AudioManager retries module DataCloneError with retained bytes and rethrows other post failures', async () => {

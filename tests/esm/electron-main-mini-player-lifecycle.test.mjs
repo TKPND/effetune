@@ -18,15 +18,16 @@ test('each recreated main window starts with fresh normal-mode state', () => {
 
 test('full-page navigation restores normal window shape before replacing the renderer', () => {
   const navigationStart = mainSource.indexOf("mainWindow.webContents.on('did-start-navigation'");
-  const navigationEnd = mainSource.indexOf("mainWindow.webContents.session.on('will-download'", navigationStart);
+  const navigationEnd = mainSource.indexOf("mainWindow.webContents.on('render-process-gone'", navigationStart);
   const navigationSource = mainSource.slice(navigationStart, navigationEnd);
 
   assert.ok(navigationStart >= 0);
+  assert.ok(navigationEnd > navigationStart);
   assert.match(navigationSource, /if \(isMainFrame && !isInPlace\)/);
-  assert.ok(
-    navigationSource.indexOf('ipcHandlers.restoreNormalWindowShape?.();') <
-      navigationSource.indexOf('disarmRendererWatchdog(')
-  );
+  const restoreIndex = navigationSource.indexOf('ipcHandlers.restoreNormalWindowShape?.();');
+  const disarmIndex = navigationSource.indexOf('disarmRendererWatchdog(');
+  assert.ok(restoreIndex >= 0);
+  assert.ok(disarmIndex > restoreIndex);
 });
 
 test('maximizing the mini player waits for restored bounds before maximizing the normal layout', () => {

@@ -624,10 +624,6 @@ function getScriptContextBonus(repairContext, script, score) {
   return bonus;
 }
 
-function hasScriptContext(repairContext, script) {
-  return repairContext?.languageScripts?.has(script) || repairContext?.contextScripts?.has(script);
-}
-
 function hasTextScriptContext(repairContext, script) {
   return repairContext?.contextScripts?.has(script);
 }

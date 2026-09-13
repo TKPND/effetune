@@ -109,7 +109,6 @@ export class DragDropManager {
         // If somehow the column exists but is not in the list query, treat as invalid
         // Example: Drag starts, UI updates, then drag event fires with stale targetColumn reference.
         if (columnIndex === -1) {
-             // console.warn("Target column found but not in current list query results.");
              return { columnIndex: null, itemIndex: null };
         }
 

@@ -12,7 +12,17 @@ from typing import Literal
 class TelemetryFrame:
     """Common metadata for a decoded analyzer observation."""
 
-    kind: Literal["level", "noteSpectrogram", "oscilloscope", "spectrum", "spectrogram", "stereo"]
+    kind: Literal[
+        "level",
+        "noteSpectrogram",
+        "oscilloscope",
+        "pitch",
+        "spectrum",
+        "spectrumHq",
+        "spectrogram",
+        "spectrogramHq",
+        "stereo",
+    ]
     effect_type: str
     effect_id: str | None
     effect_index: int
@@ -66,10 +76,58 @@ class NoteSpectrogramTelemetryFrame(TelemetryFrame):
 
 
 @dataclass(frozen=True, slots=True)
+class PitchMeterTelemetryFrame(TelemetryFrame):
+    sample_rate: float
+    time_seconds: float
+    hop_seconds: float
+    frame_index: int
+    generation: int
+    f0_hz: float
+    midi: float
+    cents: float
+    confidence: float
+    level_db: float
+    voiced: bool
+
+
+@dataclass(frozen=True, slots=True)
 class SpectrogramTelemetryFrame(TelemetryFrame):
     sample_rate: float
     time_seconds: float
     points: int
+    intensities: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SpectrumHqTelemetryFrame(TelemetryFrame):
+    sample_rate: float
+    points: int
+    hop: int
+    generation: int
+    capture_end: int
+    frame_index: int
+    cell_count: int
+    min_frequency: float
+    max_frequency: float
+    first_valid_index: int
+    valid_cell_count: int
+    current_db: tuple[float, ...]
+    peak_db: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SpectrogramHqTelemetryFrame(TelemetryFrame):
+    sample_rate: float
+    points: int
+    hop: int
+    generation: int
+    capture_end: int
+    frame_index: int
+    cell_count: int
+    min_frequency: float
+    max_frequency: float
+    first_valid_index: int
+    valid_cell_count: int
     intensities: tuple[int, ...]
 
 
@@ -86,13 +144,21 @@ class StereoTelemetryFrame(TelemetryFrame):
 
 
 _ANALYZER_FRAMES = {
-    "LevelMeter": (1, 1),
-    "NoteSpectrogram": (24, 3),
-    "Oscilloscope": (3, 2),
-    "SpectrumAnalyzer": (4, 1),
-    "Spectrogram": (5, 1),
-    "StereoMeter": (6, 2),
+    "LevelMeter": (1, (1,)),
+    "NoteSpectrogram": (24, (3,)),
+    "Oscilloscope": (3, (2,)),
+    "PitchMeter": (26, (1,)),
+    "SpectrumAnalyzer": (4, (1, 2)),
+    "Spectrogram": (5, (1, 2)),
+    "StereoMeter": (6, (2,)),
 }
+
+_MULTIRES_HQ_MIN_FREQUENCY = 20.0
+_MULTIRES_HQ_MAX_FREQUENCY = 40_000.0
+_MULTIRES_HQ_SPECTRUM_CELLS = 2048
+_MULTIRES_HQ_SPECTROGRAM_CELLS = 256
+_PITCH_METER_MIN_DETECTED_MIDI = 20.5
+_PITCH_METER_MAX_DETECTED_MIDI = 108.5
 
 
 def _common(
@@ -296,6 +362,112 @@ def _decode_spectrogram(
     )
 
 
+def _decode_multires_hq(
+    payload: memoryview,
+    node: tuple[str, str | None, int],
+    sequence: int,
+    dropped: int,
+    frame_type: int,
+) -> TelemetryFrame | None:
+    if len(payload) < 48:
+        return None
+    (
+        sample_rate,
+        points,
+        flags,
+        hop,
+        generation,
+        capture_end,
+        frame_index,
+        cell_count,
+        min_frequency,
+        max_frequency,
+        first_valid_index,
+        valid_cell_count,
+    ) = struct.unpack_from("<fHHIIQIIffII", payload)
+    is_spectrum = frame_type == 4
+    if (
+        not math.isfinite(sample_rate)
+        or sample_rate <= 0
+        or not 8 <= points <= 14
+        or flags != 0
+        or generation == 0
+    ):
+        return None
+    expected_cell_count = (
+        _MULTIRES_HQ_SPECTRUM_CELLS
+        if is_spectrum
+        else _MULTIRES_HQ_SPECTROGRAM_CELLS
+    )
+    size = 1 << points
+    expected_hop = (
+        max(size // 2, math.ceil(sample_rate / 30))
+        if is_spectrum
+        else size // 2
+    )
+    if (
+        cell_count != expected_cell_count
+        or hop != expected_hop
+        or min_frequency != _MULTIRES_HQ_MIN_FREQUENCY
+        or max_frequency != _MULTIRES_HQ_MAX_FREQUENCY
+    ):
+        return None
+    expected_first_valid_index = cell_count
+    expected_valid_cell_count = 0
+    log_step = math.log(
+        _MULTIRES_HQ_MAX_FREQUENCY / _MULTIRES_HQ_MIN_FREQUENCY
+    ) / (cell_count - 1)
+    for index in range(cell_count):
+        ascending = index if is_spectrum else cell_count - 1 - index
+        frequency = (
+            _MULTIRES_HQ_MAX_FREQUENCY
+            if ascending == cell_count - 1
+            else _MULTIRES_HQ_MIN_FREQUENCY * math.exp(ascending * log_step)
+        )
+        if frequency <= sample_rate * 0.5:
+            if expected_first_valid_index == cell_count:
+                expected_first_valid_index = index
+            expected_valid_cell_count += 1
+    if expected_valid_cell_count == 0:
+        expected_first_valid_index = 0
+    value_bytes = cell_count * 8 if is_spectrum else cell_count
+    if (
+        first_valid_index != expected_first_valid_index
+        or valid_cell_count != expected_valid_cell_count
+        or len(payload) != 48 + value_bytes
+    ):
+        return None
+    metadata = {
+        "sample_rate": sample_rate,
+        "points": points,
+        "hop": hop,
+        "generation": generation,
+        "capture_end": capture_end,
+        "frame_index": frame_index,
+        "cell_count": cell_count,
+        "min_frequency": min_frequency,
+        "max_frequency": max_frequency,
+        "first_valid_index": first_valid_index,
+        "valid_cell_count": valid_cell_count,
+    }
+    if is_spectrum:
+        current_db = struct.unpack_from(f"<{cell_count}f", payload, 48)
+        peak_db = struct.unpack_from(f"<{cell_count}f", payload, 48 + cell_count * 4)
+        if any(not math.isfinite(value) for value in current_db + peak_db):
+            return None
+        return SpectrumHqTelemetryFrame(
+            **_common("spectrumHq", node, sequence, dropped),
+            **metadata,
+            current_db=current_db,
+            peak_db=peak_db,
+        )
+    return SpectrogramHqTelemetryFrame(
+        **_common("spectrogramHq", node, sequence, dropped),
+        **metadata,
+        intensities=tuple(payload[48:]),
+    )
+
+
 def _decode_note_spectrogram(
     payload: memoryview,
     node: tuple[str, str | None, int],
@@ -337,6 +509,75 @@ def _decode_note_spectrogram(
         generation=generation,
         levels=levels,
         volume_db=volume_db,
+    )
+
+
+def _decode_pitch_meter(
+    payload: memoryview,
+    node: tuple[str, str | None, int],
+    sequence: int,
+    dropped: int,
+) -> TelemetryFrame | None:
+    if len(payload) != 44:
+        return None
+    (
+        sample_rate,
+        time_seconds,
+        hop_seconds,
+        frame_index,
+        generation,
+        f0_hz,
+        midi,
+        cents,
+        confidence,
+        level_db,
+        flags,
+        reserved,
+    ) = struct.unpack_from("<fffIIfffffHH", payload)
+    voiced = bool(flags & 1)
+    if (
+        not math.isfinite(sample_rate)
+        or sample_rate <= 0
+        or not math.isfinite(time_seconds)
+        or time_seconds < 0
+        or not math.isfinite(hop_seconds)
+        or hop_seconds <= 0
+        or generation == 0
+        or not all(
+            math.isfinite(value)
+            for value in (f0_hz, midi, cents, confidence, level_db)
+        )
+        or not 0 <= confidence <= 1
+        or flags & ~1
+        or reserved != 0
+        or (
+            voiced
+            and (
+                f0_hz <= 0
+                or midi < _PITCH_METER_MIN_DETECTED_MIDI
+                or midi > _PITCH_METER_MAX_DETECTED_MIDI
+                or not -50 <= cents <= 50
+            )
+        )
+        or (
+            not voiced
+            and (f0_hz != 0 or midi != 0 or cents != 0 or confidence != 0)
+        )
+    ):
+        return None
+    return PitchMeterTelemetryFrame(
+        **_common("pitch", node, sequence, dropped),
+        sample_rate=sample_rate,
+        time_seconds=time_seconds,
+        hop_seconds=hop_seconds,
+        frame_index=frame_index,
+        generation=generation,
+        f0_hz=f0_hz,
+        midi=midi,
+        cents=cents,
+        confidence=confidence,
+        level_db=level_db,
+        voiced=voiced,
     )
 
 
@@ -399,6 +640,7 @@ _DECODERS = {
     5: _decode_spectrogram,
     6: _decode_stereo,
     24: _decode_note_spectrogram,
+    26: _decode_pitch_meter,
 }
 
 
@@ -422,12 +664,16 @@ def _decode_telemetry_packet(
             break
         node = nodes_by_tap.get(tap_id)
         expected = _ANALYZER_FRAMES.get(node[0]) if node else None
-        if expected == (frame_type, version):
-            decoded = _DECODERS[frame_type](
-                view[offset + 16 : offset + 16 + payload_bytes],
-                node,
-                sequence,
-                pending_dropped,
+        if expected and expected[0] == frame_type and version in expected[1]:
+            payload = view[offset + 16 : offset + 16 + payload_bytes]
+            decoded = (
+                _decode_multires_hq(
+                    payload, node, sequence, pending_dropped, frame_type
+                )
+                if version == 2 and frame_type in (4, 5)
+                else _DECODERS[frame_type](
+                    payload, node, sequence, pending_dropped
+                )
             )
             if decoded is not None:
                 frames.append(decoded)
@@ -441,8 +687,11 @@ __all__ = [
     "LevelTelemetryFrame",
     "NoteSpectrogramTelemetryFrame",
     "OscilloscopeTelemetryFrame",
+    "PitchMeterTelemetryFrame",
     "SpectrogramTelemetryFrame",
+    "SpectrogramHqTelemetryFrame",
     "SpectrumTelemetryFrame",
+    "SpectrumHqTelemetryFrame",
     "StereoTelemetryFrame",
     "TelemetryFrame",
 ]

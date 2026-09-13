@@ -722,6 +722,20 @@ test('Spectrogram plot uses one fixed black-background palette before history is
       assert.equal(operations.find(operation =>
         operation.type === 'fillText' && operation.text === 'Frequency (Hz)').fillStyle, '#fff');
     }
+    const graphLabels = operations.filter(operation =>
+      operation.type === 'fillText' &&
+      (operation.text === 'Time' || operation.text === 'Frequency (Hz)' ||
+        operation.fillStyle === '#ccc'));
+    const outlinedGraphLabels = operations.filter(operation =>
+      operation.type === 'strokeText' && graphLabels.some(label =>
+        label.text === operation.text && label.x === operation.x && label.y === operation.y));
+    assert.deepEqual(
+      outlinedGraphLabels.map(({ text, x, y }) => ({ text, x, y })),
+      graphLabels.map(({ text, x, y }) => ({ text, x, y }))
+    );
+    assert.ok(outlinedGraphLabels.every(label =>
+      label.strokeStyle === 'rgb(0, 0, 0)' &&
+      label.lineWidth === 2 && label.lineJoin === 'round'));
   };
 
   plugin.drawGraph(0);
@@ -869,7 +883,8 @@ test('Spectrogram Keyboard scales history, grid, clock and labels to the same pl
         label.x > plotWidth && label.x < width && label.y > 0 && label.y < height));
       assert.equal(operations.some(operation =>
         (operation.type === 'fillText' || operation.type === 'strokeText') && /^C\d+$/.test(operation.text)), false);
-      const outlinedLabels = operations.filter(operation => operation.type === 'strokeText');
+      const outlinedLabels = operations.filter(operation =>
+        operation.type === 'strokeText' && /^\d+$/.test(operation.text) && operation.x > plotWidth);
       assert.deepEqual(outlinedLabels.map(({ text, x, y }) => ({ text, x, y })),
         octaveLabels.map(({ text, x, y }) => ({ text, x, y })));
       assert.ok(outlinedLabels.every(label =>

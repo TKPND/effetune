@@ -196,6 +196,7 @@ export class UIManager {
         this.audioPlayerLayoutPlaceholder = null;
         this.audioPlayerLayoutPlaceholderTimer = null;
         this.transientMessageTimer = null;
+        this.transientMessageRevision = 0;
         this.libraryManager = null;
         this.libraryView = null;
         this.libraryInitPromise = null;
@@ -273,7 +274,10 @@ export class UIManager {
         this.pipelineManager = new PipelineManager(audioManager, pluginManager, this.expandedPlugins, this.pluginListManager);
         this.initPipelineAnalyzerBootstrap();
         this.initPipelineAnalyzerMenuIntegration();
-        this.stateManager = new StateManager(audioManager);
+        this.stateManager = new StateManager(
+            audioManager,
+            (message, isError) => this.setError(message, isError)
+        );
         this.mobileMenu = new MobileMenu(this);
         this.mobileNav = new MobileNav(this);
         this.mobileNumberKeypad = new MobileNumberKeypad({
@@ -445,35 +449,36 @@ export class UIManager {
             this.transientMessageTimer = null;
         }
 
-        // Check if the message is a translation key
-        if (message && (message.startsWith('error.') || message.startsWith('success.') ||
-            message.startsWith('status.') || message.startsWith('library.'))) {
-            // Translate the message with provided parameters
-            message = this.t(message, params);
-        }
+        message = this.t(message, params);
 
         this.stateManager.setError(message, isError);
     }
 
     _scheduleMessageClear(duration) {
+        const revision = ++this.transientMessageRevision;
         const timeoutId = setTimeout(() => {
-            if (this.transientMessageTimer !== timeoutId) return;
-            this.transientMessageTimer = null;
-            this.stateManager.clearError();
+            if (this.transientMessageRevision !== revision) return;
+            this.clearError();
         }, duration);
         this.transientMessageTimer = timeoutId;
+        return {
+            clear: () => {
+                if (this.transientMessageRevision !== revision) return;
+                this.clearError();
+            }
+        };
     }
 
     // Header messages are notifications, not persistent state indicators, so they
     // must never remain visible indefinitely.
     setError(message, isError = false, params = {}) {
         this._setMessage(message, isError, params);
-        this._scheduleMessageClear(MESSAGE_DISPLAY_DURATION_MS);
+        return this._scheduleMessageClear(MESSAGE_DISPLAY_DURATION_MS);
     }
 
     showTransientMessage(message, isError = false, params = {}, duration = 3000) {
         this._setMessage(message, isError, params);
-        this._scheduleMessageClear(duration);
+        return this._scheduleMessageClear(duration);
     }
 
     toggleMiniPlayer() {
@@ -555,6 +560,7 @@ export class UIManager {
     }
 
     clearError() {
+        this.transientMessageRevision += 1;
         if (this.transientMessageTimer !== null) {
             clearTimeout(this.transientMessageTimer);
             this.transientMessageTimer = null;
@@ -635,7 +641,7 @@ export class UIManager {
             console.error('Failed to parse pipeline state:', error);
             // Show error to user
             if (this.stateManager) {
-                this.setError(this.t('error.invalidUrl', { message: error.message }), true);
+                this.setError('error.invalidUrl', true);
             }
             return null;
         }

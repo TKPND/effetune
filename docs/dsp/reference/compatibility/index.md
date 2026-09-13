@@ -22,8 +22,8 @@ integrated-LUFS/true-peak measurement.
 
 ## Analyzers and telemetry
 
-`LevelMeter`, `NoteSpectrogram`, `Oscilloscope`, `SpectrumAnalyzer`,
-`Spectrogram`, and `StereoMeter` expose decoded semantic observations in Python, JavaScript offline and
+`LevelMeter`, `NoteSpectrogram`, `Oscilloscope`, `PitchMeter`,
+`SpectrumAnalyzer`, `Spectrogram`, and `StereoMeter` expose decoded semantic observations in Python, JavaScript offline and
 streaming processing, and AudioWorklet. Telemetry is opt-in: the first callback or
 subscriber enables it and the last unsubscribe disables it. Long renders drain after
 every processing block. Public frames identify the semantic effect and contain owned
@@ -34,7 +34,7 @@ Common metadata:
 
 | JavaScript / Python | Meaning |
 |---|---|
-| `kind` / `kind` | `level`, `noteSpectrogram`, `oscilloscope`, `spectrum`, `spectrogram`, or `stereo` |
+| `kind` / `kind` | `level`, `noteSpectrogram`, `oscilloscope`, `pitch`, `spectrum`, `spectrumHq`, `spectrogram`, `spectrogramHq`, or `stereo` |
 | `effectType` / `effect_type` | Semantic effect type |
 | `effectId` / `effect_id` | Declared effect ID, or null / `None` |
 | `effectIndex` / `effect_index` | Zero-based position in the declared DSP chain |
@@ -58,6 +58,15 @@ Analyzer fields:
 | Spectrum | `binsTruncated` / `bins_truncated` | True when the highest bins were omitted to fit transport capacity |
 | Spectrum | `currentDb` / `current_db` | dBFS `[bin]`, ascending frequency from DC |
 | Spectrum | `peakDb` / `peak_db` | Peak-held dBFS `[bin]`, same order and length as current |
+| Spectrum HQ / Spectrogram HQ | `sampleRate` / `sample_rate` | Hz |
+| Spectrum HQ / Spectrogram HQ | `points` / `points` | FFT size exponent; the short FFT size is `2 ** points` |
+| Spectrum HQ / Spectrogram HQ | `hop` / `hop` | Nominal analysis step in input samples |
+| Spectrum HQ / Spectrogram HQ | `generation`, `frameIndex` / `generation`, `frame_index` | Non-zero analysis generation and unsigned observation counter within it |
+| Spectrum HQ / Spectrogram HQ | `captureEnd` / `capture_end` | End sample index of the aligned analysis capture; JavaScript uses `bigint` |
+| Spectrum HQ / Spectrogram HQ | `cellCount`, `minFrequency`, `maxFrequency` / `cell_count`, `min_frequency`, `max_frequency` | Log-frequency grid count and bounds in Hz |
+| Spectrum HQ / Spectrogram HQ | `firstValidIndex`, `validCellCount` / `first_valid_index`, `valid_cell_count` | Contiguous valid part of the grid; cells outside it have no input-band data |
+| Spectrum HQ | `currentDb` / `current_db` | dBFS `[cell]`, in ascending log-frequency grid order |
+| Spectrum HQ | `peakDb` / `peak_db` | Peak-held dBFS `[cell]`, same order and length as current |
 | Note Spectrogram | `sampleRate` / `sample_rate` | Hz |
 | Note Spectrogram | `timeSeconds` / `time_seconds` | Observation time in seconds on the processing timeline |
 | Note Spectrogram | `firstMidi` / `first_midi` | `21`, the first piano-key MIDI note before fine-pitch offsets are applied |
@@ -67,10 +76,22 @@ Analyzer fields:
 | Note Spectrogram | `generation` / `generation` | Non-zero analysis generation; a change indicates that analyzer state restarted |
 | Note Spectrogram | `levels` / `levels` | Pitch confidence in [0, 1] as JavaScript `Float32Array[440]` or Python `tuple[440]`; index `i` maps to MIDI `firstMidi + (i - 2) / divisionsPerSemitone` |
 | Note Spectrogram | `volumeDb` / `volume_db` | Volume in dB as JavaScript `Float32Array[440]` or Python `tuple[440]`, with the same pitch indexing as `levels`; values include a 3 dB/octave correction above 100 Hz, and -240 dB means no level was measured |
+| Pitch | `sampleRate` / `sample_rate` | Hz |
+| Pitch | `timeSeconds` / `time_seconds` | Observation time in seconds on the processing timeline |
+| Pitch | `hopSeconds` / `hop_seconds` | Nominal time step between analysis observations, in seconds |
+| Pitch | `frameIndex` / `frame_index` | Unsigned observation counter within the current analysis generation |
+| Pitch | `generation` / `generation` | Non-zero analysis generation; a change indicates that analyzer state restarted |
+| Pitch | `f0Hz` / `f0_hz` | Detected fundamental frequency in Hz; 0 when unvoiced |
+| Pitch | `midi` / `midi` | Fractional MIDI note relative to the configured A4 reference; 0 when unvoiced |
+| Pitch | `cents` / `cents` | Difference from the nearest semitone in cents, from -50 to +50; 0 when unvoiced |
+| Pitch | `confidence` / `confidence` | Detection confidence in [0, 1]; 0 when unvoiced |
+| Pitch | `levelDb` / `level_db` | Analyzed input level in dB |
+| Pitch | `voiced` / `voiced` | True when the pitch fields contain a detected fundamental pitch |
 | Spectrogram | `sampleRate` / `sample_rate` | Hz |
 | Spectrogram | `timeSeconds` / `time_seconds` | Observation time in seconds on the processing timeline |
 | Spectrogram | `points` / `points` | FFT size exponent; FFT size is `2 ** points` |
 | Spectrogram | `intensities` / `intensities` | `uint8[256]` display intensity, high-to-low log-frequency cells from index 0 through 255 |
+| Spectrogram HQ | `intensities` / `intensities` | `uint8[256]` display intensity, high-to-low log-frequency grid cells from index 0 through 255 |
 | Stereo | `sampleRate` / `sample_rate` | Hz |
 | Stereo | `discontinuity` / `discontinuity` | True when the sample delta is incomplete after truncation or a window change |
 | Stereo | `samples` / `samples` | JavaScript `Float32Array[side0, mid0, ...]`; Python `tuple[(side, mid), ...]`; linear amplitude where side is R-L and mid is L+R |
@@ -88,5 +109,5 @@ Telemetry stays local: the library only passes decoded frames to in-process Pyth
 callbacks or callbacks in the browser page. It does not automatically collect, persist,
 or send telemetry over the network, and it does not collect device or user identifiers.
 
-Other catalog telemetry remains metadata-only in v0.1. Integrated LUFS, BS.1770/EBU
+Other catalog telemetry remains metadata-only. Integrated LUFS, BS.1770/EBU
 R128, true peak, and dynamics gain-reduction observations are not part of this API.

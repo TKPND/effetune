@@ -1,3 +1,4 @@
+#include "../../../generated/cpp/SpectrogramPluginParams.h"
 #include "effetune/kernel.h"
 
 #include "pffft.h"
@@ -70,8 +71,12 @@ struct KernelHarness {
       : ring_storage(kTelemetryBytes), output(kTelemetryBytes) {
     descriptor = et_kernel_descriptor_SpectrogramPlugin();
     SPECTROGRAM_CHECK(descriptor != nullptr);
-    SPECTROGRAM_CHECK(descriptor != nullptr && descriptor->paramsHash == 0xc99dcc20u);
-    SPECTROGRAM_CHECK(descriptor != nullptr && descriptor->paramsFloatCount == 2u);
+    SPECTROGRAM_CHECK(descriptor != nullptr &&
+                      descriptor->paramsHash ==
+                          effetune::generated::SpectrogramPluginParams::kHash);
+    SPECTROGRAM_CHECK(descriptor != nullptr &&
+                      descriptor->paramsFloatCount ==
+                          effetune::generated::SpectrogramPluginParams::kFloatCount);
     SPECTROGRAM_CHECK(descriptor != nullptr && descriptor->objectSize <= object_storage.size());
     if (descriptor == nullptr || descriptor->objectSize > object_storage.size()) {
       return;
@@ -91,9 +96,12 @@ struct KernelHarness {
     }
   }
 
-  void setParams(float dB_range, float points) noexcept {
-    const std::array<float, 2> params = {dB_range, points};
-    SPECTROGRAM_CHECK(kernel->stageParameters(params.data(), 2u, descriptor->paramsHash) == ET_OK);
+  void setParams(float dB_range, float points, bool hq = false) noexcept {
+    const std::array<float, effetune::generated::SpectrogramPluginParams::kFloatCount> params = {
+        dB_range, points, hq ? 1.0F : 0.0F};
+    SPECTROGRAM_CHECK(kernel->stageParameters(params.data(),
+                                              static_cast<std::uint32_t>(params.size()),
+                                              descriptor->paramsHash) == ET_OK);
   }
 
   void process(float *audio, std::uint32_t channels, std::uint32_t frames,
@@ -535,6 +543,50 @@ void testLatencyRemainsZero() {
   SPECTROGRAM_CHECK(harness.kernel != nullptr && harness.kernel->latencySamples() == 0u);
 }
 
+std::vector<std::uint8_t> renderHqColumns(const std::vector<std::uint32_t> &blocks) {
+  KernelHarness harness(32768.0F, 129u);
+  harness.setParams(-144.0F, 8.0F, true);
+  processGenerated(harness, 32768.0F, 4096u, blocks);
+  const auto frames = takeTelemetry(harness);
+  constexpr std::uint32_t frame_bytes = 16u + 48u + 256u;
+  SPECTROGRAM_CHECK(frames.size() == 23u * frame_bytes);
+  std::uint32_t previous_capture = 0u;
+  for (std::size_t offset = 0u; offset + frame_bytes <= frames.size(); offset += frame_bytes) {
+    const std::uint8_t *frame = frames.data() + offset;
+    const std::uint8_t *payload = frame + 16u;
+    SPECTROGRAM_CHECK(readU16(frame) == 5u && readU16(frame + 2u) == 2u);
+    SPECTROGRAM_CHECK(readU16(frame + 12u) == 304u);
+    SPECTROGRAM_CHECK(readU32(payload + 8u) == 128u);
+    SPECTROGRAM_CHECK(readU32(payload + 12u) == 1u);
+    const std::uint32_t capture = readU32(payload + 16u);
+    SPECTROGRAM_CHECK(readU32(payload + 20u) == 0u);
+    SPECTROGRAM_CHECK(capture == (previous_capture == 0u ? 1104u : previous_capture + 128u));
+    previous_capture = capture;
+    SPECTROGRAM_CHECK(readU32(payload + 24u) == offset / frame_bytes);
+    SPECTROGRAM_CHECK(readU32(payload + 28u) == 256u);
+    const std::uint32_t first_valid = readU32(payload + 40u);
+    SPECTROGRAM_CHECK(first_valid > 0u && readU32(payload + 44u) + first_valid == 256u);
+    for (std::uint32_t row = 0u; row < first_valid; ++row) {
+      SPECTROGRAM_CHECK(payload[48u + row] == 0u);
+    }
+  }
+  harness.setParams(-96.0F, 9.0F, true);
+  processGenerated(harness, 32768.0F, 1024u, blocks);
+  SPECTROGRAM_CHECK(takeTelemetry(harness).empty());
+  harness.setParams(-96.0F, 8.0F, false);
+  processGenerated(harness, 32768.0F, 256u, blocks);
+  const auto legacy = takeTelemetry(harness);
+  SPECTROGRAM_CHECK(legacy.size() == kFrameBytes);
+  SPECTROGRAM_CHECK(!legacy.empty() && readU16(legacy.data() + 2u) == 1u);
+  return frames;
+}
+
+void testHqWarmupCaptureAndSwitching() {
+  const auto reference = renderHqColumns({16u});
+  SPECTROGRAM_CHECK(!reference.empty());
+  SPECTROGRAM_CHECK(reference == renderHqColumns({1u, 7u, 16u, 32u, 64u, 128u, 129u}));
+}
+
 } // namespace
 
 int main() {
@@ -548,6 +600,7 @@ int main() {
   testResetAndPointChangeCancelActiveJobs();
   testPreparedTwiddleTablesAcrossPointChangesAndReset();
   testLatencyRemainsZero();
+  testHqWarmupCaptureAndSwitching();
   if (failures != 0) {
     std::fprintf(stderr, "%d Spectrogram native check(s) failed\n", failures);
     return 1;

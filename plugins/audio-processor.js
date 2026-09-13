@@ -1184,6 +1184,7 @@ const ET_DSP_ASSET_AGGREGATE_BUDGET_BYTES = 128 * 1024 * 1024;
 const ET_DSP_FIR_REPLACEMENT_DRY_MODE = -1;
 const ET_DSP_FIR_REPLACEMENT_DRY_READY = 1 << 16;
 const ET_DSP_PACKET_POOL_SIZE = 3;
+const ET_HQ_TELEMETRY_BYTES = 16 + 48 + 2048 * 8;
 const ET_DSP_PIPELINE_FALLBACK = 0;
 const ET_DSP_PIPELINE_PROCESSED = 1;
 const ET_DSP_PIPELINE_ARENA_INVALID = -1;
@@ -1191,6 +1192,15 @@ const ET_DSP_PIPELINE_VERSION = 1;
 const ET_DSP_PIPELINE_HEADER_BYTES = 8;
 const ET_DSP_PIPELINE_NODE_BYTES = 12;
 const ET_DSP_PIPELINE_MAX_NODES = 128;
+const DISPLAY_ONLY_DSP_TYPES = new Set([
+    'LevelMeterPlugin',
+    'NoteSpectrogramPlugin',
+    'OscilloscopePlugin',
+    'PitchMeterPlugin',
+    'SpectrogramPlugin',
+    'SpectrumAnalyzerPlugin',
+    'StereoMeterPlugin'
+]);
 const AUDIO_PROCESSING_OVERLOAD_HEARTBEAT_SECONDS = 1;
 // Render headroom, in milliseconds, that the output buffer absorbs before a
 // late quantum turns into an audible dropout. The deadline credit tracks that
@@ -1335,6 +1345,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         this.dspFailedTypes = new Set();
         this.dspReportedFailures = new Set();
         this.dspPacketPool = [];
+        this.hqPacketPool = null;
         this.dspTelemetryRateHz = null;
         this.dspSampleRate = globalThis.sampleRate;
         this.dspPendingInstanceDestroy = [];
@@ -1451,6 +1462,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             temporalCapabilities: [],
             enabledPluginCount: 0,
             uiTelemetryEnabled: true,
+            displayDspBypassed: false,
             pendingObservationRequestId: null,
             pendingFirstRenderCommandId: null,
             renderSequence: 0,
@@ -1484,11 +1496,11 @@ class PluginProcessor extends AudioWorkletProcessor {
             const data = event.data;
             switch(data.type) {
                 case 'setSpectrumTapRoute': {
-                    const wasEmpty = this.spectrumTapRoute.size === 0;
+                    const wasActive = this.isSpectrumTapRoutingActive();
                     if (data.enabled) this.spectrumTapRoute.add(data.pluginId);
                     else this.spectrumTapRoute.delete(data.pluginId);
                     // Visibility changes must never rebuild latency compensation.
-                    if ((this.spectrumTapRoute.size === 0) !== wasEmpty) this.refreshDspPipeline();
+                    if (this.isSpectrumTapRoutingActive() !== wasActive) this.refreshDspPipeline();
                     break;
                 }
                 case 'setSpectrumTap':
@@ -1589,7 +1601,11 @@ class PluginProcessor extends AudioWorkletProcessor {
                     this.clearPluginAsset(data);
                     break;
                 case 'dspTelemetryReturn':
-                    if (data.packet instanceof ArrayBuffer && this.dspPacketPool.length < ET_DSP_PACKET_POOL_SIZE) {
+                    if (data.packet instanceof ArrayBuffer && data.packet.byteLength === ET_HQ_TELEMETRY_BYTES && this.hqPacketPool) {
+                        if (this.hqPacketPool.length < ET_DSP_PACKET_POOL_SIZE) {
+                            this.hqPacketPool.push({ bytes: new Uint8Array(data.packet), header: new DataView(data.packet) });
+                        }
+                    } else if (data.packet instanceof ArrayBuffer && this.dspPacketPool.length < ET_DSP_PACKET_POOL_SIZE) {
                         this.dspPacketPool.push(new Uint8Array(data.packet));
                     }
                     break;
@@ -1689,9 +1705,15 @@ class PluginProcessor extends AudioWorkletProcessor {
                     this.lowLatencyMode = !!data.enabled;
                     this.MESSAGE_INTERVAL = this.lowLatencyMode ? 8 : 16;
                     break;
-                case 'configurePowerPolicy':
+                case 'configurePowerPolicy': {
+                    const wasDisplayDspBypassed = this.powerPolicy.displayDspBypassed;
                     this.configurePowerPolicy(data);
+                    if (this.powerPolicy.displayDspBypassed !== wasDisplayDspBypassed) {
+                        ++this.dspExecutionGeneration;
+                        this.refreshDspPipeline();
+                    }
                     break;
+                }
                 case 'setPowerProcessingState':
                     this.setPowerProcessingState(data);
                     break;
@@ -1706,6 +1728,16 @@ class PluginProcessor extends AudioWorkletProcessor {
                             renderSequence: this.powerPolicy.renderSequence,
                             uiTelemetryEnabled: this.powerPolicy.uiTelemetryEnabled
                         });
+                    }
+                    break;
+                case 'setDisplayDspBypassed':
+                    if (this._matchesPowerIdentity(data)) {
+                        const bypassed = data.bypassed === true;
+                        if (this.powerPolicy.displayDspBypassed !== bypassed) {
+                            this.powerPolicy.displayDspBypassed = bypassed;
+                            ++this.dspExecutionGeneration;
+                            this.refreshDspPipeline();
+                        }
                     }
                     break;
                 case 'requestPowerObservation':
@@ -1862,6 +1894,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                 if (status !== 0) throw new Error(`DSP reset failed with status ${status}`);
             }
             this.pluginContexts.clear();
+            for (const plugin of this.plugins) this.prepareSpectrumAnalyzerContext(plugin);
             this.currentFrame = 0;
             this.clearAudioProcessingOverload();
             this.audioLevelMonitoring.lastInputActiveTime = 0;
@@ -1992,6 +2025,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             power.state = 'active';
             power.processingDirective = 'full-process';
             power.uiTelemetryEnabled = true;
+            power.displayDspBypassed = false;
             this._clearPowerSkipOwnership();
             return;
         }
@@ -2033,6 +2067,9 @@ class PluginProcessor extends AudioWorkletProcessor {
         power.topologyRevision = data.topologyRevision;
         if (typeof data.uiTelemetryEnabled === 'boolean') {
             power.uiTelemetryEnabled = data.uiTelemetryEnabled;
+        }
+        if (typeof data.displayDspBypassed === 'boolean') {
+            power.displayDspBypassed = data.displayDspBypassed;
         }
         const thresholdDb = Number.isFinite(data.silenceThresholdDb) ? data.silenceThresholdDb : -80;
         const wakeGainMarginDb = Number.isFinite(data.wakeGainMarginDb) ? data.wakeGainMarginDb : 0;
@@ -3317,6 +3354,11 @@ class PluginProcessor extends AudioWorkletProcessor {
                 sectionEnabled = Boolean(plugin.enabled);
                 continue;
             }
+            if (this.isDisplayDspExecutionBypassed(plugin)) {
+                admissions.set(plugin.id, true);
+                costs.set(plugin.id, 0);
+                continue;
+            }
             const capacityLimit = jsFallbackCapacityLimit(plugin);
             if (capacityLimit === null) continue;
             const entry = this.dspLive ? this.wasmInstances.get(plugin.id) : null;
@@ -3465,6 +3507,12 @@ class PluginProcessor extends AudioWorkletProcessor {
 
         if (this.masterBypass) return;
 
+        // The native pipeline cannot represent a processing bypass while
+        // preserving the plugin's channel and bus routing. Use the hybrid path
+        // while a visible-only analyzer is suppressed so its existing dry
+        // routing remains exact and every other WASM effect keeps running.
+        if (this.hasActiveDisplayDspExecutionBypass()) return;
+
         const nodes = [];
         let insideSection = false;
         let sectionEnabled = true;
@@ -3507,7 +3555,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             }
             this.adoptDspArena();
             this.dspPipelinePluginCount = nodes.length;
-            this.dspPipelineReady = this.spectrumTapRoute.size === 0;
+            this.dspPipelineReady = !this.isSpectrumTapRoutingActive();
             this.publishDspPipelineLatency(this.dspBinding.pipelineLatency(), true);
         } catch (error) {
             this.reportDspFailure('pipeline-configure', error?.message || String(error));
@@ -3967,8 +4015,28 @@ class PluginProcessor extends AudioWorkletProcessor {
         }
     }
 
+    prepareSpectrumAnalyzerContext(pluginConfig) {
+        if ((pluginConfig?.type === 'SpectrumAnalyzerPlugin' || pluginConfig?.type === 'SpectrogramPlugin') &&
+            typeof globalThis.MultiresSpectrum === 'function') {
+            if (!this.hqPacketPool) {
+                this.hqPacketPool = Array.from({ length: ET_DSP_PACKET_POOL_SIZE }, () => {
+                    const bytes = new Uint8Array(ET_HQ_TELEMETRY_BYTES);
+                    return { bytes, header: new DataView(bytes.buffer) };
+                });
+            }
+            let context = this.pluginContexts.get(pluginConfig.id);
+            if (!context) {
+                context = {};
+                this.pluginContexts.set(pluginConfig.id, context);
+            }
+            globalThis.MultiresSpectrum.prepare(context, sampleRate,
+                pluginConfig.type === 'SpectrumAnalyzerPlugin' ? 4 : 5);
+        }
+    }
+
     normalizePluginConfig(pluginConfig, previousPlugin = null) {
         const params = pluginConfig?.parameters ?? {};
+        this.prepareSpectrumAnalyzerContext(pluginConfig);
         return {
             ...pluginConfig,
             inputBus: params.inputBus ?? pluginConfig?.inputBus ?? 0,
@@ -4074,6 +4142,7 @@ class PluginProcessor extends AudioWorkletProcessor {
     }
 
     isPluginExecutionBypassed(plugin) {
+        if (this.isDisplayDspExecutionBypassed(plugin)) return true;
         if (!this.isJsFallbackAdmitted(plugin)) {
             const entry = this.dspLive ? this.wasmInstances.get(plugin.id) : null;
             if (!entry?.ready) return true;
@@ -4085,6 +4154,35 @@ class PluginProcessor extends AudioWorkletProcessor {
                 this.dspSampleRate,
                 this.outputChannelCount
             ) !== null;
+    }
+
+    isDisplayDspExecutionBypassed(plugin) {
+        return this.powerPolicy.displayDspBypassed === true &&
+            DISPLAY_ONLY_DSP_TYPES.has(plugin?.type);
+    }
+
+    isSpectrumTapAcquisitionActive() {
+        return this.powerPolicy.displayDspBypassed !== true && this.spectrumTaps.size !== 0;
+    }
+
+    isSpectrumTapRoutingActive() {
+        return this.powerPolicy.displayDspBypassed !== true && this.spectrumTapRoute.size !== 0;
+    }
+
+    hasActiveDisplayDspExecutionBypass() {
+        if (this.powerPolicy.displayDspBypassed !== true) return false;
+        let insideSection = false;
+        let sectionEnabled = true;
+        for (const plugin of this.plugins) {
+            if (plugin.type === 'SectionPlugin') {
+                insideSection = true;
+                sectionEnabled = Boolean(plugin.enabled);
+                continue;
+            }
+            if (!plugin.enabled || (insideSection && !sectionEnabled)) continue;
+            if (DISPLAY_ONLY_DSP_TYPES.has(plugin.type)) return true;
+        }
+        return false;
     }
 
     publishWasmOnlyExecutionStates(force = false, engineStopped = false) {
@@ -4966,7 +5064,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         const messageQueue = this.messageQueue; // Cache message queue
         const MESSAGE_INTERVAL = this.MESSAGE_INTERVAL; // Cache interval
         let processedPlugin = false;
-        const tapsActive = this.spectrumTaps.size !== 0;
+        const tapsActive = this.isSpectrumTapAcquisitionActive();
 
         for (const plugin of plugins) {
             // Handle section start/end
@@ -5399,8 +5497,32 @@ class PluginProcessor extends AudioWorkletProcessor {
             // Legacy JavaScript analyzers attach measurements to their result buffer.
             const measurements = result?.measurements;
             if (measurements) {
+                if (measurements.hqFrame) {
+                    const analysisContext = pluginContexts.get(plugin.id);
+                    const frame = analysisContext.multiresFrame;
+                    // Reuse the existing telemetry return protocol to bound in-flight HQ notifications.
+                    if ((!this.powerPolicy.enabled || this.powerPolicy.uiTelemetryEnabled) && this.hqPacketPool.length > 0) {
+                        const packet = this.hqPacketPool.pop();
+                        packet.header.setUint16(0, frame.frameType, true);
+                        packet.header.setUint16(2, 2, true);
+                        packet.header.setUint32(4, plugin.id, true);
+                        packet.header.setUint32(8, frame.payload.getUint32(24, true), true);
+                        packet.header.setUint16(12, frame.bytes.length, true);
+                        packet.header.setUint16(14, 0, true);
+                        packet.bytes.set(frame.bytes, 16);
+                        port.postMessage({ type: 'dspTelemetry', packet: packet.bytes.buffer,
+                            bytes: 16 + frame.bytes.length, droppedFrames: 0 }, [packet.bytes.buffer]);
+                    }
+                    analysisContext.multiresSpectrum.release(analysisContext.multiresFrame);
+                    result.measurements = null;
+                    continue;
+                }
                 if (this.powerPolicy.enabled && !this.powerPolicy.uiTelemetryEnabled) {
+                    for (const queued of messageQueue.values()) {
+                        globalThis.MultiresSpectrum?.releaseMeasurements(queued.measurements);
+                    }
                     messageQueue.clear();
+                    globalThis.MultiresSpectrum?.releaseMeasurements(measurements);
                     result.measurements = null;
                     continue;
                 }
@@ -5410,14 +5532,17 @@ class PluginProcessor extends AudioWorkletProcessor {
                     if (messageQueue.size > 0) {
                         for (const [pluginId, data] of messageQueue) {
                             port.postMessage({ type: 'processBuffer', pluginId, ...data });
+                            globalThis.MultiresSpectrum?.releaseMeasurements(data.measurements);
                         }
                         messageQueue.clear();
                     }
                     // Send current message immediately
                     port.postMessage({ type: 'processBuffer', pluginId: plugin.id, measurements });
+                    globalThis.MultiresSpectrum?.releaseMeasurements(measurements);
                     lastMessageTime = currentTimeMs; // Update last sent time
                 } else {
                     // Queue the message if interval hasn't passed
+                    globalThis.MultiresSpectrum?.releaseMeasurements(messageQueue.get(plugin.id)?.measurements);
                     messageQueue.set(plugin.id, { measurements });
                 }
                 // Clear measurements after handling to avoid re-sending.

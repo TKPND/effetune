@@ -1590,9 +1590,13 @@ class PluginBase {
             radioLabel.htmlFor = radioId;
             radioLabel.textContent = optionLabel;
 
+            const radioOption = document.createElement('span');
+            radioOption.className = 'radio-option';
+            radioOption.appendChild(radio);
+            radioOption.appendChild(radioLabel);
+
             radios.push(radio);
-            row.appendChild(radio);
-            row.appendChild(radioLabel);
+            row.appendChild(radioOption);
         });
 
         this._registerUIControl(modelKey, radios, (modelValue) => {

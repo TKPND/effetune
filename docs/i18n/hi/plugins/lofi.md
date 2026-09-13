@@ -907,7 +907,7 @@ TV Audio Simulator संगीत को एनालॉग टेलीवि�
 - मनचाहा Standard चुनें और Signal 35 dBµV, Tuning 0 kHz, Multipath व Fading 0 और Mix 100% से शुरू करें।
 - साफ पुराने टीवी की ध्वनि के लिए Signal बढ़ाएँ और Tuning को बीच में रखें। Processing एनालॉग पथ को अधिक सघन बनाता है, पर NICAM के मुख्य डिजिटल पथ को नहीं बदलता।
 - कठिन एनालॉग रिसेप्शन के लिए पहले Signal घटाएँ, फिर Multipath या थोड़ा Tuning offset जोड़ें। Path Delay विकृति का स्वरूप बदलता है।
-- B/G NICAM या I NICAM में Signal धीरे-धीरे घटाकर डिजिटल क्षति और FM मोनो fallback सुनें। Video Buzz 50/60 Hz टोन जोड़ता है; -80 dB पर यह बंद रहता है।
+- B/G NICAM या I NICAM में Signal धीरे-धीरे घटाकर डिजिटल क्षति और FM मोनो fallback सुनें। Video Buzz टैब में Buzz को तभी बढ़ाएँ जब आपको बिजली की आवृत्ति और स्कैन से जुड़े 50/60 Hz टोन चाहिए। इसकी न्यूनतम वैल्यू -80 dB पर बज़ बंद हो जाता है।
 
 ### सिस्टम प्रीसेट
 
@@ -922,11 +922,11 @@ TV Audio Simulator संगीत को एनालॉग टेलीवि�
 - **Signal**: 0 से 70 dBµV तक रिसेप्शन शक्ति तय करता है। घटाने पर शोर या त्रुटियाँ बढ़ती हैं और fallback हो सकता है।
 - **Tuning**: -200 से +200 kHz तक tuning बदलता है; 0 से दूर जाने पर रिसेप्शन संकरा और विकृत होता है।
 - **IF Band**: 80 से 240 kHz तक receiver passband तय करता है। कम मान off-tune ऊर्जा रोकता है, पर कार्यक्रम भी काट सकता है।
-- **Multipath**: विलंबित reflection जोड़ता है; अधिक मान coloration और stereo instability बढ़ाते हैं।
+- **Multipath** (0–100%): विलंबित reflection जोड़ता है; अधिक मान coloration और stereo instability बढ़ाते हैं।
 - **Path Delay**: reflection delay 0.5 से 50 µs तक तय करके peaks और dips की दूरी बदलता है।
 - **Fading**: रिसेप्शन बदलाव की गति 0 से 20 Hz तक तय करता है।
 - **Receive Mode**: `Auto` उपलब्ध पथ चुनता है; `Stereo`, `Main` और `Sub` किसी खास कार्यक्रम का अनुरोध करते हैं।
-- **Video Buzz**: 50/60 Hz buzz को -80 से -20 dB तक तय करता है; -80 dB पर बंद रहता है।
+- **Buzz**: 50/60 Hz buzz को -80 से -20 dB तक तय करता है; -80 dB पर बंद रहता है।
 - **Output Gain**: अंतिम स्तर -24 से +24 dB तक समायोजित करता है।
 - **Mix**: मूल और टीवी ध्वनि को 0% से 100% तक मिलाता है।
 

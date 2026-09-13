@@ -1,6 +1,6 @@
 ---
 title: "Analyzer Plugins - EffeTune"
-description: "Audio analysis plugins including Level Meter, Note Spectrogram, Oscilloscope, Spectrogram, Spectrum Analyzer, and Stereo Meter."
+description: "Audio analysis plugins including Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer, and Stereo Meter."
 lang: en
 ---
 
@@ -13,6 +13,7 @@ A collection of plugins that let you see your music in fascinating ways. These v
 - [Level Meter](#level-meter) - Shows digital signal level and possible clipping
 - [Note Spectrogram](#note-spectrogram) - Shows estimated pitches over time as a piano roll
 - [Oscilloscope](#oscilloscope) - Shows real-time waveform visualization
+- [Pitch Meter](#pitch-meter) - Tracks one fundamental pitch and its tuning over time
 - [Spectrogram](#spectrogram) - Creates beautiful visual patterns from your music
 - [Spectrum Analyzer](#spectrum-analyzer) - Shows the different frequencies in your music
 - [Stereo Meter](#stereo-meter) - Visualizes stereo balance and phase relationships
@@ -103,6 +104,31 @@ Shows the shape of the sound wave in real time, so you can see beats, sharp hits
 ### Note on Waveform Display
 The waveform connects captured points in time order. For longer display times, each interval retains its first and last samples plus the minimum and maximum samples at their original positions, preserving continuity and short peaks at display resolution. Use it as a visual guide rather than an exact measurement tool.
 
+## Pitch Meter
+
+Tracks one fundamental pitch (F0) at a time in a two-second scrolling piano roll without changing the audio. Use it to check the tuning and pitch movement of a solo voice or instrument.
+
+### Visualization Guide
+
+- **Horizontal** (default) places low notes on the left and high notes on the right. The newest estimate appears above the keyboard and history scrolls upward.
+- **Vertical** places low notes at the bottom and high notes at the top. The newest estimate appears beside the keyboard at the right and history moves left.
+- The line position shows pitch between semitones. A more confident estimate appears more strongly; the line breaks when the input is too quiet or no stable single pitch is found.
+- The current label shows the nearest note and the difference in cents. A positive value is above the note and a negative value is below it. The label disappears when there is no reliable estimate.
+
+### Listening Guide
+
+- Start with a single sustained note, then watch whether the line stays centered on a note or moves sharp or flat.
+- Vibrato and pitch bends appear as smooth movement across the note rows.
+- This analyzer follows one dominant pitch. Chords, dense mixes, percussion, noise, or unclear repeating sounds can interrupt the line or produce an incorrect octave.
+
+### Parameters
+
+- **Layout** - Selects **Horizontal** (default) or **Vertical**.
+- **Reference A4** (400 to 480 Hz) - Sets the tuning reference used for note names and cents. Default: 440 Hz.
+- **Lowest Note** - Sets the bottom of the displayed and analyzed range. Default: C2. The lowest available setting is A0.
+- **Highest Note** - Sets the top of the displayed and analyzed range. Default: C7. The highest available setting is C8.
+- Stereo input is analyzed by averaging the first two channels; mono input is used directly. Strong opposite-polarity content can cancel in the average and leave no pitch trace.
+
 ## Spectrogram
 
 Creates colorful patterns that show how your music changes over time. Colors show how strong each sound is, while vertical position shows its frequency.
@@ -118,6 +144,7 @@ The graph scrolls from right to left at a steady speed, with marks every second.
   - Bottom: Bass sounds
   - Middle: Main instruments
   - Top: High frequencies
+- With **Log (HQ)**, nearby low-frequency tones appear as more clearly separated bands. The longer low-frequency measurement can take a little longer to settle or fade.
 
 ### What You Can See
 - Melodies: Flowing lines of color
@@ -133,8 +160,9 @@ The graph scrolls from right to left at a steady speed, with marks every second.
 - **Points** - FFT size used for the display (256 to 16384)
   - Higher numbers: More frequency detail, but slower time updates
   - Lower numbers: Faster movement, but less frequency detail
-- **Frequency Scale** - **Log** gives low frequencies more display space; **Linear** places equal frequency widths at equal intervals.
-- **Keyboard** - Shows a static keyboard guide at the right of the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log** or **Linear**; with **Linear**, low-frequency keys look narrower.
+  - With **Log (HQ)**, Points sets the short analysis window; a four-times-longer window improves low-frequency separation.
+- **Frequency Scale** - **Log** gives low frequencies more display space. **Log (HQ)** adds a longer measurement for clearer separation of nearby bass frequencies while retaining the short measurement for higher frequencies. It uses more processing and low-frequency changes can take longer to appear or fade; it does not change the audio. **Linear** places equal frequency widths at equal intervals.
+- **Keyboard** - Shows a static keyboard guide at the right of the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log**, **Log (HQ)**, or **Linear**; **Log (HQ)** uses the same logarithmic spacing as **Log**, while with **Linear**, low-frequency keys look narrower.
 - The analyzer uses the average of the left and right channels. Mono input is analyzed directly.
 
 ## Spectrum Analyzer
@@ -148,8 +176,9 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
 - Higher peaks mean stronger presence of those frequencies
 - Darker green line shows the current sound
 - The brighter green line follows recent peaks and falls smoothly as they fade
-- In **Bar** display, each bar shows the strongest level in an equal-width portion of the display. **Log** uses equal octave widths; **Linear** uses equal frequency widths.
+- In **Bar** display, each bar shows the strongest level in an equal-width portion of the display. **Log** and **Log (HQ)** use equal octave widths; **Linear** uses equal frequency widths.
 - The thin marker above a bar shows its recent peak and falls smoothly.
+- With **Log (HQ)**, nearby bass tones can appear as separate peaks. Their longer low-frequency measurement can take a little longer to settle or fade.
 - Watch how different instruments create different patterns
 
 ### What You Can See
@@ -165,11 +194,12 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
 - **Points** - How finely the display separates nearby frequencies (256 to 16384)
   - Higher numbers: More frequency detail, with slower updates
   - Lower numbers: Quicker updates, with less frequency detail
-- **Frequency Scale** - **Log** gives low frequencies more display space; **Linear** places equal frequency widths at equal intervals.
+  - With **Log (HQ)**, Points sets the short analysis window; a four-times-longer window improves low-frequency separation.
+- **Frequency Scale** - **Log** gives low frequencies more display space. **Log (HQ)** adds a longer measurement for clearer separation of nearby bass frequencies while retaining the short measurement for higher frequencies. It uses more processing and low-frequency changes can take longer to appear or fade; it does not change the audio. **Linear** places equal frequency widths at equal intervals.
 - **Display** - Changes only how the spectrum looks; it does not change the analysis or audio.
   - **Line** (default): Shows the spectrum as continuous lines.
   - **Bar**: Shows the strongest level in each display band as a bar.
-- **Keyboard** - Shows a static keyboard guide below the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log** or **Linear**; with **Linear**, low-frequency keys look narrower.
+- **Keyboard** - Shows a static keyboard guide below the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log**, **Log (HQ)**, or **Linear**; **Log (HQ)** uses the same logarithmic spacing as **Log**, while with **Linear**, low-frequency keys look narrower.
 - The analyzer uses the average of the left and right channels. Mono input is analyzed directly.
 
 ### Fun Ways to Use These Tools

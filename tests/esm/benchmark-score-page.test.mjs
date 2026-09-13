@@ -82,6 +82,7 @@ function createHarness({ variant = 'simd', useWasmDsp = true, missing = null, fa
     alert() {},
     console: { error(...args) { calls.push(['error', ...args]); } },
     setTimeout(callback) { callback(); },
+    clearTimeout() {},
     performance: { now: () => (clock += 50) },
     createDspBenchmarkRuntime: async options => {
       calls.push(['runtime', options.sampleRate]);

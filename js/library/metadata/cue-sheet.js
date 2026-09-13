@@ -238,10 +238,6 @@ export function createCueSignature({ size, mtimeMs, bytes }) {
   return `cue-v1:${sha256Hex(concatBytes(new TextEncoder().encode(stat), byteArray))}`;
 }
 
-export function cueFrameToSeconds(frame) {
-  if (!Number.isSafeInteger(frame) || frame < 0) throw new TypeError('CUE frame must be a non-negative safe integer');
-  return frame / CUE_FRAMES_PER_SECOND;
-}
 
 function validateParsedTracks(tracks) {
   const startsByFile = new Map();

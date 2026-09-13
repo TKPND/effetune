@@ -202,7 +202,8 @@ test('unavailable IndexedDB falls back to localStorage while audio preferences r
       powerSaving: {
         mode: 'balanced',
         silenceThresholdDb: -80,
-        fullSuspendDelaySeconds: 300
+        fullSuspendDelaySeconds: 300,
+        skipDisplayDspWhenHidden: true
       }
     });
     assert.equal(await saveWebAppConfig(null), false);
@@ -446,7 +447,8 @@ test('an IndexedDB read failure repairs a stale mirror before the next localStor
         powerSaving: {
           mode: 'balanced',
           silenceThresholdDb: -80,
-          fullSuspendDelaySeconds: 300
+          fullSuspendDelaySeconds: 300,
+          skipDisplayDspWhenHidden: true
         }
       });
       assert.equal(runtime.backend, 'localStorage');
@@ -547,7 +549,8 @@ test('functional patches merge in one transaction and publish only after commit 
     powerSaving: {
       mode: 'balanced',
       silenceThresholdDb: -80,
-      fullSuspendDelaySeconds: 300
+      fullSuspendDelaySeconds: 300,
+      skipDisplayDspWhenHidden: true
     }
   });
   assert.deepEqual(harness.windowRef.appConfig, second.config);
@@ -871,7 +874,8 @@ test('public Web config helpers preserve their API on the single runtime', async
     assert.deepEqual(await saveWebPowerSavingSettings({ mode: 'maximum' }), {
       mode: 'maximum',
       silenceThresholdDb: -80,
-      fullSuspendDelaySeconds: 300
+      fullSuspendDelaySeconds: 300,
+      skipDisplayDspWhenHidden: true
     });
     assert.equal(applied.mode, 'maximum');
     assert.equal((await loadWebAppConfig()).language, 'ko');
@@ -887,7 +891,8 @@ test('AudioManager sends only the partial Web power patch through the runtime', 
   const completeSettings = {
     mode: 'maximum',
     silenceThresholdDb: -90,
-    fullSuspendDelaySeconds: 900
+    fullSuspendDelaySeconds: 900,
+    skipDisplayDspWhenHidden: true
   };
   const runtime = {
     async commitPowerSettings(partialPowerSaving, { applyPowerSettings }) {

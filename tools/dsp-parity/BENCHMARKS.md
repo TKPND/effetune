@@ -775,8 +775,8 @@ in 128-frame blocks, and the median of five measured repetitions after two warmu
 | ---: | ---: | ---: |
 | 1.84x (1.0841 s) | 5.34x (0.3746 s) | 5.79x (0.3454 s) |
 
-The Ultra/192 source comparison used
-`D:\program\proto\sound_toolbox\vinyl_explained` at 192 kHz/stereo in 128-frame
+The Ultra/192 source comparison used the independently maintained reference implementation
+at 192 kHz/stereo in 128-frame
 blocks with the Ultra preset and seed 20260705. Dust, Static, and Scratch were zero;
 silence ran for 0.2 seconds and each 100 Hz, 1 kHz, 15 kHz, and 20 kHz tone ran for
 0.1 seconds, discarding the first 50 ms. Analysis used `analysis.js` with
@@ -1124,7 +1124,7 @@ but does not allow it with JS/native in the same invocation, so each point used 
 commands (with the effect-specific parameters below):
 
 ```text
-node tools/dsp-parity/bench.mjs --type <type> --modes js,native --sample-rates <rate> --channels <channels> --block-size 128 --duration 0.25 --warmup 1 --repetitions 3 --native-runner out/dsp/fix6-rotary-msvc/Release/effetune-dsp-parity-runner.exe --params '<params>'
+node tools/dsp-parity/bench.mjs --type <type> --modes js,native --sample-rates <rate> --channels <channels> --block-size 128 --duration 0.25 --warmup 1 --repetitions 3 --native-runner <path-to-release-runner> --params '<params>'
 node tools/dsp-parity/bench.mjs --type <type> --modes wasm,simd --sample-rates <rate> --channels <channels> --block-size 128 --duration 0.25 --warmup 1 --repetitions 3 --quantum-stats --params '<params>'
 ```
 
@@ -1237,7 +1237,7 @@ Quantum percentages and deadline misses are lower-is-better; the `p99 / average`
 ratio checks that work is distributed evenly over the buffer.
 
 ```text
-node tools/dsp-parity/bench.mjs --type NoiseReductionPlugin --modes wasm,simd --sample-rates 96000,192000 --channels 2,16 --block-size 128 --quantum-stats --json tmp/dev/noise-reduction-plan-20260830/bench-quantum-stats-r1-final-model.json
+node tools/dsp-parity/bench.mjs --type NoiseReductionPlugin --modes wasm,simd --sample-rates 96000,192000 --channels 2,16 --block-size 128 --quantum-stats --json out/benchmarks/noise-reduction-matrix.json
 ```
 
 | Sample rate / channels | Variant | Realtime | Median | Average | p99 | p99 / average | Max | Misses | SIMD gate |
@@ -1262,8 +1262,8 @@ Section 6.7 allowed one paired control and one Noise Reduction remeasurement for
 cell, with no result selection or further retries:
 
 ```text
-node tools/dsp-parity/bench.mjs --type VolumePlugin --modes simd --sample-rates 96000 --channels 2 --block-size 128 --quantum-stats --json tmp/dev/noise-reduction-plan-20260830/bench-volume-96k2-r1-final-control.json
-node tools/dsp-parity/bench.mjs --type NoiseReductionPlugin --modes simd --sample-rates 96000 --channels 2 --block-size 128 --quantum-stats --json tmp/dev/noise-reduction-plan-20260830/bench-noise-96k2-r1-final-recheck.json
+node tools/dsp-parity/bench.mjs --type VolumePlugin --modes simd --sample-rates 96000 --channels 2 --block-size 128 --quantum-stats --json out/benchmarks/noise-reduction-control.json
+node tools/dsp-parity/bench.mjs --type NoiseReductionPlugin --modes simd --sample-rates 96000 --channels 2 --block-size 128 --quantum-stats --json out/benchmarks/noise-reduction-recheck.json
 ```
 
 The Volume control measured 1306.27x realtime, 0.0077 s median, 0.02% average,
@@ -1287,7 +1287,7 @@ parameter set and selected the listed transmission scheme; the NICAM preset also
 enabled -40 dB buzz.
 
 ```text
-node tools/dsp-parity/bench.mjs --preset tmp/dev/tv-audio-plan-20260911/bench-<scheme>.effetune_preset --modes wasm,simd --sample-rates 96000 --channels 2 --block-size 128 --duration 1 --warmup 2 --repetitions 20 --json tmp/dev/tv-audio-plan-20260911/bench-<scheme>.json
+node tools/dsp-parity/bench.mjs --preset <path-to-tv-audio-preset> --modes wasm,simd --sample-rates 96000 --channels 2 --block-size 128 --duration 1 --warmup 2 --repetitions 20 --json out/benchmarks/tv-audio-<scheme>.json
 ```
 
 | Transmission scheme | WASM realtime | WASM median | WASM SIMD realtime | WASM SIMD median |

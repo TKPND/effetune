@@ -504,7 +504,7 @@ test('state listeners update seek and disabled controls when optional collaborat
   });
 });
 
-test('close cleans up collaborators, clears uiManager, and debug info reflects manager state', async () => {
+test('close cleans up collaborators and clears uiManager', async () => {
   await withAudioPlayerGlobals({ window: { uiManager: { audioPlayer: 'existing' } } }, async ({ calls }) => {
     const player = createPlayer();
     globalThis.window.uiManager.audioPlayer = player;
@@ -537,15 +537,6 @@ test('close cleans up collaborators, clears uiManager, and debug info reflects m
         calls.push(['removeUI']);
       }
     };
-    player.stateManager.clearStateHistory = () => calls.push(['clearStateHistory']);
-
-    const debugWithNext = player.getDebugInfo();
-    assert.equal(debugWithNext.contextManager.hasNextTrackBuffer, true);
-
-    player.contextManager.nextTrackBuffer = null;
-    const debugWithoutNext = player.getDebugInfo();
-    assert.equal(debugWithoutNext.contextManager.hasNextTrackBuffer, false);
-    assert.equal(debugWithoutNext.playbackManager.playlistLength, 2);
 
     player.close();
     assert.equal(player.audioElement, null);
@@ -556,14 +547,12 @@ test('close cleans up collaborators, clears uiManager, and debug info reflects m
       'clearNextTrackBuffer',
       'removeUI',
       'dispose',
-      'clearStateHistory'
     ].includes(call[0])), [
       ['savePlayerState'],
       ['disconnect'],
       ['clearNextTrackBuffer'],
       ['removeUI'],
       ['dispose'],
-      ['clearStateHistory']
     ]);
   });
 
@@ -584,7 +573,6 @@ test('close cleans up collaborators, clears uiManager, and debug info reflects m
       }
     };
     player.ui = { removeUI() {} };
-    player.stateManager.clearStateHistory = () => {};
 
     player.close();
     assert.ok(calls.some(call => call[0] === 'savePlayerStateNoUiManager'));
@@ -663,7 +651,6 @@ test('player anchors the mobile media session while playing and releases it on c
       }
     };
     player.ui = { removeUI() {} };
-    player.stateManager.clearStateHistory = () => {};
 
     player.close();
     assert.equal(elements[0].paused, true);

@@ -74,7 +74,7 @@ const TV_AUDIO_SIMULATOR_SYSTEM_PRESETS = Object.freeze([
         })
     }),
     Object.freeze({
-        id: 'tv-australia-a2', label: 'Australia TV (B / A2)',
+        id: 'tv-australia-a2', label: 'Australia TV (B/G / A2)',
         params: Object.freeze({
             rd: true, ss: 'B/G A2', tx: 'Stereo', pr: 3, st: 40, tn: 0, bw: 220,
             mp: 18, dl: 12, fd: 1.5, sm: 'Auto', bz: -62, og: 0, mx: 100
@@ -1422,6 +1422,8 @@ const TV_AUDIO_SIMULATOR_SPECTRUM_BINS = 48;
 const TV_AUDIO_SIMULATOR_SPECTRUM_MIN_HZ = 300;
 const TV_AUDIO_SIMULATOR_SPECTRUM_FLOOR_DB = -100;
 
+let tvAudioSimulatorInstanceSerial = 0;
+
 class TVAudioSimulatorPlugin extends PluginBase {
     static executionCapabilities = Object.freeze({
         requiresWasm: true,
@@ -1469,6 +1471,7 @@ class TVAudioSimulatorPlugin extends PluginBase {
         this.temporalCapability = 'must-process';
         this.executionState = { state: 'pending', reason: null };
         this.executionStateReceived = false;
+        this.selectedTab = 'standard';
         this.animationFrameId = null;
         this.hudCanvas = null;
         this.hudStatusElement = null;
@@ -1732,16 +1735,6 @@ class TVAudioSimulatorPlugin extends PluginBase {
         this.standardDetailElement.textContent = TV_AUDIO_SIMULATOR_STANDARD_INFO[this.ss].detail;
     }
 
-    _createSection(title) {
-        const section = document.createElement('section');
-        section.className = 'tv-audio-simulator-section';
-        const heading = document.createElement('h3');
-        heading.className = 'tv-audio-simulator-section-title';
-        heading.textContent = title;
-        section.appendChild(heading);
-        return section;
-    }
-
     createUI() {
         this.ensureDspTelemetrySubscription();
         this.stopAnimation();
@@ -1754,62 +1747,101 @@ class TVAudioSimulatorPlugin extends PluginBase {
         this.hudGraphDispose = null;
 
         const container = document.createElement('div');
+        const instanceId = `tv-audio-simulator-${Date.now()}-${++tvAudioSimulatorInstanceSerial}`;
         container.className = 'tv-audio-simulator-container';
-        const controls = document.createElement('div');
-        controls.className = 'tv-audio-simulator-controls plugin-parameter-ui';
-
-        const standard = this._createSection('Standard');
-        standard.appendChild(this.createRadioGroup('Standard', TV_AUDIO_SIMULATOR_STANDARDS,
-            this.ss, value => this.setParameters({ ss: value }), 'ss'));
-        const standardDetail = document.createElement('p');
-        standardDetail.className = 'tv-audio-simulator-standard-detail';
-        standardDetail.setAttribute('role', 'status');
-        standardDetail.setAttribute('aria-live', 'polite');
-        this.standardDetailElement = standardDetail;
-        this._refreshStandardDetail();
-        standard.appendChild(standardDetail);
-        controls.appendChild(standard);
-
-        const programme = this._createSection('Programme');
-        programme.appendChild(this.createCheckboxControl('Broadcast', this.rd,
-            value => this.setParameters({ rd: value }), 'rd'));
-        programme.appendChild(this.createRadioGroup('Tx Mode', TV_AUDIO_SIMULATOR_TX_MODES,
-            this.tx, value => this.setParameters({ tx: value }), 'tx'));
-        programme.appendChild(this.createRadioGroup('Receive Mode',
-            TV_AUDIO_SIMULATOR_RECEIVE_MODES, this.sm,
-            value => this.setParameters({ sm: value }), 'sm'));
-        programme.appendChild(this.createParameterControl('Processing', 0, 18, 0.1, this.pr,
-            value => this.setParameters({ pr: value }), 'dB', 'pr'));
-        controls.appendChild(programme);
-
-        const reception = this._createSection('Reception');
-        reception.appendChild(this.createParameterControl('Signal', 0, 70, 0.1, this.st,
-            value => this.setParameters({ st: value }), 'dBµV', 'st'));
-        reception.appendChild(this.createParameterControl('Tuning', -200, 200, 0.1, this.tn,
-            value => this.setParameters({ tn: value }), 'kHz', 'tn'));
-        reception.appendChild(this.createParameterControl('IF Band', 80, 240, 1, this.bw,
-            value => this.setParameters({ bw: value }), 'kHz', 'bw'));
-        reception.appendChild(this.createParameterControl('Multipath', 0, 100, 1, this.mp,
-            value => this.setParameters({ mp: value }), '%', 'mp'));
-        reception.appendChild(this.createLogarithmicParameterControl(
-            'Path Delay', 0.5, 50, 0.01, this.dl,
-            value => this.setParameters({ dl: value }), 'µs', 'dl'));
-        reception.appendChild(this.createParameterControl('Fading', 0, 20, 0.1, this.fd,
-            value => this.setParameters({ fd: value }), 'Hz', 'fd'));
-        controls.appendChild(reception);
-
-        const buzz = this._createSection('Video Buzz');
-        buzz.appendChild(this.createParameterControl('Buzz', -80, -20, 1, this.bz,
-            value => this.setParameters({ bz: value }), 'dB', 'bz'));
-        controls.appendChild(buzz);
-
-        const output = this._createSection('Output');
-        output.appendChild(this.createParameterControl('Output Gain', -24, 24, 0.1, this.og,
-            value => this.setParameters({ og: value }), 'dB', 'og'));
-        output.appendChild(this.createParameterControl('Mix', 0, 100, 1, this.mx,
-            value => this.setParameters({ mx: value }), '%', 'mx'));
-        controls.appendChild(output);
-        container.appendChild(controls);
+        container.setAttribute('data-instance-id', instanceId);
+        const panel = document.createElement('div');
+        panel.className = 'tv-audio-simulator-panel';
+        const tabs = document.createElement('div');
+        tabs.className = 'tv-audio-simulator-tabs';
+        tabs.setAttribute('role', 'tablist');
+        const contents = document.createElement('div');
+        contents.className = 'tv-audio-simulator-tab-contents';
+        const definitions = [
+            { id: 'standard', label: 'Standard', create: content => {
+                content.appendChild(this.createRadioGroup('Standard', TV_AUDIO_SIMULATOR_STANDARDS,
+                    this.ss, value => this.setParameters({ ss: value }), 'ss'));
+                const standardDetail = document.createElement('p');
+                standardDetail.className = 'tv-audio-simulator-standard-detail';
+                standardDetail.setAttribute('role', 'status');
+                standardDetail.setAttribute('aria-live', 'polite');
+                this.standardDetailElement = standardDetail;
+                this._refreshStandardDetail();
+                content.appendChild(standardDetail);
+            } },
+            { id: 'programme', label: 'Programme', create: content => {
+                content.appendChild(this.createCheckboxControl('Broadcast', this.rd,
+                    value => this.setParameters({ rd: value }), 'rd'));
+                content.appendChild(this.createRadioGroup('Tx Mode', TV_AUDIO_SIMULATOR_TX_MODES,
+                    this.tx, value => this.setParameters({ tx: value }), 'tx'));
+                content.appendChild(this.createRadioGroup('Receive Mode',
+                    TV_AUDIO_SIMULATOR_RECEIVE_MODES, this.sm,
+                    value => this.setParameters({ sm: value }), 'sm'));
+                content.appendChild(this.createParameterControl('Processing', 0, 18, 0.1, this.pr,
+                    value => this.setParameters({ pr: value }), 'dB', 'pr'));
+            } },
+            { id: 'reception', label: 'Reception', create: content => {
+                content.appendChild(this.createParameterControl('Signal', 0, 70, 0.1, this.st,
+                    value => this.setParameters({ st: value }), 'dBµV', 'st'));
+                content.appendChild(this.createParameterControl('Tuning', -200, 200, 0.1, this.tn,
+                    value => this.setParameters({ tn: value }), 'kHz', 'tn'));
+                content.appendChild(this.createParameterControl('IF Band', 80, 240, 1, this.bw,
+                    value => this.setParameters({ bw: value }), 'kHz', 'bw'));
+                content.appendChild(this.createParameterControl('Multipath', 0, 100, 1, this.mp,
+                    value => this.setParameters({ mp: value }), '%', 'mp'));
+                content.appendChild(this.createLogarithmicParameterControl(
+                    'Path Delay', 0.5, 50, 0.01, this.dl,
+                    value => this.setParameters({ dl: value }), 'µs', 'dl'));
+                content.appendChild(this.createParameterControl('Fading', 0, 20, 0.1, this.fd,
+                    value => this.setParameters({ fd: value }), 'Hz', 'fd'));
+            } },
+            { id: 'video-buzz', label: 'Video Buzz', create: content => {
+                content.appendChild(this.createParameterControl('Buzz', -80, -20, 1, this.bz,
+                    value => this.setParameters({ bz: value }), 'dB', 'bz'));
+            } },
+            { id: 'output', label: 'Output', create: content => {
+                content.appendChild(this.createParameterControl('Output Gain', -24, 24, 0.1, this.og,
+                    value => this.setParameters({ og: value }), 'dB', 'og'));
+                content.appendChild(this.createParameterControl('Mix', 0, 100, 1, this.mx,
+                    value => this.setParameters({ mx: value }), '%', 'mx'));
+            } }
+        ];
+        for (const definition of definitions) {
+            const active = definition.id === this.selectedTab;
+            const tab = document.createElement('button');
+            const content = document.createElement('div');
+            tab.type = 'button';
+            tab.id = `${instanceId}-${definition.id}-tab`;
+            tab.className = `tv-audio-simulator-tab ${active ? 'active' : ''}`;
+            tab.textContent = definition.label;
+            tab.setAttribute('role', 'tab');
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            tab.setAttribute('aria-controls', `${instanceId}-${definition.id}-panel`);
+            content.id = `${instanceId}-${definition.id}-panel`;
+            content.className = `tv-audio-simulator-tab-content plugin-parameter-ui ${active ? 'active' : ''}`;
+            content.setAttribute('role', 'tabpanel');
+            content.setAttribute('aria-labelledby', tab.id);
+            content.hidden = !active;
+            definition.create(content);
+            tab.addEventListener('click', () => {
+                tabs.querySelectorAll('.tv-audio-simulator-tab').forEach(item => {
+                    const selected = item === tab;
+                    item.classList.toggle('active', selected);
+                    item.setAttribute('aria-selected', selected ? 'true' : 'false');
+                });
+                contents.querySelectorAll('.tv-audio-simulator-tab-content').forEach(item => {
+                    const selected = item === content;
+                    item.classList.toggle('active', selected);
+                    item.hidden = !selected;
+                });
+                this.selectedTab = definition.id;
+            });
+            tabs.appendChild(tab);
+            contents.appendChild(content);
+        }
+        panel.appendChild(tabs);
+        panel.appendChild(contents);
+        container.appendChild(panel);
 
         const graph = this.createResponsiveGraph({
             maxWidth: 1024,
@@ -1980,10 +2012,21 @@ class TVAudioSimulatorPlugin extends PluginBase {
             context.fillText(label, x, plotBottom + 2 * scale);
         }
 
+        const spectrum = values.spectrumDb;
+        const bins = TV_AUDIO_SIMULATOR_SPECTRUM_BINS;
         context.beginPath();
-        for (let bin = 0; bin < TV_AUDIO_SIMULATOR_SPECTRUM_BINS; bin++) {
-            const x = plotLeft + plotWidth * bin / (TV_AUDIO_SIMULATOR_SPECTRUM_BINS - 1);
-            const y = dbToY(values.spectrumDb[bin]);
+        context.moveTo(plotLeft, plotBottom);
+        for (let bin = 0; bin < bins; bin++) {
+            const x = plotLeft + plotWidth * bin / (bins - 1);
+            context.lineTo(x, dbToY(spectrum[bin]));
+        }
+        context.lineTo(plotRight, plotBottom);
+        context.fillStyle = window.ThemePalette?.get('graph-trace-soft') ?? '';
+        context.fill();
+        context.beginPath();
+        for (let bin = 0; bin < bins; bin++) {
+            const x = plotLeft + plotWidth * bin / (bins - 1);
+            const y = dbToY(spectrum[bin]);
             if (bin === 0) context.moveTo(x, y);
             else context.lineTo(x, y);
         }

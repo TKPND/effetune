@@ -52,7 +52,7 @@ test('production schemas expose the audited automation population', async () => 
     .filter(([, parameters]) => parameters.length === 0)
     .map(([type]) => type);
 
-  assert.equal(entries.length, 101);
+  assert.equal(entries.length, 102);
   assert.equal(entries.filter(([, parameters]) => parameters.length !== 0).length, 88);
   assert.equal(entries.reduce((count, [, parameters]) => count + parameters.length, 0), 965);
   for (const effect of specs) {
@@ -86,12 +86,12 @@ test('production schemas expose the audited automation population', async () => 
   }
   assert.equal(
     createHash('sha256').update(JSON.stringify(catalog.effects)).digest('hex'),
-    '9b66e3641d32a0b721e9041b7f9ad136b728946d9bdfc8fcb0bec881f4fc6892'
+    '2be2427a78466c45e3eef1e70ff1095057e1d2325383ae289b12eedb40df27fd'
   );
   assert.deepEqual(privateEffects, [
     'FIRCrossoverPlugin', 'FiveBandFIRPEQPlugin', 'GroupDelayEqPlugin',
     'GroupDelayPEQPlugin', 'LevelMeterPlugin', 'MatrixPlugin', 'MutePlugin', 'NoteSpectrogramPlugin',
-    'OscilloscopePlugin', 'PolarityInversionPlugin', 'SpectrogramPlugin',
+    'OscilloscopePlugin', 'PitchMeterPlugin', 'PolarityInversionPlugin', 'SpectrogramPlugin',
     'SpectrumAnalyzerPlugin', 'StereoMeterPlugin'
   ]);
   const nonAutomatedByReason = {
@@ -101,8 +101,9 @@ test('production schemas expose the audited automation population', async () => 
         'displayTime', 'triggerMode', 'triggerLevel', 'triggerEdge', 'holdoff',
         'displayLevel', 'verticalOffset'
       ],
-      SpectrogramPlugin: ['dBRange', 'points'],
-      SpectrumAnalyzerPlugin: ['dBRange', 'points'],
+      PitchMeterPlugin: ['referenceA4', 'minimumMidi', 'maximumMidi'],
+      SpectrogramPlugin: ['dBRange', 'points', 'highQualityLog'],
+      SpectrumAnalyzerPlugin: ['dBRange', 'points', 'highQualityLog'],
       StereoMeterPlugin: ['windowTime']
     },
     requiresAssetRestage: {

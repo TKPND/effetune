@@ -6,10 +6,3 @@ export function getPipelineAnalyzerOutputCapacity(channelCount) {
         ? channelCount
         : PIPELINE_ANALYZER_MAX_OUTPUT_SLOTS;
 }
-
-export const getPipelineAnalyzerActiveSlotCount = getPipelineAnalyzerOutputCapacity;
-
-export function isPipelineAnalyzerSlotAvailable(index, channelCount) {
-    return Number.isInteger(index) && index >= 0 &&
-        index < getPipelineAnalyzerOutputCapacity(channelCount);
-}

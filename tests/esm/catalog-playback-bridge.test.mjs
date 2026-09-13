@@ -678,8 +678,9 @@ test('a missing session transport is reported without creating an audio player',
   assert.equal(created, 0);
 });
 
-test('Library Play awaits the audio player that loads on demand', async () => {
+test('Library Play resumes audio before awaiting the player that loads on demand', async () => {
   const calls = [];
+  let finishLoading;
   const player = {
     playbackManager: {},
     resumeAudioContextInGesture() {
@@ -690,8 +691,13 @@ test('Library Play awaits the audio player that loads on demand', async () => {
   const bridge = new CatalogPlaybackBridge({
     uiManager: {
       audioPlayer: null,
+      beginPlaybackSelectionGestureResume() {
+        calls.push('resume');
+        return Promise.resolve(true);
+      },
       async createAudioPlayer() {
         calls.push('create');
+        await new Promise(resolve => { finishLoading = resolve; });
         return player;
       }
     },
@@ -704,7 +710,10 @@ test('Library Play awaits the audio player that loads on demand', async () => {
     sequenceClient: sequenceClient()
   });
 
-  await bridge.start(playbackRequest());
-  assert.deepEqual(calls, ['create', 'resume', 'start']);
+  const started = bridge.start(playbackRequest());
+  assert.deepEqual(calls, ['resume', 'create']);
+  finishLoading();
+  await started;
+  assert.deepEqual(calls, ['resume', 'create', 'start']);
   assert.equal(player.libraryOperationService, bridge);
 });

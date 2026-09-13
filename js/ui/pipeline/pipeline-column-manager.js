@@ -141,7 +141,6 @@ export class PipelineColumnManager {
             column.dataset.columnIndex = i;
             this.pipelineList.appendChild(column);
         }
-        // console.log(`Rebuilt ${columns} columns.`);
 
         // Distribute plugins into the newly created columns
         this.distributePluginsToColumns();
@@ -154,7 +153,6 @@ export class PipelineColumnManager {
     distributePluginsToColumns() {
         const columns = this.pipelineList.querySelectorAll('.pipeline-column');
         if (!columns.length) {
-            // console.warn("distributePluginsToColumns called but no columns found.");
             // If no columns, ensure empty state is handled correctly by updatePipelineUI
             // This might happen if pipeline becomes empty, trigger update
             if (this.audioManager.pipeline.length === 0) {
@@ -273,7 +271,6 @@ export class PipelineColumnManager {
         if (pipelineEmptyElement) { 
              pipelineEmptyElement.style.display = 'block';
         }
-        // console.log("Pipeline is empty, adding is-empty class.");
         // Ensure pull tab position is updated even when empty
         requestAnimationFrame(() => {
              this.updatePluginListPullTab();

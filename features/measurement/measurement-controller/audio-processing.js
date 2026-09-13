@@ -502,9 +502,6 @@ const AudioProcessing = {
                     } else {
                         finalBuffer = recordBuffer;
                     }
-                    
-                    // Save full recording for debugging
-                    this.fullRecordBuffer = finalBuffer;
 
                     try {
                         // Process the recording to extract the impulse response

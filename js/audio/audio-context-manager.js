@@ -294,7 +294,11 @@ export class AudioContextManager {
         }
 
         const source = await response.text();
-        const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+        const helperUrl = new URL('multires-spectrum.js', new URL(moduleUrl, window.location.href)).href;
+        const helperResponse = await fetch(helperUrl, { cache: 'no-store' });
+        if (!helperResponse?.ok) throw new Error('AudioWorklet analysis helper could not be loaded');
+        const helperSource = await helperResponse.text();
+        const blobUrl = URL.createObjectURL(new Blob([helperSource, '\n', source], { type: 'text/javascript' }));
         try {
             await this.audioContext.audioWorklet.addModule(blobUrl);
         } finally {
@@ -328,6 +332,9 @@ export class AudioContextManager {
                         // registration. A cold but valid load must be allowed to finish;
                         // racing it with a timeout leaves the registration running while
                         // incorrectly starting the failure fallback in parallel.
+                        await this.audioContext.audioWorklet.addModule(
+                            new URL('multires-spectrum.js', new URL(moduleUrl, window.location.href)).href
+                        );
                         await this.audioContext.audioWorklet.addModule(moduleUrl);
                     } catch (moduleError) {
                         if (!allowBlobFallback) throw moduleError;

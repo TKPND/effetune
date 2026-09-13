@@ -896,7 +896,7 @@ TV Audio Simulator让音乐经过模拟电视广播或NICAM数字电视的伴音
 - 先选择所需的Standard，然后从Signal 35 dBµV、Tuning 0 kHz、Multipath和Fading 0、Mix 100%开始。
 - 要获得接收良好的年代电视声，可提高Signal并让Tuning保持居中。Processing会增加模拟通路的压缩感和密度，但不作用于NICAM数字主通路。
 - 要模拟困难的模拟接收，先降低Signal，再加入Multipath或轻微偏移Tuning。Path Delay会改变多径失真的质感。
-- 使用B/G NICAM或I NICAM时，逐渐降低Signal即可听到数字损伤和切换至FM单声道的过程。Video Buzz加入50/60 Hz音调；-80 dB时关闭。
+- 使用B/G NICAM或I NICAM时，逐渐降低Signal即可听到数字损伤和切换至FM单声道的过程。只有在需要电源频率和扫描相关的50/60 Hz音调时，才在Video Buzz选项卡中提高Buzz。最小值-80 dB会关闭嗡声。
 
 ### 系统预设
 
@@ -911,11 +911,11 @@ TV Audio Simulator让音乐经过模拟电视广播或NICAM数字电视的伴音
 - **Signal**：设置0至70 dBµV的接收强度。降低会增加噪声或数字错误，并可能触发回退。
 - **Tuning**：在-200至+200 kHz范围偏移调谐；偏离0越多，接收越窄、失真越大。
 - **IF Band**：设置80至240 kHz的接收带宽。较窄可更强地抑制失谐能量，但也可能削减节目带宽。
-- **Multipath**：加入延迟反射；提高会加重梳状染色与立体声不稳定。
+- **Multipath** (0–100%)：加入延迟反射；提高会加重梳状染色与立体声不稳定。
 - **Path Delay**：设置0.5至50 µs的反射延迟，改变峰谷的间距。
 - **Fading**：设置0至20 Hz的接收电平变化速度。
 - **Receive Mode**：`Auto`跟随可用通路；`Stereo`、`Main`和`Sub`请求特定节目。
-- **Video Buzz**：设置-80至-20 dB的50/60 Hz嗡声；-80 dB时关闭。
+- **Buzz**：设置-80至-20 dB的50/60 Hz嗡声；-80 dB时关闭。
 - **Output Gain**：在-24至+24 dB范围调整最终电平。
 - **Mix**：在0%至100%之间混合原声与电视伴音。
 

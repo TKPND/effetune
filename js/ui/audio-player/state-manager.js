@@ -66,9 +66,6 @@ export class StateManager {
     // from audio transition state so transport changes cannot strand the UI.
     this.playbackPendingRequests = new Set();
     
-    // State history for debugging
-    this.stateHistory = [];
-    this.maxHistorySize = 100;
   }
   
   /**
@@ -82,18 +79,13 @@ export class StateManager {
    * Update state with validation
    */
   updateState(updates, source = 'unknown') {
-    const oldState = this.getStateSnapshot();
-    const timestamp = Date.now();
     
     // Apply updates
     Object.assign(this.state, updates);
     
     // Validate state consistency
     this.validateState();
-    
-    // Log state change
-    this.logStateChange(oldState, this.getStateSnapshot(), source, timestamp);
-    
+
     // Notify listeners
     this.notifyListeners(updates, source);
   }
@@ -151,38 +143,7 @@ export class StateManager {
       this.state.playbackMode = 'audioElement';
     }
   }
-  
-  /**
-   * Log state change for debugging
-   */
-  logStateChange(oldState, newState, source, timestamp) {
-    const change = {
-      timestamp,
-      source: summarizeHistoryValue(source),
-      changes: {}
-    };
-    
-    // Find what changed
-    for (const [key, newValue] of Object.entries(newState)) {
-      if (oldState[key] !== newValue) {
-        change.changes[key] = {
-          from: summarizeHistoryValue(oldState[key]),
-          to: summarizeHistoryValue(newValue)
-        };
-      }
-    }
-    
-    // Only log if there are actual changes
-    if (Object.keys(change.changes).length > 0) {
-      this.stateHistory.push(change);
-      
-      // Keep history size manageable
-      if (this.stateHistory.length > this.maxHistorySize) {
-        this.stateHistory.shift();
-      }
-    }
-  }
-  
+
   /**
    * Add state change listener
    */
@@ -469,63 +430,9 @@ export class StateManager {
       controlsEnabled: options.controlsEnabled !== undefined ? options.controlsEnabled : enabled
     }, 'ui_state_change');
   }
-  
-  /**
-   * Get state history for debugging
-   */
-  getStateHistory() {
-    return [...this.stateHistory];
-  }
-  
-  /**
-   * Clear state history
-   */
-  clearStateHistory() {
-    this.stateHistory = [];
-  }
-  
-  /**
-   * Get debug information
-   */
-  getDebugInfo() {
-    return {
-      currentState: this.getStateSnapshot(),
-      stateHistory: this.stateHistory.slice(-10), // Last 10 changes
-      listeners: Array.from(this.listeners.keys()),
-      listenerCounts: Object.fromEntries(
-        Array.from(this.listeners.entries()).map(([key, set]) => [key, set.size])
-      )
-    };
-  }
+
 }
 
-function summarizeHistoryValue(value) {
-  if (value === null || value === undefined || typeof value === 'boolean' ||
-      typeof value === 'number') return value ?? null;
-  if (typeof value === 'string') return value.slice(0, 160);
-  if (typeof value === 'bigint') return `${value}n`;
-  if (value instanceof ArrayBuffer) return `ArrayBuffer(${value.byteLength} bytes)`;
-  if (ArrayBuffer.isView(value)) {
-    return `${value.constructor?.name ?? 'TypedArray'}(${value.byteLength} bytes)`;
-  }
-  if (typeof Blob === 'function' && value instanceof Blob) {
-    return `${value.constructor?.name ?? 'Blob'}(${value.size} bytes${value.type
-      ? `, ${value.type.slice(0, 80)}`
-      : ''})`;
-  }
-  if (Array.isArray(value)) return `Array(${value.length})`;
-  if (typeof value === 'object') {
-    const audioBufferSummary = Number.isSafeInteger(value.length) &&
-      Number.isSafeInteger(value.numberOfChannels) && Number.isFinite(value.sampleRate)
-      ? `AudioBuffer(${value.numberOfChannels}ch, ${value.length} frames, ${value.sampleRate}Hz)`
-      : null;
-    if (audioBufferSummary) return audioBufferSummary;
-    const type = value.constructor?.name ?? 'Object';
-    const keys = Object.keys(value).slice(0, 8).join(',');
-    return `${type}(${keys}${Object.keys(value).length > 8 ? ',…' : ''})`.slice(0, 160);
-  }
-  return String(value).slice(0, 160);
-}
 
 function normalizeQueueWindow(queueWindow, totalCount) {
   const rows = Array.isArray(queueWindow?.rows) ? queueWindow.rows : [];

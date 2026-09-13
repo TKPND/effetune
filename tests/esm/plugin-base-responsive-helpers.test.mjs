@@ -390,9 +390,15 @@ test('PluginBase creates mobile-friendly select, checkbox, and radio controls', 
   checkbox.dispatch('change');
 
   const radioRow = plugin.createRadioGroup('Channel', ['Left', 'Right'], 'Right', value => calls.push(['radio', value]));
-  const leftRadio = radioRow.children[1];
-  const rightRadio = radioRow.children[3];
+  const leftOption = radioRow.children[1];
+  const rightOption = radioRow.children[2];
+  const leftRadio = leftOption.children[0];
+  const rightRadio = rightOption.children[0];
   assert.equal(radioRow.className, 'parameter-row radio-group');
+  assert.equal(leftOption.className, 'radio-option');
+  assert.equal(rightOption.className, 'radio-option');
+  assert.equal(leftOption.children[1].htmlFor, leftRadio.id);
+  assert.equal(rightOption.children[1].htmlFor, rightRadio.id);
   assert.equal(leftRadio.name, rightRadio.name);
   assert.notEqual(leftRadio.id, rightRadio.id);
   leftRadio.checked = true;

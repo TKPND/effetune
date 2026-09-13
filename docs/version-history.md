@@ -7,8 +7,8 @@ lang: en
 # Version History
 
 ### Version 2.10.0 (TBD, 2026)
-- Added TV Audio Simulator effect
-- Added a bar display mode to the Spectrum Analyzer
+- Added Pitch Meter and TV Audio Simulator effects
+- Improved Spectrogram and Spectrum Analyzer
 - Various minor improvements
 
 ### Version 2.9.0 (Sep 11, 2026)

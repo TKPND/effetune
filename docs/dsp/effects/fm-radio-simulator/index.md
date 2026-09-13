@@ -11,7 +11,7 @@ Semantic type: `FMRadioSimulator` · Category: lo-fi
 
 Models bandwidth, stereo behavior, distortion, and noise associated with FM radio.
 
-This type has catalog telemetry metadata but no public observation API in v0.1. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).
+This type has catalog telemetry metadata but no public observation API. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).
 
 This type can intentionally generate output from zero input at an active setting. See [Processing model](/dsp/concepts/processing-model/#source-generating-effects).
 
@@ -21,7 +21,7 @@ This type can intentionally generate output from zero input at an active setting
 - Catalog sample rates: **44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000 Hz**
 - Assets: **none**
 - Catalog-declared latency: **sampleRateDependent**; depends on sampleRate
-- Telemetry: **catalog metadata only; observation API unavailable in v0.1**
+- Telemetry: **catalog metadata only; no public observation API**
 
 | Semantic name | Python constructor keyword | Type / count | Default | Unit | Range or values |
 |---|---|---:|---|---|---|

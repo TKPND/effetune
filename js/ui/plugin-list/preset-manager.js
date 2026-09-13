@@ -354,7 +354,7 @@ export class PresetManager {
         } catch (error) {
             console.error('Error adding preset:', error);
             if (window.uiManager) {
-                window.uiManager.setError(`Error adding preset: ${error.message}`, true);
+                window.uiManager.setError('error.failedToLoadPreset', true);
             }
         }
     }
@@ -369,7 +369,7 @@ export class PresetManager {
         } catch (error) {
             console.error('Error adding user preset:', error);
             if (window.uiManager) {
-                window.uiManager.setError(`Error adding user preset: ${error.message}`, true);
+                window.uiManager.setError('error.failedToLoadPreset', true);
             }
         }
     }

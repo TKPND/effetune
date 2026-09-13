@@ -12,6 +12,7 @@ const BLOCK_SIZE = 128;
 const QUANTUM_COUNT = SAMPLE_RATE / BLOCK_SIZE;
 const TELEMETRY_BYTES = 256 * 1024;
 const MULTI_F0_TAP_ID = 206;
+const PITCH_METER_TAP_ID = 207;
 const MULTI_F0_NOTE_COUNT = 88;
 const MULTI_F0_FINE_DIVISIONS = 5;
 const MULTI_F0_PITCH_COUNT = MULTI_F0_NOTE_COUNT * MULTI_F0_FINE_DIVISIONS;
@@ -30,7 +31,8 @@ const bandwidthTargets = new Map([
   [202, ['Oscilloscope', 300_000]],
   [203, ['Spectrum Analyzer', 600_000]],
   [204, ['Spectrogram', 50_000]],
-  [205, ['Stereo Meter', 900_000]]
+  [205, ['Stereo Meter', 900_000]],
+  [PITCH_METER_TAP_ID, ['Pitch Meter', 20_000]]
 ]);
 
 const analyzers = [
@@ -39,7 +41,8 @@ const analyzers = [
   ['SpectrumAnalyzerPlugin', 203, TelemetryFrameType.TAP_SPECTRUM, 1],
   ['SpectrogramPlugin', 204, TelemetryFrameType.TAP_SPECTROGRAM_COL, 1],
   ['StereoMeterPlugin', 205, TelemetryFrameType.TAP_STEREO_FIELD, 2],
-  ['NoteSpectrogramPlugin', MULTI_F0_TAP_ID, 24, 3]
+  ['NoteSpectrogramPlugin', MULTI_F0_TAP_ID, 24, 3],
+  ['PitchMeterPlugin', PITCH_METER_TAP_ID, TelemetryFrameType.TAP_PITCH_METER, 1]
 ];
 
 function deterministicNoise(sample, channel) {

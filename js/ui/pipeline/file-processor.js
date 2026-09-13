@@ -149,7 +149,7 @@ export class FileProcessor {
         fileInput.addEventListener('change', (e) => this._runSingleFlight(async () => {
             const files = Array.from(e.target.files).filter(isSupportedOfflineAudioFile);
             if (files.length === 0) {
-                window.uiManager.setError('Please select audio files', true);
+                window.uiManager.setError('error.selectAudioFiles', true);
                 return;
             }
 
@@ -909,8 +909,12 @@ export class FileProcessor {
                                 );
 
                                 if (saveResult.success) {
-                                    window.uiManager.setError(`File saved successfully to ${result.filePath}`);
-                                    setTimeout(() => window.uiManager.clearError(), 3000);
+                                    window.uiManager.showTransientMessage(
+                                        'success.fileSaved',
+                                        false,
+                                        { filePath: result.filePath },
+                                        3000
+                                    );
                                 } else {
                                     this._reportOutputError(
                                         'Failed to save processed audio file:',
@@ -977,7 +981,7 @@ export class FileProcessor {
             try {
                 const audioFiles = Array.from(files || []).filter(isSupportedOfflineAudioFile);
                 if (audioFiles.length === 0) {
-                    window.uiManager.setError('Please select audio files', true);
+                    window.uiManager.setError('error.selectAudioFiles', true);
                     return;
                 }
 

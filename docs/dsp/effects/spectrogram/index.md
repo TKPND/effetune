@@ -19,12 +19,13 @@ Use the opt-in decoded telemetry callback or subscription API to observe this an
 - Catalog sample rates: **not declared; this does not mean unsupported**
 - Assets: **none**
 - Catalog-declared latency: **zero**
-- Analyzer telemetry: **decoded semantic observations are available in v0.1**
+- Analyzer telemetry: **decoded semantic observations are available**
 
 | Semantic name | Python constructor keyword | Type / count | Default | Unit | Range or values |
 |---|---|---:|---|---|---|
 | `dBRange` | `d_brange` | number / 1 | `-96` | dB | -144 … -48 |
 | `points` | `points` | integer / 1 | `12` | Not declared in catalog | 8 … 14 |
+| `highQualityLog` | `high_quality_log` | boolean / 1 | `false` | Not declared in catalog | Not declared in catalog |
 
 
 
@@ -47,6 +48,7 @@ The graph scrolls from right to left at a steady speed, with marks every second.
   - Bottom: Bass sounds
   - Middle: Main instruments
   - Top: High frequencies
+- With **Log (HQ)**, nearby low-frequency tones appear as more clearly separated bands. The longer low-frequency measurement can take a little longer to settle or fade.
 
 ### What You Can See
 - Melodies: Flowing lines of color
@@ -62,8 +64,9 @@ The graph scrolls from right to left at a steady speed, with marks every second.
 - **Points** - FFT size used for the display (256 to 16384)
   - Higher numbers: More frequency detail, but slower time updates
   - Lower numbers: Faster movement, but less frequency detail
-- **Frequency Scale** - **Log** gives low frequencies more display space; **Linear** places equal frequency widths at equal intervals.
-- **Keyboard** - Shows a static keyboard guide at the right of the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log** or **Linear**; with **Linear**, low-frequency keys look narrower.
+  - With **Log (HQ)**, Points sets the short analysis window; a four-times-longer window improves low-frequency separation.
+- **Frequency Scale** - **Log** gives low frequencies more display space. **Log (HQ)** adds a longer measurement for clearer separation of nearby bass frequencies while retaining the short measurement for higher frequencies. It uses more processing and low-frequency changes can take longer to appear or fade; it does not change the audio. **Linear** places equal frequency widths at equal intervals.
+- **Keyboard** - Shows a static keyboard guide at the right of the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log**, **Log (HQ)**, or **Linear**; **Log (HQ)** uses the same logarithmic spacing as **Log**, while with **Linear**, low-frequency keys look narrower.
 - The analyzer uses the average of the left and right channels. Mono input is analyzed directly.
 
 [Back to all effects](/dsp/effects/)

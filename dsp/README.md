@@ -427,13 +427,23 @@ All payloads are little-endian and four-byte aligned. Consumers must accept the
 exact payload size for the selected format version. The default format version
 is 1; `TAP_SCOPE_SNAPSHOT` (type 3), `TAP_STEREO_FIELD` (type 6), and
 `TAP_AM_RADIO_SIMULATOR` (type 17) use version 2. `TAP_NOTE_SPECTROGRAM`
-(type 24) uses version 3.
+(type 24) uses version 3. `TAP_SPECTRUM` (type 4) and `TAP_SPECTROGRAM`
+(type 5) use version 2 when `highQualityLog` is enabled.
 
 #### Frame Types
 
 - **Types 1-6 — analyzer frames.** Type 2, `TAP_GAIN_REDUCTION`, contains one
   nonnegative float32 dB value and is shared by Compressor, Gate, Expander, and
   BrickwallLimiter.
+- **Types 4 and 5 — `TAP_SPECTRUM` and `TAP_SPECTROGRAM`.** Format version 2
+  is emitted only for `highQualityLog`. It has a 48-byte header with sample rate,
+  FFT-size exponent, nominal hop, analysis generation, capture-end sample index,
+  frame index, log-grid count and bounds, and the first valid grid index and count.
+  Type 4 then carries current and peak-held float32 dBFS values for every grid cell;
+  type 5 carries 256 high-to-low log-frequency uint8 display intensities. Public
+  JavaScript and Python decoders expose these as `SpectrumHqTelemetryFrame` with
+  `kind` `spectrumHq` and `SpectrogramHqTelemetryFrame` with `kind`
+  `spectrogramHq`. Version 1 remains the non-HQ frame format.
 - **Type 7 — `TAP_LOUDNESS_LEVELS`.** Two float32 LUFS values.
 - **Type 8 — `TAP_TRANSIENT_GAIN`.** One signed float32 dB value.
 - **Type 9 — `TAP_CHANNEL_COUNT`.** One little-endian `u32` in the range 1-16.
@@ -513,6 +523,15 @@ is 1; `TAP_SCOPE_SNAPSHOT` (type 3), `TAP_STEREO_FIELD` (type 6), and
   path blend from 0-1, and multipath depth in dB. The spectrum uses dBFS on a
   fixed logarithmic grid. It represents recovered multiplex audio for analogue
   FM, detected audio for L AM, and selected output audio for NICAM.
+
+- **Type 26 — `TAP_PITCH_METER`.** Format version 1 is exactly 44 bytes. It
+  contains float32 sample rate, observation time, hop duration, fundamental
+  frequency in Hz, fractional MIDI note, cents offset, confidence, and input
+  level in dB; `u32` frame index and non-zero analysis generation; and `u16`
+  flags followed by a reserved `u16`. Flag bit 0 marks a voiced observation.
+  Unvoiced observations set frequency, MIDI note, cents, and confidence to zero.
+  Public JavaScript and Python decoders expose this as
+  `PitchMeterTelemetryFrame` with `kind` `pitch`.
 
 ### Latency and Pipeline Descriptors
 

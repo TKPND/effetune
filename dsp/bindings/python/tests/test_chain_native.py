@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import tempfile
 import unittest
@@ -191,9 +192,21 @@ class NativeChainTests(unittest.TestCase):
                 "oscilloscope",
             ),
             (
+                effetune.PitchMeter(id="pitch"),
+                effetune.PitchMeterTelemetryFrame,
+                "pitch",
+            ),
+            (
                 effetune.SpectrumAnalyzer(id="spectrum", points=10),
                 effetune.SpectrumTelemetryFrame,
                 "spectrum",
+            ),
+            (
+                effetune.SpectrumAnalyzer(
+                    id="spectrum-hq", points=10, high_quality_log=True
+                ),
+                effetune.SpectrumHqTelemetryFrame,
+                "spectrumHq",
             ),
             (
                 effetune.NoteSpectrogram(id="notes"),
@@ -204,6 +217,13 @@ class NativeChainTests(unittest.TestCase):
                 effetune.Spectrogram(id="spectrogram", points=10),
                 effetune.SpectrogramTelemetryFrame,
                 "spectrogram",
+            ),
+            (
+                effetune.Spectrogram(
+                    id="spectrogram-hq", points=10, high_quality_log=True
+                ),
+                effetune.SpectrogramHqTelemetryFrame,
+                "spectrogramHq",
             ),
             (
                 effetune.StereoMeter(id="stereo", window_time=0.02),
@@ -256,6 +276,21 @@ class NativeChainTests(unittest.TestCase):
                         )
                         self.assertTrue(np.isfinite(frame.values).all())
                         self.assertGreater(max(frame.values) - min(frame.values), 0.5)
+                    elif kind == "pitch":
+                        self.assertEqual(frame.sample_rate, 48_000)
+                        self.assertGreater(frame.time_seconds, 0)
+                        self.assertGreater(frame.hop_seconds, 0)
+                        self.assertGreater(frame.frame_index, 0)
+                        self.assertGreater(frame.generation, 0)
+                        self.assertTrue(frame.voiced)
+                        self.assertGreater(frame.f0_hz, 0)
+                        self.assertGreaterEqual(frame.midi, 21)
+                        self.assertLessEqual(frame.midi, 108)
+                        self.assertGreaterEqual(frame.cents, -50)
+                        self.assertLessEqual(frame.cents, 50)
+                        self.assertGreater(frame.confidence, 0)
+                        self.assertLessEqual(frame.confidence, 1)
+                        self.assertTrue(math.isfinite(frame.level_db))
                     elif kind == "spectrum":
                         self.assertEqual(frame.sample_rate, 48_000)
                         self.assertEqual(frame.points, 10)
@@ -269,6 +304,23 @@ class NativeChainTests(unittest.TestCase):
                             max(frame.current_db) - min(frame.current_db),
                             20,
                         )
+                    elif kind == "spectrumHq":
+                        self.assertEqual(frame.sample_rate, 48_000)
+                        self.assertEqual(frame.points, 10)
+                        self.assertEqual(frame.hop, 1_600)
+                        self.assertGreater(frame.generation, 0)
+                        self.assertGreater(frame.capture_end, 0)
+                        self.assertGreater(frame.frame_index, 0)
+                        self.assertEqual(frame.cell_count, 2_048)
+                        self.assertEqual(frame.min_frequency, 20)
+                        self.assertEqual(frame.max_frequency, 40_000)
+                        self.assertEqual(frame.first_valid_index, 0)
+                        self.assertGreater(frame.valid_cell_count, 0)
+                        self.assertLess(frame.valid_cell_count, frame.cell_count)
+                        self.assertEqual(len(frame.current_db), frame.cell_count)
+                        self.assertEqual(len(frame.peak_db), frame.cell_count)
+                        self.assertTrue(np.isfinite(frame.current_db).all())
+                        self.assertTrue(np.isfinite(frame.peak_db).all())
                     elif kind == "noteSpectrogram":
                         self.assertEqual(frame.sample_rate, 48_000)
                         self.assertEqual(frame.first_midi, 21)
@@ -296,6 +348,30 @@ class NativeChainTests(unittest.TestCase):
                             )
                         )
                         self.assertGreater(max(frame.intensities), 0)
+                    elif kind == "spectrogramHq":
+                        self.assertEqual(frame.sample_rate, 48_000)
+                        self.assertEqual(frame.points, 10)
+                        self.assertEqual(frame.hop, 512)
+                        self.assertGreater(frame.generation, 0)
+                        self.assertGreater(frame.capture_end, 0)
+                        self.assertGreater(frame.frame_index, 0)
+                        self.assertEqual(frame.cell_count, 256)
+                        self.assertEqual(frame.min_frequency, 20)
+                        self.assertEqual(frame.max_frequency, 40_000)
+                        self.assertGreater(frame.first_valid_index, 0)
+                        self.assertGreater(frame.valid_cell_count, 0)
+                        self.assertLess(frame.valid_cell_count, frame.cell_count)
+                        self.assertEqual(
+                            frame.first_valid_index + frame.valid_cell_count,
+                            frame.cell_count,
+                        )
+                        self.assertEqual(len(frame.intensities), frame.cell_count)
+                        self.assertTrue(
+                            all(
+                                0 <= intensity <= 255
+                                for intensity in frame.intensities
+                            )
+                        )
                     else:
                         self.assertEqual(frame.sample_rate, 48_000)
                         self.assertTrue(frame.samples)
@@ -1101,7 +1177,7 @@ class NativeChainTests(unittest.TestCase):
             topology="automatic",
         )
         source_four_channels = np.vstack((source, source))
-        self.assertEqual(len(EFFECT_METADATA["effects"]), 101)
+        self.assertEqual(len(EFFECT_METADATA["effects"]), 102)
         for metadata in EFFECT_METADATA["effects"]:
             effect_type = metadata["type"]
             definition = metadata["parameters"][0] if metadata["parameters"] else None

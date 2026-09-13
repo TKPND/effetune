@@ -374,7 +374,7 @@
 
     <script type="module">
         import { PluginManager } from '../js/plugin-manager.js';
-        import { loadScript, loadCSS } from '../js/script-loader.js';
+        import { loadClassicScript, loadStylesheet, waitForStylesheets } from '../js/utils/classic-script-loader.js';
         import { startRendererWatchdogHeartbeat } from '../js/electron-watchdog.js';
         import { loadAudioPreferences } from '../js/electron/audioIntegration.js';
         import { copyTextToClipboard } from '../js/utils/clipboard-utils.js';
@@ -525,18 +525,22 @@
             button.textContent = 'Copy the results to the clipboard';
             const message = document.createElement('span');
             message.className = 'copy-success';
-            message.textContent = 'The results were copied to the clipboard.';
+            message.setAttribute('role', 'status');
             container.append(button, message);
+            let messageTimer;
             button.addEventListener('click', async () => {
+                clearTimeout(messageTimer);
                 try {
                     if (!(await copyTextToClipboard(getText()))) {
                         throw new Error('Clipboard copy failed');
                     }
+                    message.textContent = 'The results were copied to the clipboard.';
                     message.classList.add('show');
-                    setTimeout(() => message.classList.remove('show'), 2000);
+                    messageTimer = setTimeout(() => message.classList.remove('show'), 2000);
                 } catch (error) {
                     console.error('Failed to copy benchmark results:', error);
-                    alert('The results could not be copied. Please select and copy them manually.');
+                    message.textContent = 'The results could not be copied. Please select and copy them manually.';
+                    message.classList.add('show');
                 }
             });
             return container;
@@ -647,7 +651,8 @@
                     const pluginDefinitions = new Map();
                     let currentSection = null;
 
-                    await loadScript('../plugins/plugin-base.js');
+                    await loadClassicScript('../plugins/plugin-base.js');
+                    await loadClassicScript('../plugins/multires-spectrum.js');
 
                     text.split('\n').forEach(line => {
                         line = line.trim();
@@ -689,20 +694,17 @@
                     const loadCategory = async (plugins) => {
                         const loadPromises = plugins.flatMap(({displayName, path, hasCSS}) => {
                             const promises = [
-                                loadScript(`${path}.js`).catch(error => {
+                                loadClassicScript(`${path}.js`).catch(error => {
                                     throw new Error(`Failed to load plugin script for ${displayName}: ${error.message}`);
                                 })
                             ];
                             if (hasCSS) {
-                                promises.push(
-                                    loadCSS(`${path}.css`).catch(error => {
-                                        throw new Error(`Failed to load CSS for ${displayName}: ${error.message}`);
-                                    })
-                                );
+                                loadStylesheet(`${path}.css`);
                             }
                             return promises;
                         });
                         await Promise.all(loadPromises);
+                        await waitForStylesheets();
                     };
 
                     await Promise.all(
@@ -1215,8 +1217,7 @@
             if (window.electronAPI) {
                 window.electronAPI.hideApplicationMenu()
                     .then(result => {
-                        if (result && result.success) {
-                        } else {
+                        if (!result || !result.success) {
                             console.error('Failed to hide application menu:', result ? result.error : 'Unknown error');
                         }
                     })

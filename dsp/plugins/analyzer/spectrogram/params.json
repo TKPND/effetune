@@ -21,6 +21,12 @@
       "min": 8,
       "max": 14,
       "default": 12
+    },
+    {
+      "name": "highQualityLog",
+      "key": "hq",
+      "kind": "bool",
+      "default": false
     }
   ]
 }

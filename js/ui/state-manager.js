@@ -1,6 +1,7 @@
 export class StateManager {
-    constructor(audioManager) {
+    constructor(audioManager, showNotification = null) {
         this.audioManager = audioManager;
+        this.showNotification = showNotification;
         
         // UI elements
         this.errorDisplay = document.getElementById('errorDisplay');
@@ -205,17 +206,36 @@ export class StateManager {
 
     async resetAudio() {
         if (typeof this.audioManager?.reset === 'function') {
-            this.setError(this.translate('status.resettingAudio', 'Resetting audio...'));
+            const resettingMessage = this.translate('status.resettingAudio', 'Resetting audio...');
+            const resettingNotice = this.notify(resettingMessage);
             const result = await this.audioManager.reset(null);
             if (result) {
-                this.setError(result, true);
+                console.error('Audio reset failed:', result);
+                this.notify(this.translate(
+                    'error.audioResetFailed',
+                    'Audio could not be reset. Check your audio devices and try again.'
+                ), true);
             } else {
-                this.clearError();
+                resettingNotice.clear();
             }
             return;
         }
         this.setError(this.translate('status.reloading', 'Reloading...'));
         window.location.reload();
+    }
+
+    notify(message, isError = false) {
+        if (typeof this.showNotification === 'function') {
+            const notice = this.showNotification(message, isError);
+            if (typeof notice?.clear === 'function') return notice;
+        }
+
+        this.setError(message, isError);
+        return {
+            clear: () => {
+                if (this.errorDisplay.textContent === message) this.clearError();
+            }
+        };
     }
 
     setError(message, isError = false) {

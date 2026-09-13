@@ -54,7 +54,7 @@ try {
 
   const smoke = [
     "import('@effetune/dsp').then(async m => {",
-    "  if (m.EFFECT_TYPES.length !== 101) throw new Error('catalog mismatch');",
+    "  if (m.EFFECT_TYPES.length !== 102) throw new Error('catalog mismatch');",
     "  if (m.EFFECT_CATALOG.channels.length !== 27) throw new Error('catalog channels missing');",
     "  for (const type of m.EFFECT_TYPES) {",
     "    const factoryName = `create${type}`;",
@@ -75,8 +75,9 @@ try {
     "  if (output.length !== 1 || output[0].length !== 128 || output[0][127] === 1) throw new Error('preset execution failed');",
     "  const sameAudio = (left, right) => left.length === right.length && left.every((channel, index) => channel.length === right[index].length && channel.every((value, frame) => value === right[index][frame]));",
     "  const modulationInput = [Float32Array.from({length: 512}, (_, index) => Math.sin(index * 0.071) * 0.4), Float32Array.from({length: 512}, (_, index) => Math.cos(index * 0.053) * 0.3)];",
-    "  const canonicalizeModulation = (type, parameters) => { const values = {...parameters}; if (type === 'AutoFilter' && values.minimumFrequency > values.maximumFrequency) [values.minimumFrequency, values.maximumFrequency] = [values.maximumFrequency, values.minimumFrequency]; else if (type === 'Chorus' && values.depth > values.delay) values.depth = values.delay; else if (type === 'FrequencyShifter' && values.minimumShift > values.maximumShift) [values.minimumShift, values.maximumShift] = [values.maximumShift, values.minimumShift]; return values; };",
+    "  const canonicalizeModulation = (type, parameters) => { const values = {...parameters}; if ((type === 'NoteSpectrogram' || type === 'PitchMeter') && values.minimumMidi > values.maximumMidi) [values.minimumMidi, values.maximumMidi] = [values.maximumMidi, values.minimumMidi]; else if (type === 'AutoFilter' && values.minimumFrequency > values.maximumFrequency) [values.minimumFrequency, values.maximumFrequency] = [values.maximumFrequency, values.minimumFrequency]; else if (type === 'Chorus' && values.depth > values.delay) values.depth = values.delay; else if (type === 'FrequencyShifter' && values.minimumShift > values.maximumShift) [values.minimumShift, values.maximumShift] = [values.maximumShift, values.minimumShift]; return values; };",
     "  const modulationCases = [",
+    "    ['PitchMeter', {minimumMidi: 91, maximumMidi: 28}, {minimumMidi: 28, maximumMidi: 91}, {minimumMidi: 21, maximumMidi: 108}],",
     "    ['AutoFilter', {minimumFrequency: 8000, maximumFrequency: 200}, {minimumFrequency: 200, maximumFrequency: 8000}, {minimumFrequency: 100, maximumFrequency: 9000}],",
     "    ['Chorus', {delay: 0.5, depth: 20}, {delay: 0.5, depth: 0.5}, {delay: 10, depth: 0.25}],",
     "    ['FrequencyShifter', {minimumShift: 900, maximumShift: 20}, {minimumShift: 20, maximumShift: 900}, {minimumShift: 10, maximumShift: 1000}]",
@@ -166,7 +167,7 @@ try {
     "  const generated = await import('@effetune/dsp');",
     "  new generated.Compressor({threshold: -12});",
     "  const catalog = await import('@effetune/dsp/catalog');",
-    "  if (catalog.EFFECT_CATALOG.effects.length !== 101) throw new Error('catalog subpath failed');",
+    "  if (catalog.EFFECT_CATALOG.effects.length !== 102) throw new Error('catalog subpath failed');",
     "})"
   ].join('\n');
   await run(process.execPath, ['--input-type=module', '--eval', smoke], {

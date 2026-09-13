@@ -49,6 +49,9 @@ function createUiManager(calls, options = {}) {
     setError(...args) {
       calls.push(['setError', ...args]);
     },
+    showTransientMessage(...args) {
+      calls.push(['showTransientMessage', ...args]);
+    },
     clearError() {
       calls.push(['clearError']);
     },
@@ -181,7 +184,7 @@ test('openPresetFile rejects unavailable integration and reports validation fail
 
   await withPresetGlobals({
     window: { ORIGINAL_PIPELINE_STATE_LOADED: true }
-  }, async ({ calls, timeouts, windowRef }) => {
+  }, async ({ calls, windowRef }) => {
     Object.defineProperty(windowRef, 'pipelineStateLoaded', {
       configurable: true,
       set(value) {
@@ -191,33 +194,31 @@ test('openPresetFile rejects unavailable integration and reports validation fail
     await openPresetFile(true, 'not-a-preset.txt');
     assert.equal(windowRef.ORIGINAL_PIPELINE_STATE_LOADED, false);
     assert.ok(calls.some(call => call[0] === 'consoleError' && String(call[1]).includes('Error setting pipeline')));
-    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Not a valid preset file'));
-    timeouts[0]();
-    assert.ok(calls.some(call => call[0] === 'clearError'));
+    assert.deepEqual(calls.find(call => call[0] === 'showTransientMessage'),
+      ['showTransientMessage', 'error.invalidPresetData', true, {}, 3000]);
+    assert.equal(calls.some(call => call[0] === 'setTimeout'), false);
   });
 
   await withPresetGlobals({
     electronOptions: { readResults: [{ success: false, error: 'denied' }] }
-  }, async ({ calls, timeouts }) => {
+  }, async ({ calls }) => {
     await openPresetFile(true, 'bad.effetune_preset');
-    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Failed to read preset file: denied'));
-    timeouts.forEach(fn => fn());
+    assert.ok(calls.some(call => call[0] === 'showTransientMessage' && call[1] === 'error.failedToReadPresetFile'));
+    assert.equal(calls.some(call => call[0] === 'setTimeout'), false);
   });
 
   await withPresetGlobals({
     electronOptions: { readContent: '{bad json' }
-  }, async ({ calls, timeouts }) => {
+  }, async ({ calls }) => {
     await openPresetFile(true, 'bad.effetune_preset');
-    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Invalid preset file format'));
-    timeouts.forEach(fn => fn());
+    assert.ok(calls.some(call => call[0] === 'showTransientMessage' && call[1] === 'error.invalidPresetData'));
   });
 
   await withPresetGlobals({
     electronOptions: { readContent: JSON.stringify({ nope: true }) }
-  }, async ({ calls, timeouts }) => {
+  }, async ({ calls }) => {
     await openPresetFile(true, 'bad.effetune_preset');
-    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Unknown preset format'));
-    timeouts.forEach(fn => fn());
+    assert.ok(calls.some(call => call[0] === 'showTransientMessage' && call[1] === 'error.unknownPresetFormat'));
   });
 });
 
@@ -226,14 +227,13 @@ test('openPresetFile loads old and pending preset formats with filename normaliz
     isFirstLaunch: true,
     app: { audioManager: createAudioManager([], {}) },
     electronOptions: { readContent: JSON.stringify([{ name: 'Gain' }]) }
-  }, async ({ calls, timeouts, windowRef }) => {
+  }, async ({ calls, windowRef }) => {
     windowRef.app.audioManager = createAudioManager(calls, {});
     await openPresetFile(true, 'C:\\Music\\First.effetune_preset');
     assert.deepEqual(calls.find(call => call[0] === 'loadPreset')?.[1].pipeline, [{ name: 'Gain' }]);
     assert.equal(calls.find(call => call[0] === 'loadPreset')?.[1].name, 'First');
     assert.ok(calls.some(call => call[0] === 'rebuildPipeline' && call[1] === true));
-    assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'success.presetLoaded'));
-    timeouts.forEach(fn => fn());
+    assert.ok(calls.some(call => call[0] === 'showTransientMessage' && call[1] === 'success.presetLoaded'));
   });
 
   await withPresetGlobals({
@@ -353,10 +353,10 @@ test('openPresetFile handles initialized apps with and without audio-player pres
 test('openPresetFile reports read exceptions through the outer catch', async () => {
   await withPresetGlobals({
     electronOptions: { readFileError: new Error('read exploded') }
-  }, async ({ calls, timeouts }) => {
+  }, async ({ calls }) => {
     await assert.rejects(() => openPresetFile(true, '/tmp/Error.effetune_preset'), /read exploded/);
-    assert.ok(calls.some(call => call[0] === 'setError' && String(call[1]).includes('read exploded')));
-    timeouts.forEach(fn => fn());
+    assert.ok(calls.some(call => call[0] === 'showTransientMessage' && call[1] === 'error.failedToLoadPreset'));
+    assert.equal(calls.some(call => call[0] === 'setTimeout'), false);
   });
 });
 
@@ -445,11 +445,12 @@ test('importPreset handles dialogs, reads, formats, and parse errors', async () 
       openDialogResult: { canceled: false, filePaths: ['C:\\Presets\\Imported.effetune_preset'] },
       readContent: JSON.stringify([{ name: 'Plugin' }])
     }
-  }, async ({ calls, timeouts }) => {
+  }, async ({ calls }) => {
     await importPreset(true);
     assert.equal(calls.find(call => call[0] === 'loadPreset')?.[1].name, 'Imported');
-    timeouts[0]();
-    assert.ok(calls.some(call => call[0] === 'clearError'));
+    assert.deepEqual(calls.find(call => call[0] === 'showTransientMessage'),
+      ['showTransientMessage', 'success.presetLoaded', false, { name: 'Imported' }, 3000]);
+    assert.equal(calls.some(call => call[0] === 'setTimeout'), false);
   });
 
   await withPresetGlobals({

@@ -45,6 +45,7 @@ const publicTelemetryTypes = new Set([
   'LevelMeter',
   'NoteSpectrogram',
   'Oscilloscope',
+  'PitchMeter',
   'Spectrogram',
   'SpectrumAnalyzer',
   'StereoMeter'
@@ -774,8 +775,8 @@ function contractBadges(effect) {
   if (effect.telemetry.length) {
     badges.push(
       publicTelemetryTypes.has(effect.type)
-        ? 'Analyzer telemetry: **decoded semantic observations are available in v0.1**'
-        : 'Telemetry: **catalog metadata only; observation API unavailable in v0.1**'
+        ? 'Analyzer telemetry: **decoded semantic observations are available**'
+        : 'Telemetry: **catalog metadata only; no public observation API**'
     );
   }
   return badges.map(item => `- ${item}`).join('\n');
@@ -795,7 +796,7 @@ function effectPage(effect, docsEntry, appSection) {
     );
   } else if (effect.telemetry.length) {
     conceptNotices.push(
-      'This type has catalog telemetry metadata but no public observation API in v0.1. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).'
+      'This type has catalog telemetry metadata but no public observation API. See [Compatibility](/dsp/reference/compatibility/#analyzers-and-telemetry).'
     );
   }
   if (docsEntry.sourceGenerating) {
@@ -976,12 +977,12 @@ function landingPage(catalog, version, convenienceExports) {
     '',
     'EffeTune DSP does not host VST/AU plugins, decode or encode audio in JavaScript, ' +
       'resample audio, call ffmpeg, or expose integrated-LUFS/true-peak measurements. ' +
-      'Six analyzers expose opt-in decoded observations in v0.1; all other catalog ' +
+      'Seven analyzers expose opt-in decoded observations; all other catalog ' +
       'telemetry remains metadata-only. ' +
       'MCP is planned only after its implementation and acceptance exist.',
     '',
     'See [Compatibility and boundaries](/dsp/reference/compatibility/) for supported runtimes, ' +
-      'channel behavior, and the precise v0.1 surface.',
+      'channel behavior, and the precise current surface.',
     '',
     'Package identities are `effetune` on PyPI and `@effetune/dsp` on npm. ' +
       'Source: [Frieve-A/effetune](https://github.com/Frieve-A/effetune). ' +
@@ -1126,7 +1127,7 @@ The package is ESM-only. Save the example as \`start.mjs\` and run
 \`package.json\`. CommonJS \`require()\` is not supported.
 
 Node.js \`>=18\` is required. Chromium is acceptance-tested; other evergreen
-browsers are designed for but not verified in v0.1. The package accepts equal-length
+browsers are designed for but not verified. The package accepts equal-length
 \`Float32Array[]\` channels and does not decode, encode, or resample audio.
 In Node.js, \`@effetune/dsp\` resolves after installation. In a browser, use a bundler
 or an import map that maps the bare \`@effetune/dsp\` specifier to the package's
@@ -1295,7 +1296,7 @@ an effect parameter such as \`BitCrusher.seed\`, whose catalog default is 11 and
 
 ## Reproducible experiment
 
-v0.1 has no standard experiment-manifest API. This source owns the complete experiment
+The library has no standard experiment-manifest API. This source owns the complete experiment
 record: candidate wheel filename and twice-computed SHA-256, package and environment
 versions, input construction and SHA-256, stream mode, parameters, seeds, each ordered
 open/process/close operation, exact process block spans, and every output hash. It uses
@@ -1322,7 +1323,7 @@ one serial path in the app and export it again, or reproduce the branching in th
 around separate Chains.
 
 App presets containing \`FIR Crossover\`, \`5Band FIR PEQ\`, \`Group Delay EQ\`,
-\`Group Delay PEQ\`, \`Room EQ\`, or \`IR Reverb\` cannot be imported in v0.1: the library
+\`Group Delay PEQ\`, \`Room EQ\`, or \`IR Reverb\` cannot be imported: the library
 drives these six effects from a caller-supplied precomputed impulse-response asset
 instead of the app's filter-design parameters, so those parameters have no conversion
 and the importer rejects the node with an \`EffectError\` naming the effect. Construct
@@ -1468,7 +1469,7 @@ parameter names.
 4. Run \`effetune render input.wav output.wav --preset chain.json\`.
 
 Runtime validation still enforces duplicate IDs, assets, and cross-field rules. MCP,
-measurement, resampling, ffmpeg, LUFS, and true-peak tools are not v0.1 capabilities.
+measurement, resampling, ffmpeg, LUFS, and true-peak tools are not available through this API.
 `);
 
   add('python-api', `
@@ -2361,8 +2362,8 @@ integrated-LUFS/true-peak measurement.
 
 ## Analyzers and telemetry
 
-\`LevelMeter\`, \`NoteSpectrogram\`, \`Oscilloscope\`, \`SpectrumAnalyzer\`,
-\`Spectrogram\`, and \`StereoMeter\` expose decoded semantic observations in Python, JavaScript offline and
+\`LevelMeter\`, \`NoteSpectrogram\`, \`Oscilloscope\`, \`PitchMeter\`,
+\`SpectrumAnalyzer\`, \`Spectrogram\`, and \`StereoMeter\` expose decoded semantic observations in Python, JavaScript offline and
 streaming processing, and AudioWorklet. Telemetry is opt-in: the first callback or
 subscriber enables it and the last unsubscribe disables it. Long renders drain after
 every processing block. Public frames identify the semantic effect and contain owned
@@ -2373,7 +2374,7 @@ Common metadata:
 
 | JavaScript / Python | Meaning |
 |---|---|
-| \`kind\` / \`kind\` | \`level\`, \`noteSpectrogram\`, \`oscilloscope\`, \`spectrum\`, \`spectrogram\`, or \`stereo\` |
+| \`kind\` / \`kind\` | \`level\`, \`noteSpectrogram\`, \`oscilloscope\`, \`pitch\`, \`spectrum\`, \`spectrumHq\`, \`spectrogram\`, \`spectrogramHq\`, or \`stereo\` |
 | \`effectType\` / \`effect_type\` | Semantic effect type |
 | \`effectId\` / \`effect_id\` | Declared effect ID, or null / \`None\` |
 | \`effectIndex\` / \`effect_index\` | Zero-based position in the declared DSP chain |
@@ -2397,6 +2398,15 @@ Analyzer fields:
 | Spectrum | \`binsTruncated\` / \`bins_truncated\` | True when the highest bins were omitted to fit transport capacity |
 | Spectrum | \`currentDb\` / \`current_db\` | dBFS \`[bin]\`, ascending frequency from DC |
 | Spectrum | \`peakDb\` / \`peak_db\` | Peak-held dBFS \`[bin]\`, same order and length as current |
+| Spectrum HQ / Spectrogram HQ | \`sampleRate\` / \`sample_rate\` | Hz |
+| Spectrum HQ / Spectrogram HQ | \`points\` / \`points\` | FFT size exponent; the short FFT size is \`2 ** points\` |
+| Spectrum HQ / Spectrogram HQ | \`hop\` / \`hop\` | Nominal analysis step in input samples |
+| Spectrum HQ / Spectrogram HQ | \`generation\`, \`frameIndex\` / \`generation\`, \`frame_index\` | Non-zero analysis generation and unsigned observation counter within it |
+| Spectrum HQ / Spectrogram HQ | \`captureEnd\` / \`capture_end\` | End sample index of the aligned analysis capture; JavaScript uses \`bigint\` |
+| Spectrum HQ / Spectrogram HQ | \`cellCount\`, \`minFrequency\`, \`maxFrequency\` / \`cell_count\`, \`min_frequency\`, \`max_frequency\` | Log-frequency grid count and bounds in Hz |
+| Spectrum HQ / Spectrogram HQ | \`firstValidIndex\`, \`validCellCount\` / \`first_valid_index\`, \`valid_cell_count\` | Contiguous valid part of the grid; cells outside it have no input-band data |
+| Spectrum HQ | \`currentDb\` / \`current_db\` | dBFS \`[cell]\`, in ascending log-frequency grid order |
+| Spectrum HQ | \`peakDb\` / \`peak_db\` | Peak-held dBFS \`[cell]\`, same order and length as current |
 | Note Spectrogram | \`sampleRate\` / \`sample_rate\` | Hz |
 | Note Spectrogram | \`timeSeconds\` / \`time_seconds\` | Observation time in seconds on the processing timeline |
 | Note Spectrogram | \`firstMidi\` / \`first_midi\` | \`21\`, the first piano-key MIDI note before fine-pitch offsets are applied |
@@ -2406,10 +2416,22 @@ Analyzer fields:
 | Note Spectrogram | \`generation\` / \`generation\` | Non-zero analysis generation; a change indicates that analyzer state restarted |
 | Note Spectrogram | \`levels\` / \`levels\` | Pitch confidence in [0, 1] as JavaScript \`Float32Array[440]\` or Python \`tuple[440]\`; index \`i\` maps to MIDI \`firstMidi + (i - 2) / divisionsPerSemitone\` |
 | Note Spectrogram | \`volumeDb\` / \`volume_db\` | Volume in dB as JavaScript \`Float32Array[440]\` or Python \`tuple[440]\`, with the same pitch indexing as \`levels\`; values include a 3 dB/octave correction above 100 Hz, and -240 dB means no level was measured |
+| Pitch | \`sampleRate\` / \`sample_rate\` | Hz |
+| Pitch | \`timeSeconds\` / \`time_seconds\` | Observation time in seconds on the processing timeline |
+| Pitch | \`hopSeconds\` / \`hop_seconds\` | Nominal time step between analysis observations, in seconds |
+| Pitch | \`frameIndex\` / \`frame_index\` | Unsigned observation counter within the current analysis generation |
+| Pitch | \`generation\` / \`generation\` | Non-zero analysis generation; a change indicates that analyzer state restarted |
+| Pitch | \`f0Hz\` / \`f0_hz\` | Detected fundamental frequency in Hz; 0 when unvoiced |
+| Pitch | \`midi\` / \`midi\` | Fractional MIDI note relative to the configured A4 reference; 0 when unvoiced |
+| Pitch | \`cents\` / \`cents\` | Difference from the nearest semitone in cents, from -50 to +50; 0 when unvoiced |
+| Pitch | \`confidence\` / \`confidence\` | Detection confidence in [0, 1]; 0 when unvoiced |
+| Pitch | \`levelDb\` / \`level_db\` | Analyzed input level in dB |
+| Pitch | \`voiced\` / \`voiced\` | True when the pitch fields contain a detected fundamental pitch |
 | Spectrogram | \`sampleRate\` / \`sample_rate\` | Hz |
 | Spectrogram | \`timeSeconds\` / \`time_seconds\` | Observation time in seconds on the processing timeline |
 | Spectrogram | \`points\` / \`points\` | FFT size exponent; FFT size is \`2 ** points\` |
 | Spectrogram | \`intensities\` / \`intensities\` | \`uint8[256]\` display intensity, high-to-low log-frequency cells from index 0 through 255 |
+| Spectrogram HQ | \`intensities\` / \`intensities\` | \`uint8[256]\` display intensity, high-to-low log-frequency grid cells from index 0 through 255 |
 | Stereo | \`sampleRate\` / \`sample_rate\` | Hz |
 | Stereo | \`discontinuity\` / \`discontinuity\` | True when the sample delta is incomplete after truncation or a window change |
 | Stereo | \`samples\` / \`samples\` | JavaScript \`Float32Array[side0, mid0, ...]\`; Python \`tuple[(side, mid), ...]\`; linear amplitude where side is R-L and mid is L+R |
@@ -2427,7 +2449,7 @@ Telemetry stays local: the library only passes decoded frames to in-process Pyth
 callbacks or callbacks in the browser page. It does not automatically collect, persist,
 or send telemetry over the network, and it does not collect device or user identifiers.
 
-Other catalog telemetry remains metadata-only in v0.1. Integrated LUFS, BS.1770/EBU
+Other catalog telemetry remains metadata-only. Integrated LUFS, BS.1770/EBU
 R128, true peak, and dynamics gain-reduction observations are not part of this API.
 `);
 
@@ -2482,7 +2504,7 @@ MIME types, CSP, processor/WASM/meta files, and a resumed AudioContext. Direct
 \`file:\` loading is unsupported.
 
 **Does the library decode, encode, resample, call ffmpeg, or measure loudness?** No.
-Those are caller responsibilities in v0.1.
+Those are caller responsibilities.
 
 **Why do offline and streaming output differ?** Offline starts fresh. Streams retain
 history and require the same block/event schedule for reproduction.
@@ -2644,7 +2666,7 @@ function llmsText(sources) {
     '- https://effetune.frieve.com/dsp/reference/graph-v1/',
     '- https://effetune.frieve.com/dsp/reference/compatibility/',
     '',
-    'MCP, measurement, resampling, ffmpeg, integrated LUFS, and true-peak APIs are not implemented in v0.1.',
+    'MCP, measurement, resampling, ffmpeg, integrated LUFS, and true-peak APIs are not implemented.',
     ''
   ].join('\n');
 }

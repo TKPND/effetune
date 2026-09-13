@@ -158,8 +158,8 @@ _LEGACY_ECHOED_STRUCTURAL_KEYS_V1 = ("pluginType", "ch", "ib", "ob")
 # dropped for these two effects only.
 _LEGACY_ECHOED_ENABLED_EFFECTS_V1 = ("HornResonator", "HornResonatorPlus")
 
-# These analyzers persist their frequency-axis choice for display only. Validate
-# the known values before discarding it so other unknown parameters remain strict.
+# These analyzers persist their frequency-axis choice. Log (HQ) selects the public
+# DSP option; the ordinary Log and Linear choices remain display-only.
 _LEGACY_FREQUENCY_SCALE_EFFECTS_V1 = ("SpectrumAnalyzer", "Spectrogram")
 
 # These analyzers also persist a display-only keyboard guide. Validate the
@@ -272,10 +272,21 @@ def _prepare_legacy_parameters_v1(
     parameters = _drop_echoed_structural_keys_v1(dict(source), effect_type)
     if effect_type in _LEGACY_FREQUENCY_SCALE_EFFECTS_V1 and "sc" in parameters:
         scale = parameters.pop("sc")
-        if scale not in ("log", "linear"):
+        if scale not in ("log", "log-hq", "linear"):
             raise ValidationError(
                 f"legacy {effect_type} contains invalid frequency scale display state"
             )
+        high_quality_log = scale == "log-hq"
+        if "hq" in parameters:
+            if (
+                not isinstance(parameters["hq"], bool)
+                or parameters["hq"] != high_quality_log
+            ):
+                raise ValidationError(
+                    f"legacy {effect_type} contains conflicting frequency scale and HQ settings"
+                )
+        elif high_quality_log:
+            parameters["hq"] = True
     if effect_type in _LEGACY_KEYBOARD_DISPLAY_EFFECTS_V1 and "kb" in parameters:
         keyboard = parameters.pop("kb")
         if not isinstance(keyboard, bool):
@@ -288,6 +299,14 @@ def _prepare_legacy_parameters_v1(
             raise ValidationError(
                 "legacy SpectrumAnalyzer contains invalid display mode state"
             )
+    if effect_type == "NoteSpectrogram":
+        # These app settings only control the piano-roll display.
+        for key in ("cl", "pr", "ly", "vl", "ts"):
+            parameters.pop(key, None)
+    if effect_type == "PitchMeter" and "ly" in parameters:
+        layout = parameters.pop("ly")
+        if layout not in ("Vertical", "Horizontal"):
+            raise ValidationError("legacy PitchMeter contains invalid layout state")
     processing_enabled = True
     if effect_type == "Matrix" and "mx" in parameters:
         if "matrixRoutes" in parameters:

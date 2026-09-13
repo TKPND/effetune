@@ -348,6 +348,12 @@ test('worklet telemetry callbacks run on the node side with opt-in lifetime', as
         enabled: true,
         channel: 'all',
         parameters: {}
+      }, {
+        id: 'pitch',
+        type: 'PitchMeter',
+        enabled: true,
+        channel: 'all',
+        parameters: {}
       }]
     };
     const node = new EffeTuneNode({}, 2, document, 42);
@@ -413,6 +419,36 @@ test('worklet telemetry callbacks run on the node side with opt-in lifetime', as
     noteView.setFloat32(1804, Number.NaN, true);
     node._handleMessage({ type: 'telemetry', packet: notePacket, bytes: 3564, dropped: 0 });
     assert.equal(received.length, 2);
+
+    const pitchPacket = new ArrayBuffer(60);
+    const pitchView = new DataView(pitchPacket);
+    pitchView.setUint16(0, 26, true);
+    pitchView.setUint16(2, 1, true);
+    pitchView.setUint32(4, 3, true);
+    pitchView.setUint32(8, 9, true);
+    pitchView.setUint16(12, 44, true);
+    pitchView.setFloat32(16, 48000, true);
+    pitchView.setFloat32(20, 1.25, true);
+    pitchView.setFloat32(24, 0.01, true);
+    pitchView.setUint32(28, 124, true);
+    pitchView.setUint32(32, 2, true);
+    pitchView.setFloat32(36, 440, true);
+    pitchView.setFloat32(40, 69, true);
+    pitchView.setFloat32(44, 0, true);
+    pitchView.setFloat32(48, 0.9375, true);
+    pitchView.setFloat32(52, -12, true);
+    pitchView.setUint16(56, 1, true);
+    node._handleMessage({ type: 'telemetry', packet: pitchPacket, bytes: 60, dropped: 0 });
+    assert.equal(received.length, 3);
+    assert.deepEqual(received[2], {
+      kind: 'pitch', effectType: 'PitchMeter', effectId: 'pitch', effectIndex: 2,
+      sequence: 9, dropped: 0, sampleRate: 48000, timeSeconds: 1.25,
+      hopSeconds: Math.fround(0.01), frameIndex: 124, generation: 2, f0Hz: 440,
+      midi: 69, cents: 0, confidence: 0.9375, levelDb: -12, voiced: true
+    });
+    pitchView.setUint16(56, 0, true);
+    node._handleMessage({ type: 'telemetry', packet: pitchPacket, bytes: 60, dropped: 0 });
+    assert.equal(received.length, 3);
 
     assert.equal(unsubscribe(), true);
     assert.deepEqual(node.port.messages.at(-1), {

@@ -906,11 +906,11 @@ TV Audio Simulator passes music through the sound path of an analogue television
 - For a clean period-TV sound, raise Signal and keep Tuning centered. Use Processing for a denser analogue broadcast sound; it does not affect the NICAM digital main path.
 - For difficult analogue reception, lower Signal first, then add Multipath or a small Tuning offset. Path Delay changes the character of multipath distortion.
 - With B/G NICAM or I NICAM, lower Signal gradually to hear digital damage and the transition to analogue FM mono. The HUD shows `NICAM` while the digital path is selected and `FALLBACK` after the changeover.
-- Raise Video Buzz only when you want mains and scan-related tones. Its minimum value, -80 dB, turns the buzz off.
+- In the Video Buzz tab, raise Buzz only when you want mains and scan-related tones. Its minimum value, -80 dB, turns the buzz off.
 
 ### System Presets
 
-The nine presets select representative regional systems: Japan TV (M / EIA-J), North America TV (M / BTSC), Korea TV (M / A2), Europe TV (B/G / A2), Australia TV (B / A2), UK TV (I / NICAM), Nordic TV (B/G / NICAM), Eastern Europe TV (D/K mono), and France TV (L / AM sound). They also provide a useful reception starting point; adjust Signal, Tuning, Multipath, and Fading for the amount of damage you want.
+The nine presets select representative regional systems: Japan TV (M / EIA-J), North America TV (M / BTSC), Korea TV (M / A2), Europe TV (B/G / A2), Australia TV (B/G / A2), UK TV (I / NICAM), Nordic TV (B/G / NICAM), Eastern Europe TV (D/K mono), and France TV (L / AM sound). They also provide a useful reception starting point; adjust Signal, Tuning, Multipath, and Fading for the amount of damage you want.
 
 ### Parameters
 
@@ -921,11 +921,11 @@ The nine presets select representative regional systems: Japan TV (M / EIA-J), N
 - **Signal**: Sets received strength from 0 to 70 dBµV. Lower values add analogue noise and loss of stereo, or increase NICAM errors and eventually cause fallback.
 - **Tuning**: Offsets receiver tuning by -200 to +200 kHz. Moving away from 0 narrows and distorts reception and can remove the programme entirely.
 - **IF Band**: Sets the receiver passband from 80 to 240 kHz. Narrower settings reject more off-frequency energy but remove more programme bandwidth when tuning is offset.
-- **Multipath**: Adds a delayed reflected signal. Higher values increase comb-like coloration, stereo instability, and reception distortion.
+- **Multipath** (0–100%): Adds a delayed reflected signal. Higher values increase comb-like coloration, stereo instability, and reception distortion.
 - **Path Delay**: Sets the reflected-path delay from 0.5 to 50 µs. Short delays produce broad coloration; longer delays create more closely spaced peaks and dips.
 - **Fading**: Sets reception-level movement from 0 to 20 Hz. Raise it for faster fluttering or repeated changes between clear and impaired reception.
 - **Receive Mode**: `Auto` follows the available stereo, main, secondary, NICAM, or fallback path. `Stereo`, `Main`, and `Sub` request a particular programme; combinations the selected transmission cannot supply return to the main mono programme.
-- **Video Buzz**: Sets picture-related 50/60 Hz buzz from -80 to -20 dB. -80 dB is off. Buzz is heard on analogue paths, including NICAM fallback.
+- **Buzz**: Sets picture-related 50/60 Hz buzz from -80 to -20 dB. -80 dB is off. Buzz is heard on analogue paths, including NICAM fallback.
 - **Output Gain**: Adjusts the final level from -24 to +24 dB. Reduce it if transmitter processing or reception artifacts make peaks too strong.
 - **Mix**: Blends the original and television paths from 0% to 100%.
 

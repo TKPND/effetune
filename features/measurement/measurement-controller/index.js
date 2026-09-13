@@ -96,7 +96,6 @@ export class MeasurementController {
         this.levelGraphData = [];
         this.startTime = null;
         this.levelGraphInterval = null;
-        this.fullRecordBuffer = null;
         this.syncedBuffer = null;
         this.recorderNode = null;
         this.currentImpulseResponses = null;
@@ -322,7 +321,6 @@ export class MeasurementController {
         }
         
         // Clear any record buffers
-        this.fullRecordBuffer = null;
         this.syncedBuffer = null;
         console.log('Record buffers cleared');
         

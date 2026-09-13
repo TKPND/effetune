@@ -3,15 +3,6 @@
     position: relative;
 }
 
-.fifteen-band-geq-plugin-ui .fifteen-band-geq-radio-label {
-    margin-right: 15px;
-    cursor: pointer;
-}
-
-.fifteen-band-geq-plugin-ui .fifteen-band-geq-radio-label input {
-    margin-right: 5px;
-}
-
 .fifteen-band-geq-plugin-ui .parameter-row {
     margin-bottom: 20px;
 }

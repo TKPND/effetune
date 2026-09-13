@@ -18,7 +18,7 @@ The package is ESM-only. Save the example as `start.mjs` and run
 `package.json`. CommonJS `require()` is not supported.
 
 Node.js `>=18` is required. Chromium is acceptance-tested; other evergreen
-browsers are designed for but not verified in v0.1. The package accepts equal-length
+browsers are designed for but not verified. The package accepts equal-length
 `Float32Array[]` channels and does not decode, encode, or resample audio.
 In Node.js, `@effetune/dsp` resolves after installation. In a browser, use a bundler
 or an import map that maps the bare `@effetune/dsp` specifier to the package's

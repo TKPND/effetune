@@ -62,7 +62,8 @@ function gitTrackedFiles() {
 // a new tracked source can satisfy another new reference while both remain
 // visible to review; ignored build products remain excluded.
 function gitReviewableFiles() {
-  return gitFiles(['--cached', '--others', '--exclude-standard']);
+  return new Set([...gitFiles(['--cached', '--others', '--exclude-standard'])]
+    .filter(existingRepositoryFile));
 }
 
 function scannedSources(tracked) {

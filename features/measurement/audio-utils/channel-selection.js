@@ -66,10 +66,6 @@ export function channelIndexOf(token) {
     return CHANNEL_ORDER.get(channel);
 }
 
-export function channelLabelKey(token) {
-    const index = channelIndexOf(token);
-    return index === null ? 'option:all' : index === 0 ? 'option:left' : index === 1 ? 'option:right' : `option:ch${index + 1}`;
-}
 
 export function channelDisplayLabel(token) {
     const index = channelIndexOf(token);

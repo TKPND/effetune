@@ -173,10 +173,54 @@
       ],
       "assets": []
     },
+    "PitchMeter": {
+      "internalType": "PitchMeterPlugin",
+      "layoutHash": 2658803801,
+      "floatCount": 3,
+      "packedParameters": [
+        {
+          "publicName": "referenceA4",
+          "field": "referenceA4",
+          "keys": [
+            "rf"
+          ],
+          "offset": 0,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "minimumMidi",
+          "field": "minimumMidi",
+          "keys": [
+            "mn"
+          ],
+          "offset": 1,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "maximumMidi",
+          "field": "maximumMidi",
+          "keys": [
+            "mx"
+          ],
+          "offset": 2,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        }
+      ],
+      "assets": []
+    },
     "Spectrogram": {
       "internalType": "SpectrogramPlugin",
-      "layoutHash": 3382561824,
-      "floatCount": 2,
+      "layoutHash": 1047398425,
+      "floatCount": 3,
       "packedParameters": [
         {
           "publicName": "dBRange",
@@ -197,6 +241,18 @@
             "pt"
           ],
           "offset": 1,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "highQualityLog",
+          "field": "highQualityLog",
+          "keys": [
+            "hq"
+          ],
+          "offset": 2,
           "count": 1,
           "transform": {
             "kind": "identity"
@@ -207,8 +263,8 @@
     },
     "SpectrumAnalyzer": {
       "internalType": "SpectrumAnalyzerPlugin",
-      "layoutHash": 3382561824,
-      "floatCount": 2,
+      "layoutHash": 1047398425,
+      "floatCount": 3,
       "packedParameters": [
         {
           "publicName": "dBRange",
@@ -229,6 +285,18 @@
             "pt"
           ],
           "offset": 1,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "highQualityLog",
+          "field": "highQualityLog",
+          "keys": [
+            "hq"
+          ],
+          "offset": 2,
           "count": 1,
           "transform": {
             "kind": "identity"
@@ -8872,6 +8940,7 @@
     "dsp/plugins/analyzer/level_meter/params.json": "dsp/plugins/analyzer/level_meter/golden/index.json",
     "dsp/plugins/analyzer/note_spectrogram/params.json": "dsp/plugins/analyzer/note_spectrogram/golden/index.json",
     "dsp/plugins/analyzer/oscilloscope/params.json": "dsp/plugins/analyzer/oscilloscope/golden/index.json",
+    "dsp/plugins/analyzer/pitch_meter/params.json": "dsp/plugins/analyzer/pitch_meter/golden/index.json",
     "dsp/plugins/analyzer/spectrogram/params.json": "dsp/plugins/analyzer/spectrogram/golden/index.json",
     "dsp/plugins/analyzer/spectrum_analyzer/params.json": "dsp/plugins/analyzer/spectrum_analyzer/golden/index.json",
     "dsp/plugins/analyzer/stereo_meter/params.json": "dsp/plugins/analyzer/stereo_meter/golden/index.json",
@@ -8971,5 +9040,5 @@
     "dsp/plugins/spatial/phase_select_eq/params.json": "dsp/plugins/spatial/phase_select_eq/golden/index.json",
     "dsp/plugins/spatial/stereo_blend/params.json": "dsp/plugins/spatial/stereo_blend/golden/index.json"
   },
-  "contractDigest": "20d5f91eb56f8fe42683e7d07c7d77daf019b885a9f5770e655cdca0a7a9c426"
+  "contractDigest": "90541227a97596a51d47ec770a1e32b817bcf9b96bda7591f0a96a8c5e65ad84"
 }

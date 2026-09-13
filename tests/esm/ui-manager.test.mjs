@@ -506,7 +506,7 @@ async function withUIHarness(options = {}, callback) {
         'success.urlCopied': 'Copied URL',
         'error.failedToCopyUrl': 'Copy failed',
         'error.failedToReadClipboard': 'Read failed',
-        'error.invalidUrl': 'Invalid URL: {message}',
+        'error.invalidUrl': 'The link contains invalid effect settings.',
         'ui.whatsThisApp': 'What is this?',
         'ui.shareButton': 'Share',
         'ui.pipelineLatency': 'Total Delay: {samples} samples',
@@ -830,6 +830,49 @@ test('constructs, delegates manager methods, translates errors, parses and seria
   });
 });
 
+test('header notifications translate any namespace and preserve literal messages', async () => {
+  await withUIHarness({}, async ({ manager }) => {
+    manager.translations['ui.notificationTest'] = 'Playing {name}';
+    manager.setError('ui.notificationTest', false, { name: 'Music' });
+    assert.equal(manager.stateManager.errorDisplay.textContent, 'Playing Music');
+    manager.showTransientMessage('A literal notification');
+    assert.equal(manager.stateManager.errorDisplay.textContent, 'A literal notification');
+  });
+});
+
+test('audio reset notifications share UIManager timer ownership and clear only their own notice', async () => {
+  const firstReset = createDeferred();
+  await withUIHarness({}, async ({ audioManager, manager, timers }) => {
+    manager.translations['status.resettingAudio'] = 'Resetting audio...';
+    manager.translations['error.audioResetFailed'] = 'Audio could not be reset.';
+    audioManager.reset = async () => firstReset.promise;
+
+    manager.showTransientMessage('Earlier notice');
+    const earlierTimer = timers.at(-1);
+    const failedReset = manager.stateManager.resetAudio();
+    firstReset.resolve('device reset failed');
+    await failedReset;
+
+    const failureTimer = timers.at(-1);
+    earlierTimer.fn();
+    assert.equal(manager.stateManager.errorDisplay.textContent, 'Audio could not be reset.');
+    failureTimer.fn();
+    assert.equal(manager.stateManager.errorDisplay.textContent, '');
+
+    const secondReset = createDeferred();
+    audioManager.reset = async () => secondReset.promise;
+    const successfulReset = manager.stateManager.resetAudio();
+    manager.showTransientMessage('Later notice');
+    const laterTimer = timers.at(-1);
+    secondReset.resolve('');
+    await successfulReset;
+
+    assert.equal(manager.stateManager.errorDisplay.textContent, 'Later notice');
+    laterTimer.fn();
+    assert.equal(manager.stateManager.errorDisplay.textContent, '');
+  });
+});
+
 test('mini player mode coordinates renderer state, Electron bounds, pinning, and DSP UI suppression', async () => {
   const ipcCalls = [];
   let exitFromMain = null;
@@ -937,7 +980,11 @@ test('handles invalid URL state and URL updates', async () => {
   await withUIHarness({ search: '?p=bad!' }, async ({ calls, manager, timers, window }) => {
     manager.audioManager.pipeline = [createPlugin('Gain')];
     assert.equal(manager.parsePipelineState(), null);
-    assert.match(manager.stateManager.errorDisplay.textContent, /Invalid URL/);
+    assert.equal(manager.stateManager.errorDisplay.textContent, 'The link contains invalid effect settings.');
+    assert.equal(manager.stateManager.errorDisplay.textContent.includes('base64'), false);
+    assert.ok(calls.some(call => call[0] === 'console.error' &&
+      call[1] === 'Failed to parse pipeline state:' &&
+      String(call[2]?.message).includes('base64')));
 
     manager.urlReflectionEnabled = false;
     manager.updateURL();

@@ -515,8 +515,8 @@ test('preset item double-click failures and user item events report UI errors', 
     await noDescriptionItem.dispatchEvent('mouseenter');
   });
 
-  assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Error adding preset: system add failed'));
-  assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'Error adding user preset: user add failed'));
+  assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'error.failedToLoadPreset'));
+  assert.ok(calls.some(call => call[0] === 'setError' && call[1] === 'error.failedToLoadPreset'));
   assert.ok(pluginListManager.calls.some(call => call[0] === 'setupPresetItemDragEvents' && call[2] === true));
 
   await withPresetGlobals([], { uiManager: false, console: { error() {} } }, async () => {

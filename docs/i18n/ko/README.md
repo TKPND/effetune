@@ -320,6 +320,7 @@ Effect Pipeline 헤더의 **효과 체인 프리셋** 버튼을 클릭하면 프
 | Analyzer | Level Meter | 피크 홀드가 있는 오디오 레벨 표시 | [세부 정보](plugins/analyzer.md#level-meter) |
 | Analyzer | Note Spectrogram | 시간에 따른 추정 음높이를 피아노 롤로 표시 | [세부 정보](plugins/analyzer.md#note-spectrogram) |
 | Analyzer | Oscilloscope | 실시간 파형 시각화 | [세부 정보](plugins/analyzer.md#oscilloscope) |
+| Analyzer | Pitch Meter | 하나의 기본 주파수와 튜닝 변화를 시간에 따라 추적 | [세부 정보](plugins/analyzer.md#pitch-meter) |
 | Analyzer | Spectrogram | 시간에 따른 주파수 스펙트럼 변화를 표시 | [세부 정보](plugins/analyzer.md#spectrogram) |
 | Analyzer | Spectrum Analyzer | 저역, 중역, 고역의 강도를 실시간으로 표시 | [세부 정보](plugins/analyzer.md#spectrum-analyzer) |
 | Analyzer | Stereo Meter | 스테레오 밸런스와 채널 상관을 시각화 | [세부 정보](plugins/analyzer.md#stereo-meter) |
@@ -377,6 +378,7 @@ Effect Pipeline 헤더의 **효과 체인 프리셋** 버튼을 클릭하면 프
 | Lo-Fi | Simple Jitter | 디지털 지터 시뮬레이션 | [세부 정보](plugins/lofi.md#simple-jitter) |
 | Lo-Fi | SW Radio Simulator | 음악을 모델링한 단파 송출·전리층 전파·수신 체인으로 변환 | [세부 정보](plugins/lofi.md#sw-radio-simulator) |
 | Lo-Fi | Tape Artifacts | 음악을 모델링한 릴 테이프에 녹음하고 재생 | [세부 정보](plugins/lofi.md#tape-artifacts) |
+| Lo-Fi | TV Audio Simulator | 음악을 모델링한 아날로그 및 NICAM TV 음성 경로에 통과시킴 | [세부 정보](plugins/lofi.md#tv-audio-simulator) |
 | Lo-Fi | Vinyl Artifacts | 레코드풍 팝, 크래클, 히스, 럼블, 스테레오 노이즈 블리드를 추가 | [세부 정보](plugins/lofi.md#vinyl-artifacts) |
 | Lo-Fi | Vinyl Simulator | 입력을 모델링한 홈에 커팅한 뒤 물리적 스타일러스 모델로 재생 | [세부 정보](plugins/lofi.md#vinyl-simulator) |
 | Modulation | Auto Filter | LFO 또는 음량 엔벌로프로 공진 필터를 스윕 | [세부 정보](plugins/modulation.md#auto-filter) |

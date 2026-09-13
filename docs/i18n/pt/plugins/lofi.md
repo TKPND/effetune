@@ -896,7 +896,7 @@ TV Audio Simulator passa a música pelo caminho de áudio de uma transmissão de
 - Escolha primeiro o Standard desejado e comece com Signal em 35 dBµV, Tuning em 0 kHz, Multipath e Fading em 0 e Mix em 100%.
 - Para um som de época bem recebido, aumente Signal e mantenha Tuning centralizado. Processing dá mais densidade ao caminho analógico, mas não ao caminho digital principal do NICAM.
 - Para uma recepção analógica difícil, reduza Signal e depois adicione Multipath ou um pequeno desvio de Tuning. Path Delay muda o caráter dessa distorção.
-- Em B/G NICAM ou I NICAM, reduza Signal aos poucos para ouvir a degradação digital e a mudança para FM mono. Video Buzz adiciona tons de 50/60 Hz; -80 dB o desliga.
+- Em B/G NICAM ou I NICAM, reduza Signal aos poucos para ouvir a degradação digital e a mudança para FM mono. Na aba Video Buzz, aumente Buzz apenas quando quiser tons relacionados à frequência da rede elétrica e à varredura, como os de 50/60 Hz. O valor mínimo, -80 dB, desliga o zumbido.
 
 ### Predefinições do sistema
 
@@ -911,11 +911,11 @@ As nove predefinições cobrem Japão M/EIA-J, América do Norte M/BTSC, Coreia 
 - **Signal**: Ajusta a intensidade recebida de 0 a 70 dBµV. Reduzi-la aumenta ruído ou erros e pode acionar o fallback.
 - **Tuning**: Desloca a sintonia de -200 a +200 kHz; afastar-se de 0 estreita e distorce a recepção.
 - **IF Band**: Ajusta a faixa do receptor de 80 a 240 kHz. Uma faixa menor rejeita mais sinal fora de sintonia, mas pode cortar o programa.
-- **Multipath**: Adiciona um reflexo atrasado; valores maiores aumentam a coloração e a instabilidade estéreo.
+- **Multipath** (0–100%): Adiciona um reflexo atrasado; valores maiores aumentam a coloração e a instabilidade estéreo.
 - **Path Delay**: Ajusta o atraso do reflexo de 0,5 a 50 µs e o espaçamento de seus picos e vales.
 - **Fading**: Ajusta de 0 a 20 Hz a velocidade das variações de recepção.
 - **Receive Mode**: `Auto` segue o caminho disponível; `Stereo`, `Main` e `Sub` solicitam um programa específico.
-- **Video Buzz**: Ajusta o zumbido de 50/60 Hz de -80 a -20 dB. -80 dB o desliga.
+- **Buzz**: Ajusta o zumbido de 50/60 Hz de -80 a -20 dB. -80 dB o desliga.
 - **Output Gain**: Ajusta o nível final de -24 a +24 dB.
 - **Mix**: Mistura o áudio original e o de televisão de 0% a 100%.
 

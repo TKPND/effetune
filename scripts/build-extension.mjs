@@ -44,6 +44,7 @@ export async function buildExtension() {
     const scripts = new Set([
         'extension/service-worker.js', 'extension/offscreen.js', 'extension/editor.js', 'extension/popup.js',
         'plugins/plugin-base.js', 'plugins/graph-point-interaction.js', 'plugins/spectrum-overlay.js', 'plugins/theme-palette.js',
+        'plugins/multires-spectrum.js',
         'plugins/audio-processor.js', ...pluginPaths.map(filename => `${filename}.js`)
     ]);
     const plugin = {
@@ -87,7 +88,7 @@ export async function buildExtension() {
         ...(await walk('presets')),
         'plugins/plugins.txt', 'plugins/dsp/effetune-dsp.wasm', 'plugins/dsp/effetune-dsp.simd.wasm',
         'plugins/dsp/effetune-dsp.meta.json', 'effetune.css', 'effetune-theme.css', 'effetune-mobile.css', 'pipeline-analyzer.css',
-        'images/icon_192x192.png', 'images/icon_64x64.png', 'LICENSE'
+        'images/icon_128x128.png', 'images/icon_192x192.png', 'images/icon_64x64.png', 'LICENSE'
     ];
     for (const filename of materials) files.set(filename, await fs.readFile(path.join(root, filename)));
     files.set('manifest.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`));

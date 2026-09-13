@@ -139,6 +139,13 @@ export async function showConfigDialog(isElectron, currentConfig) {
             <label for="power-full-suspend-delay" id="power-full-suspend-delay-label"></label>
             <select id="power-full-suspend-delay" class="config-select" ${powerSavingSettings.mode === PowerPolicy.MAXIMUM ? '' : 'disabled'}></select>
           </div>
+          <div class="power-mode-option">
+            <div class="checkbox-container">
+              <input type="checkbox" id="power-skip-display-dsp-when-hidden" aria-describedby="power-skip-display-dsp-when-hidden-help" ${powerSavingSettings.skipDisplayDspWhenHidden ? 'checked' : ''}>
+              <label for="power-skip-display-dsp-when-hidden" id="power-skip-display-dsp-when-hidden-label"></label>
+            </div>
+            <div class="power-mode-help" id="power-skip-display-dsp-when-hidden-help"></div>
+          </div>
         </div>
       </div>`;
 
@@ -605,6 +612,9 @@ export async function showConfigDialog(isElectron, currentConfig) {
       warning.hidden = delayHidden;
       warning.setAttribute('aria-hidden', delayHidden ? 'true' : 'false');
     }
+
+    const skipDisplayDsp = document.getElementById('power-skip-display-dsp-when-hidden');
+    if (skipDisplayDsp) skipDisplayDsp.checked = settings.skipDisplayDspWhenHidden;
   }
 
   function renderOfflineOutputControls() {
@@ -864,6 +874,14 @@ export async function showConfigDialog(isElectron, currentConfig) {
     if (thresholdLabel) thresholdLabel.textContent = t('dialog.config.powerSaving.silenceThreshold');
     const delayLabel = document.getElementById('power-full-suspend-delay-label');
     if (delayLabel) delayLabel.textContent = t('dialog.config.powerSaving.fullSuspendDelay');
+    const skipDisplayDspLabel = document.getElementById('power-skip-display-dsp-when-hidden-label');
+    if (skipDisplayDspLabel) {
+      skipDisplayDspLabel.textContent = t('dialog.config.powerSaving.skipDisplayDspWhenHidden');
+    }
+    const skipDisplayDspHelp = document.getElementById('power-skip-display-dsp-when-hidden-help');
+    if (skipDisplayDspHelp) {
+      skipDisplayDspHelp.textContent = t('dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp');
+    }
     document.getElementById('controller-mapping-btn').textContent = t('midi.openSettings');
     document.getElementById('close-btn').textContent = t('dialog.config.close');
     renderLanguageOptions();
@@ -1076,6 +1094,12 @@ export async function showConfigDialog(isElectron, currentConfig) {
     const value = e.target.value === 'never' ? 'never' : Number(e.target.value);
     await applyPowerSettings({ fullSuspendDelaySeconds: value });
   });
+  document.getElementById('power-skip-display-dsp-when-hidden')?.addEventListener(
+    'change',
+    async e => {
+      await applyPowerSettings({ skipDisplayDspWhenHidden: e.target.checked });
+    }
+  );
   document.getElementById('offline-output-format')?.addEventListener('change', async e => {
     await applyOfflineOutputSettings({ format: e.target.value });
   });
@@ -1150,8 +1174,6 @@ export async function showConfigDialog(isElectron, currentConfig) {
     document.body.removeChild(overlay);
     document.head.removeChild(style);
     document.removeEventListener('keydown', handleKeydown);
-    // const message = t('dialog.config.languageRestartNotice');
-    // alert(message);
   }
 
   function handleKeydown(e) {

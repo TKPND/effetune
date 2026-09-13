@@ -100,7 +100,8 @@ export const SuspendCause = Object.freeze({
 export const DEFAULT_POWER_SETTINGS = Object.freeze({
   mode: PowerPolicy.BALANCED,
   silenceThresholdDb: -80,
-  fullSuspendDelaySeconds: 300
+  fullSuspendDelaySeconds: 300,
+  skipDisplayDspWhenHidden: true
 });
 
 export const NO_ROUTE_IDLE_DELAY_MS = Object.freeze({
@@ -572,7 +573,10 @@ export function normalizePowerSettings(config = {}) {
       candidate.fullSuspendDelaySeconds
     )
       ? candidate.fullSuspendDelaySeconds
-      : DEFAULT_POWER_SETTINGS.fullSuspendDelaySeconds
+      : DEFAULT_POWER_SETTINGS.fullSuspendDelaySeconds,
+    skipDisplayDspWhenHidden: typeof candidate.skipDisplayDspWhenHidden === 'boolean'
+      ? candidate.skipDisplayDspWhenHidden
+      : DEFAULT_POWER_SETTINGS.skipDisplayDspWhenHidden
   };
 }
 
@@ -712,10 +716,6 @@ export function getRequiredResourcesForResume(resumeKind, facts = {}) {
     default:
       return createRequiredResources();
   }
-}
-
-export function deriveProcessingDirective(facts = {}, settings = {}, now = 0) {
-  return decidePowerTarget(facts, settings, now).processingDirective;
 }
 
 export function decidePowerTarget(facts = {}, settings = {}, now = 0) {
@@ -1154,9 +1154,4 @@ export function validatePowerDecision(value) {
     (value.inputReleaseRequest === null || isObject(value.inputReleaseRequest)) &&
     typeof value.manualResumeRequired === 'boolean' &&
     validateRequiredResources(value.requiredResources);
-}
-
-export function assertValidPowerDecision(value) {
-  if (!validatePowerDecision(value)) throw new TypeError('Invalid power decision schema');
-  return value;
 }

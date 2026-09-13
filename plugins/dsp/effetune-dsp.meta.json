@@ -1,6 +1,6 @@
 {
   "abiVersion": 1,
-  "sourceDigest": "sha256:d798d9278c56dae94fbb62709785d5ce21a5b8afe71632332838ecbfcdfa322c",
+  "sourceDigest": "sha256:f2fe6933447e4b59368f6eb7d2abbec5bc4d42fd6645473868f095fd39986681",
   "emsdkVersion": "6.0.2",
   "g726PerformanceInput": {
     "contract": "g726-production-performance-input-sha256-v2",
@@ -410,14 +410,20 @@
       "assets": []
     },
     {
+      "name": "PitchMeterPlugin",
+      "hash": 2658803801,
+      "byteCapacity": 0,
+      "assets": []
+    },
+    {
       "name": "SpectrogramPlugin",
-      "hash": 3382561824,
+      "hash": 1047398425,
       "byteCapacity": 0,
       "assets": []
     },
     {
       "name": "SpectrumAnalyzerPlugin",
-      "hash": 3382561824,
+      "hash": 1047398425,
       "byteCapacity": 0,
       "assets": []
     },
@@ -1048,7 +1054,7 @@
     }
   ],
   "sizes": {
-    "baseline": 7029929,
-    "simd": 7158834
+    "baseline": 7056250,
+    "simd": 7185846
   }
 }

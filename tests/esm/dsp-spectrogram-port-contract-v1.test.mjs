@@ -19,7 +19,7 @@ const schemaPath = path.join(pluginRoot, 'params.json');
 const goldenDir = path.join(pluginRoot, 'golden');
 const kernelPath = path.join(pluginRoot, 'kernel.cpp');
 const rendererPath = path.join(repoRoot, 'plugins', 'analyzer', 'spectrogram.js');
-  const jsEngineHash = '4950a7f42a141c7cb94e1d09fec8d75f1b311e4151b69d46f348bee5420eeba9';
+const jsEngineHash = '86ff125f6c868230063e78562c0a47ce6f51a67eceefd1e139464ed96d893ca5';
 
 async function directoryBytes(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -49,15 +49,16 @@ test('Spectrogram schema freezes legacy keys, bounds, defaults, and hash', async
   const raw = JSON.parse(await fs.readFile(schemaPath, 'utf8'));
   const schema = validateParamSpec(raw, schemaPath);
   assert.equal(schema.type, 'SpectrogramPlugin');
-  assert.equal(schema.hash, 0xc99dcc20);
-  assert.equal(schema.floatCount, 2);
+  assert.equal(schema.hash, 0x3e6e0819);
+  assert.equal(schema.floatCount, 3);
   assert.deepEqual(
     raw.fields.map(({ name, key, kind, min, max, default: defaultValue }) => ({
       name, key, kind, min, max, default: defaultValue
     })),
     [
       { name: 'dBRange', key: 'dr', kind: 'float', min: -144, max: -48, default: -96 },
-      { name: 'points', key: 'pt', kind: 'int', min: 8, max: 14, default: 12 }
+      { name: 'points', key: 'pt', kind: 'int', min: 8, max: 14, default: 12 },
+      { name: 'highQualityLog', key: 'hq', kind: 'bool', min: undefined, max: undefined, default: false }
     ]
   );
 });
@@ -65,7 +66,8 @@ test('Spectrogram schema freezes legacy keys, bounds, defaults, and hash', async
 test('Spectrogram passthrough goldens are exact, current, and below 2 MiB', async () => {
   assert.ok(await directoryBytes(goldenDir) <= DEFAULT_GOLDEN_BUDGET_BYTES);
   const goldens = await readGoldenSet(goldenDir);
-  assert.equal(goldens.length, 6);
+  assert.equal(goldens.length, 7);
+  assert.equal(goldens.at(-1).metadata.params.hq, true);
   assert.ok(goldens.some(item => item.metadata.channels === 1));
   assert.ok(goldens.some(item => item.metadata.channels === 4));
   assert.ok(goldens.some(item => item.metadata.blockSize === 83));
@@ -82,7 +84,7 @@ test('Spectrogram passthrough goldens are exact, current, and below 2 MiB', asyn
     '--type', 'SpectrogramPlugin',
     '--self-check'
   ], { log() {} });
-  assert.equal(result.results.length, 6);
+  assert.equal(result.results.length, 7);
   assert.equal(result.results.every(item => item.comparison.pass), true);
 });
 

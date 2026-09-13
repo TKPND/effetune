@@ -313,6 +313,7 @@ Se o problema continuar, reporte em [GitHub Issues](https://github.com/Frieve-A/
 | Analyzer  | Level Meter        | Exibe o nível de áudio com retenção de pico                             | [Detalhes](plugins/analyzer.md#level-meter)          |
 | Analyzer  | Note Spectrogram | Mostra as alturas estimadas ao longo do tempo em um piano roll         | [Detalhes](plugins/analyzer.md#note-spectrogram) |
 | Analyzer  | Oscilloscope       | Visualização de forma de onda em tempo real                             | [Detalhes](plugins/analyzer.md#oscilloscope)         |
+| Analyzer  | Pitch Meter | Acompanha uma frequência fundamental e sua afinação ao longo do tempo | [Detalhes](plugins/analyzer.md#pitch-meter) |
 | Analyzer  | Spectrogram        | Exibe variações do espectro de frequências ao longo do tempo            | [Detalhes](plugins/analyzer.md#spectrogram)          |
 | Analyzer  | Spectrum Analyzer  | Mostra a força dos graves, médios e agudos em tempo real                | [Detalhes](plugins/analyzer.md#spectrum-analyzer)    |
 | Analyzer  | Stereo Meter       | Visualiza o equilíbrio estéreo e a correlação entre canais              | [Detalhes](plugins/analyzer.md#stereo-meter)         |
@@ -370,6 +371,7 @@ Se o problema continuar, reporte em [GitHub Issues](https://github.com/Frieve-A/
 | Lo-Fi     | Simple Jitter | Simulação de jitter digital | [Detalhes](plugins/lofi.md#simple-jitter) |
 | Lo-Fi     | SW Radio Simulator | Passa a música por uma cadeia modelada de transmissão em onda curta, propagação ionosférica e recepção | [Detalhes](plugins/lofi.md#sw-radio-simulator) |
 | Lo-Fi     | Tape Artifacts | Grava a música em uma fita de rolo modelada e a reproduz | [Detalhes](plugins/lofi.md#tape-artifacts) |
+| Lo-Fi     | TV Audio Simulator | Passa a música por caminhos de áudio modelados de TV analógica e NICAM | [Detalhes](plugins/lofi.md#tv-audio-simulator) |
 | Lo-Fi     | Vinyl Artifacts | Adiciona estalos, crackle, hiss, rumble e vazamento de ruído estéreo no estilo vinil | [Detalhes](plugins/lofi.md#vinyl-artifacts) |
 | Lo-Fi     | Vinyl Simulator | Grava a entrada em um sulco modelado e a reproduz com uma agulha física simulada | [Detalhes](plugins/lofi.md#vinyl-simulator) |
 | Modulation | Auto Filter | Varre um filtro ressonante com LFO ou com o envelope de amplitude | [Detalhes](plugins/modulation.md#auto-filter) |

@@ -312,6 +312,7 @@ PC 上的 Chromium 浏览器可以在不同会话间保留对所选音乐文件�
 | Analyzer  | Level Meter | 显示带峰值保持的音频电平 | [详情](plugins/analyzer.md#level-meter) |
 | Analyzer  | Note Spectrogram | 以钢琴卷帘图显示随时间变化的估算音高 | [详情](plugins/analyzer.md#note-spectrogram) |
 | Analyzer  | Oscilloscope | 实时波形可视化 | [详情](plugins/analyzer.md#oscilloscope) |
+| Analyzer  | Pitch Meter | 随时间跟踪一个基频及其调音偏差 | [详情](plugins/analyzer.md#pitch-meter) |
 | Analyzer  | Spectrogram | 显示频谱随时间的变化 | [详情](plugins/analyzer.md#spectrogram) |
 | Analyzer  | Spectrum Analyzer | 实时显示低频、中频和高频的强弱 | [详情](plugins/analyzer.md#spectrum-analyzer) |
 | Analyzer  | Stereo Meter | 可视化立体声平衡与声道相关性 | [详情](plugins/analyzer.md#stereo-meter) |
@@ -369,6 +370,7 @@ PC 上的 Chromium 浏览器可以在不同会话间保留对所选音乐文件�
 | Lo-Fi     | Simple Jitter | 数字抖动模拟 | [详情](plugins/lofi.md#simple-jitter) |
 | Lo-Fi     | SW Radio Simulator | 让音乐经过建模的短波广播、电离层传播与接收链路 | [详情](plugins/lofi.md#sw-radio-simulator) |
 | Lo-Fi     | Tape Artifacts | 将音乐录到建模的开盘磁带上再放出来 | [详情](plugins/lofi.md#tape-artifacts) |
+| Lo-Fi     | TV Audio Simulator | 让音乐经过建模的模拟电视和NICAM数字电视伴音通路 | [详情](plugins/lofi.md#tv-audio-simulator) |
 | Lo-Fi     | Vinyl Artifacts | 加入黑胶风格的爆点、噼啪声、嘶声、隆隆声和立体声噪声串扰 | [详情](plugins/lofi.md#vinyl-artifacts) |
 | Lo-Fi     | Vinyl Simulator | 将输入刻入模拟唱槽，再用物理唱针模型播放 | [详情](plugins/lofi.md#vinyl-simulator) |
 | Modulation | Auto Filter | 通过LFO或音量包络扫动共振滤波器 | [详情](plugins/modulation.md#auto-filter) |

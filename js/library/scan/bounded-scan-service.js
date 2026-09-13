@@ -1004,18 +1004,6 @@ class TimedBatch {
   }
 }
 
-async function mapConcurrent(items, concurrency, operation) {
-  let index = 0;
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    for (;;) {
-      const current = index;
-      index += 1;
-      if (current >= items.length) return;
-      await operation(items[current]);
-    }
-  });
-  await Promise.all(workers);
-}
 
 function toAsyncIterator(iterable) {
   if (iterable?.[Symbol.asyncIterator]) return iterable[Symbol.asyncIterator]();

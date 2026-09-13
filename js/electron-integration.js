@@ -166,7 +166,6 @@ export class ElectronIntegration {
     // Listen for open music files request from main process (for command line arguments)
     window.electronAPI.onOpenMusicFiles((filePaths) => {
       if (filePaths && filePaths.length > 0) {
-        // Debug logs removed for release
         
         // Check if the app is already initialized and not in first launch
         if (window.app && window.app.audioManager && window.app.audioManager.workletNode &&
@@ -176,9 +175,6 @@ export class ElectronIntegration {
           // Create audio player with the music files
           // Use the existing audio preferences
           if (window.uiManager) {
-            // Debug logs removed for release
-            // Store the files in a global variable for debugging
-            window._debugCommandLineMusicFiles = filePaths;
             void Promise.resolve(window.uiManager.createAudioPlayer(filePaths, false))
               .catch(error => {
                 console.error('Failed to open command-line music files:', error);
@@ -187,22 +183,14 @@ export class ElectronIntegration {
           }
         } else {
           // If the app is not yet initialized or in first launch, store file paths for later use
-          // Debug logs removed for release
           window.pendingMusicFiles = filePaths;
-          // Store the files in a global variable for debugging
-          window._debugPendingMusicFiles = filePaths;
           
           // Set useInputWithPlayer to false immediately, even during first launch
           // This ensures the same behavior as drag and drop
           if (window.electronIntegration && window.electronIntegration.audioPreferences) {
-            // Debug logs removed for release
             window.electronIntegration.audioPreferences.useInputWithPlayer = false;
           }
           
-          // Also set a flag to indicate that command line music files should not use input
-          window._commandLineMusicFilesNoInput = true;
-          
-          // Debug logs removed for release
         }
       }
     });

@@ -114,43 +114,6 @@ function unwrapPhase(phases) {
     return output;
 }
 
-function unwrapPhaseFrom(phases, first) {
-    const output = Float64Array.from(phases);
-    let offset = 0;
-    for (let index = first + 1; index < output.length; index += 1) {
-        const current = output[index] + offset;
-        const difference = current - output[index - 1];
-        if (difference > Math.PI) offset -= 2 * Math.PI;
-        else if (difference < -Math.PI) offset += 2 * Math.PI;
-        output[index] += offset;
-    }
-    return output;
-}
-
-function unwrapPhaseAround(phases, anchor) {
-    const output = Float64Array.from(phases);
-    let offset = 0;
-    for (let index = anchor + 1; index < output.length; index += 1) {
-        const current = output[index] + offset;
-        const difference = current - output[index - 1];
-        if (difference > Math.PI) offset -= 2 * Math.PI;
-        else if (difference < -Math.PI) offset += 2 * Math.PI;
-        output[index] += offset;
-    }
-    for (let index = anchor - 1; index >= 0; index -= 1) {
-        let value = output[index];
-        const difference = value - output[index + 1];
-        if (difference > Math.PI) value -= 2 * Math.PI * Math.ceil(
-            (difference - Math.PI) / (2 * Math.PI)
-        );
-        else if (difference < -Math.PI) value += 2 * Math.PI * Math.ceil(
-            (-difference - Math.PI) / (2 * Math.PI)
-        );
-        output[index] = value;
-    }
-    return output;
-}
-
 function interpolateValues(frequencies, values, targetFrequencies) {
     if (!frequencies.length) return new Float64Array(targetFrequencies.length);
     const result = new Float64Array(targetFrequencies.length);

@@ -40,10 +40,13 @@ export class CatalogPlaybackBridge {
     this.#assertOpen();
     const destination = PLAYBACK_DESTINATIONS[request?.operationKind];
     if (!destination) return this.service.start(request);
-    // Keep the synchronous path when a player already exists: the gesture-scoped audio resume
-    // below must still run inside the user gesture. Only creating a player has to be awaited.
-    const player = this.#getExistingPlayer() ?? await this.#getPlayer();
-    if (request.operationKind === 'play') player.resumeAudioContextInGesture?.();
+    // Resume before lazy player loading or catalog reads can outlive user activation.
+    const existingPlayer = this.#getExistingPlayer();
+    if (request.operationKind === 'play') {
+      if (existingPlayer) existingPlayer.resumeAudioContextInGesture?.();
+      else this.uiManager.beginPlaybackSelectionGestureResume?.();
+    }
+    const player = existingPlayer ?? await this.#getPlayer();
     const finishPlaybackPending = request.operationKind === 'play'
       ? player.stateManager?.beginPlaybackPending?.(3) ?? null
       : null;
