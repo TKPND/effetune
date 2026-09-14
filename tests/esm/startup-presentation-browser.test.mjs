@@ -26,15 +26,20 @@ async function assertPreparing(page) {
   assert.deepEqual(await page.evaluate(() => {
     const style = getComputedStyle(document.documentElement);
     const spinner = document.querySelector('.startup-spinner');
+    const progress = document.getElementById('startupProgress');
     const appContent = document.querySelector('.title-container');
     return {
       scrollbarColor: style.scrollbarColor,
+      progressVisibleBelowSpinner: getComputedStyle(progress).visibility === 'visible' &&
+        progress.getBoundingClientRect().top > spinner.getBoundingClientRect().bottom &&
+        progress.textContent.trim().length > 0,
       spinnerDisplay: getComputedStyle(spinner).display,
       spinnerVisibility: getComputedStyle(spinner).visibility,
       appVisibility: getComputedStyle(appContent).visibility
     };
   }), {
     scrollbarColor: 'rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)',
+    progressVisibleBelowSpinner: true,
     spinnerDisplay: 'block',
     spinnerVisibility: 'visible',
     appVisibility: 'hidden'

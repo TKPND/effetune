@@ -24,6 +24,7 @@ import {
   OFFLINE_OUTPUT_FORMATS,
   normalizeOfflineOutputSettings
 } from '../audio/offline-output-settings.js';
+import { isVisualSyncEnabled } from '../audio/visual-sync.js';
 import { closeStandardSelect, enableStandardSelects } from '../ui/standard-select.js';
 
 import { THEME_PRESETS, getThemePreset, normalizeThemeId } from '../theme-registry.mjs';
@@ -186,6 +187,13 @@ export async function showConfigDialog(isElectron, currentConfig) {
           <div class="device-section">
             <label class="section-label" for="theme-select" id="config-theme-label"></label>
             <select id="theme-select" class="config-select"></select>
+          </div>
+          <div class="device-section">
+            <div class="checkbox-container">
+              <input type="checkbox" id="visual-sync" aria-describedby="visual-sync-help" ${isVisualSyncEnabled(config) ? 'checked' : ''}>
+              <label for="visual-sync" id="visual-sync-label"></label>
+            </div>
+            <div class="power-mode-help" id="visual-sync-help"></div>
           </div>
           <div class="device-section">
             <label class="section-label" id="config-startup-view-label"></label>
@@ -838,6 +846,8 @@ export async function showConfigDialog(isElectron, currentConfig) {
     if (openHomeRisk) openHomeRisk.textContent = t('dialog.config.openHome.risk');
     document.getElementById('config-language-label').textContent = t('dialog.config.language');
     document.getElementById('config-theme-label').textContent = t('dialog.config.theme');
+    document.getElementById('visual-sync-label').textContent = t('dialog.config.visualSync.label');
+    document.getElementById('visual-sync-help').textContent = t('dialog.config.visualSync.help');
     renderThemeOptions();
     document.getElementById('config-startup-view-label').textContent = t('dialog.config.startupView');
     document.getElementById('config-startup-view-effects-label').textContent = t('dialog.config.startupView.effects');
@@ -911,6 +921,8 @@ export async function showConfigDialog(isElectron, currentConfig) {
     if (tray) tray.checked = Boolean(config.minimizeToTray);
     const checkUpdates = document.getElementById('check-updates');
     if (checkUpdates) checkUpdates.checked = config.checkForUpdatesOnStartup !== false;
+    const visualSync = document.getElementById('visual-sync');
+    if (visualSync) visualSync.checked = isVisualSyncEnabled(config);
 
     const startupView = config.startupView === 'library' ? 'library' : 'effects';
     const startupEffects = document.getElementById('startup-view-effects');
@@ -941,6 +953,7 @@ export async function showConfigDialog(isElectron, currentConfig) {
   }
 
   let configSaveSequence = 0;
+  let visualSyncUpdateSequence = 0;
   async function save(partialConfig) {
     const saveSequence = ++configSaveSequence;
     const saved = await saveConfig(isElectron, partialConfig);
@@ -1067,6 +1080,13 @@ export async function showConfigDialog(isElectron, currentConfig) {
       await save({ checkForUpdatesOnStartup: e.target.checked });
     });
   }
+  document.getElementById('visual-sync')?.addEventListener('change', async e => {
+    const enabled = e.target.checked;
+    const updateSequence = ++visualSyncUpdateSequence;
+    if (!await save({ visualSync: enabled })) return;
+    if (updateSequence !== visualSyncUpdateSequence) return;
+    await window.audioManager?.setVisualSyncEnabled?.(enabled);
+  });
   const openHomeEnabled = document.getElementById('openhome-enabled');
   openHomeEnabled?.addEventListener('change', async e => {
     await applyOpenHomeEnabled(e.target.checked);

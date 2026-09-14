@@ -50,6 +50,14 @@
             border-radius: 50%;
             animation: startup-spin 0.9s linear infinite;
         }
+        #startupProgress {
+            color: var(--et-text-primary);
+            position: absolute;
+            top: calc(50% + 37px);
+            inset-inline: 20px;
+            text-align: center;
+            font: 14px/1.5 sans-serif;
+        }
         @keyframes startup-spin {
             to { transform: rotate(360deg); }
         }
@@ -176,6 +184,7 @@
 <body>
     <div id="startupLoading" role="status" aria-label="Starting EffeTune">
         <div class="startup-spinner" aria-hidden="true"></div>
+        <div id="startupProgress">Starting EffeTune…</div>
     </div>
     <script>
         // Apply the Web startup view preference before the effect pipeline markup can paint.

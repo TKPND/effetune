@@ -19,6 +19,7 @@ let audio;
 let stream;
 let failurePending = false;
 let telemetryEnabled = null;
+let frequencyPreviewOwner = null;
 let irLibraryHostPromise;
 let settings = { plugins: [], presets: {}, masterBypass: false };
 let state = { revision: 0, status: 'stopped', target: null, masterBypass: false,
@@ -60,9 +61,17 @@ async function persist() {
     await runtimeRequest('saveSettings', { settings });
 }
 
+function removeViewer(id) {
+    viewers.delete(id);
+    if (frequencyPreviewOwner === id) {
+        audio?.setFrequencyPreview(null);
+        frequencyPreviewOwner = null;
+    }
+}
+
 function synchronizeTelemetry() {
     const now = Date.now();
-    for (const [id, lastSeen] of viewers) if (now - lastSeen > 15000) viewers.delete(id);
+    for (const [id, lastSeen] of viewers) if (now - lastSeen > 15000) removeViewer(id);
     const enabled = viewers.size > 0;
     if (enabled === telemetryEnabled) return;
     telemetryEnabled = enabled;
@@ -71,6 +80,8 @@ function synchronizeTelemetry() {
 }
 
 async function closeAudio(nextState = 'stopped', error = null) {
+    audio?.setFrequencyPreview(null);
+    frequencyPreviewOwner = null;
     publish({ status: 'stopping' });
     const models = audio?.pipeline || [];
     for (const track of stream?.getTracks() || []) track.stop();
@@ -97,6 +108,8 @@ function failAudio(error) {
 }
 
 async function applyPipeline(preset) {
+    audio?.setFrequencyPreview(null);
+    frequencyPreviewOwner = null;
     const candidates = await createPipelineModels(preset, manager, state.sampleRate);
     const previous = audio.pipeline;
     const previousBypass = audio.masterBypass;
@@ -208,7 +221,7 @@ async function handle(command, args = {}, clientId = null) {
     }
     if (command === 'setTelemetry') {
         if (args.enabled === true) viewers.set(clientId, Date.now());
-        else viewers.delete(clientId);
+        else removeViewer(clientId);
         synchronizeTelemetry();
         if (args.enabled === true) {
             replayDspExecutionStates(audio.getDspExecutionStateSnapshot(), message => {
@@ -288,7 +301,11 @@ channel.onmessage = ({ data }) => {
         getIrLibraryHost().then(host => host.cancel(data.clientId, data.operationId)).catch(console.error);
     }
     if (data.kind === 'heartbeat' && viewers.has(data.clientId)) viewers.set(data.clientId, Date.now());
-    if (data.kind === 'leave') { viewers.delete(data.clientId); synchronizeTelemetry(); }
+    if (data.kind === 'leave') { removeViewer(data.clientId); synchronizeTelemetry(); }
+    if (data.kind === 'frequencyPreview' && viewers.has(data.clientId)) {
+        frequencyPreviewOwner = Number.isFinite(data.frequency) && data.frequency > 0 ? data.clientId : null;
+        audio?.setFrequencyPreview(data.frequency);
+    }
     if (data.kind !== 'request' || !MODEL_COMMANDS.has(data.command) || !Number.isInteger(data.requestId)) return;
     enqueue(data.command, data.args, data.clientId).then(result => {
         channel.postMessage({ kind: 'response', clientId: data.clientId, requestId: data.requestId, ok: true, result });

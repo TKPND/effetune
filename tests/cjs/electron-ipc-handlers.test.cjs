@@ -351,6 +351,10 @@ function createHarness(options = {}) {
     async checkForUpdates() {
       calls.push(['main.checkForUpdates']);
       if (options.throwCheckForUpdates) throw new Error('check failed');
+    },
+    async downloadAndInstallUpdate() {
+      calls.push(['main.downloadAndInstallUpdate']);
+      if (options.throwDownloadUpdate) throw new Error('download failed: internal diagnostic');
     }
   };
 
@@ -471,6 +475,7 @@ test('registers core handlers and delegates file, config, update, path, and URL 
     assert.deepEqual(handlers.get('renderer-ready-for-updates')(), { success: true });
     assert.deepEqual(handlers.get('get-update-info')(), { version: '2.0.0' });
     assert.deepEqual(await handlers.get('force-check-for-updates')(), { success: true });
+    assert.deepEqual(await handlers.get('download-update')(), { success: true });
 
     await invokeAllDelegates(handlers);
 
@@ -717,6 +722,7 @@ test('IPC handlers recover from update, permission, config, preference, relaunch
     platform: 'linux',
     throwGetPendingUpdateInfo: true,
     throwCheckForUpdates: true,
+    throwDownloadUpdate: true,
     throwLoadConfig: true,
     throwRelaunch: true,
     savePipelineResults: [{ success: false, error: 'save failed' }, new Error('save threw')],
@@ -729,6 +735,7 @@ test('IPC handlers recover from update, permission, config, preference, relaunch
 
     assert.equal(handlers.get('get-update-info')(), null);
     assert.deepEqual(await handlers.get('force-check-for-updates')(), { success: false, error: 'check failed' });
+    assert.deepEqual(await handlers.get('download-update')(), { success: false });
     assert.deepEqual(await handlers.get('open-external-url')({}, 'bad'), { success: false, error: 'open failed' });
     assert.deepEqual(await handlers.get('load-config')(), { success: false, error: 'load config failed' });
     assert.deepEqual(await handlers.get('request-microphone-access')(), true);

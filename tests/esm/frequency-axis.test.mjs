@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import test from 'node:test';
+import vm from 'node:vm';
+import { frequencyAxisSource } from '../helpers/spectrum-overlay-harness.mjs';
+
+const context = { window: {} };
+vm.runInNewContext(frequencyAxisSource, context);
+const axes = context.window.FrequencyAxis;
+const files = {
+  BandPassFilterPlugin: 'eq/band_pass_filter', CombFilterPlugin: 'eq/comb_filter',
+  FifteenBandGEQPlugin: 'eq/fifteen_band_geq', HiPassFilterPlugin: 'eq/hi_pass_filter',
+  LoPassFilterPlugin: 'eq/lo_pass_filter', LoudnessEqualizerPlugin: 'eq/loudness_equalizer',
+  NarrowRangePlugin: 'eq/narrow_range', TiltEQPlugin: 'eq/tilt_eq', ToneControlPlugin: 'eq/tone_control',
+  ChannelDividerPlugin: 'basics/channel_divider', FIRCrossoverPlugin: 'basics/fir_crossover',
+  FiveBandDynamicEQ: 'eq/five_band_dynamic_eq', FiveBandPEQPlugin: 'eq/five_band_peq',
+  FifteenBandPEQPlugin: 'eq/fifteen_band_peq', FiveBandFIRPEQPlugin: 'eq/five_band_fir_peq',
+  RoomEqPlugin: 'eq/room_eq', EarphoneCableSimPlugin: 'eq/earphone_cable_sim', SubSynthPlugin: 'saturation/sub_synth',
+  GroupDelayEqPlugin: 'eq/group_delay_eq', GroupDelayPEQPlugin: 'eq/group_delay_peq',
+  ExciterPlugin: 'saturation/exciter', DSD64IMDSimulatorPlugin: 'lofi/dsd64_imd_simulator',
+  SpectrumAnalyzerPlugin: 'analyzer/spectrum_analyzer', SpectrogramPlugin: 'analyzer/spectrogram',
+  NoteSpectrogramPlugin: 'analyzer/note_spectrogram', PitchMeterPlugin: 'analyzer/pitch_meter',
+  PhaseSelectEqPlugin: 'spatial/phase_select_eq'
+};
+
+test('all 27 frequency axes match plugin selectors and coordinate definitions', () => {
+  assert.deepEqual([...axes.targets.keys()].sort(), Object.keys(files).sort());
+  for (const [name, target] of axes.targets) {
+    const source = fs.readFileSync(new URL(`../../plugins/${files[name]}.js`, import.meta.url), 'utf8');
+    const graphClass = target.plotSelector.match(/\.([\w-]+)/)[1];
+    assert.ok(source.includes(graphClass) || (graphClass === 'graph-container' && source.includes('this.createResponsiveGraph(')), `${name} selector`);
+    if (target.axisCheck.ownerOf) {
+      const sandbox = { window: {}, PluginBase: class {}, console };
+      vm.runInNewContext(`${source}\nthis.Loaded = ${name};`, sandbox);
+      const plugin = Object.create(sandbox.Loaded.prototype);
+      if (name === 'RoomEqPlugin') plugin._additionalEqEditor = sandbox.Loaded.createAdditionalEqEditor();
+      const owner = target.axisCheck.ownerOf(plugin);
+      for (const frequency of [10, 20, 200, 2000, 20000, 40000]) {
+        const expected = (Math.log10(frequency) - Math.log10(target.minFreq)) /
+          (Math.log10(target.maxFreq) - Math.log10(target.minFreq)) * 100;
+        assert.ok(Math.abs(owner.freqToX(frequency) - expected) <= 1e-9, name);
+      }
+    } else {
+      for (const marker of target.axisCheck) assert.ok(source.includes(marker), `${name}: ${marker}`);
+    }
+  }
+});
+
+test('logarithmic, linear and vertical coordinates round trip and clamp', () => {
+  for (const scale of ['log', 'linear']) {
+    for (const orientation of ['x', 'y']) {
+      for (const frequency of [20, 440, 20000]) {
+        const position = axes.frequencyToPosition(frequency, 480, 20, 20000, scale, orientation);
+        const actual = axes.positionToFrequency(position, 480, 20, 20000, scale, orientation);
+        assert.ok(Math.abs(actual / frequency - 1) < 1e-10);
+      }
+      assert.equal(axes.positionToFrequency(-1, 480, 20, 20000, scale, orientation), orientation === 'x' ? 20 : 20000);
+    }
+  }
+});
+
+test('semitone snapping respects half-step boundaries and reference tuning', () => {
+  for (const a4 of [440, 442]) {
+    assert.equal(axes.nearestSemitone(a4 * 2 ** (0.499 / 12), a4), a4);
+    assert.equal(axes.nearestSemitone(a4 * 2 ** (0.501 / 12), a4), axes.noteFrequency(70, a4));
+    assert.equal(axes.nearestSemitone(a4 * 2 ** (-0.501 / 12), a4), axes.noteFrequency(68, a4));
+  }
+});
+
+test('note-axis keys follow the rendered equal white-key geometry and black priority', () => {
+  const keys = axes.noteAxisKeys(60, 71, 120);
+  const c = keys.find(key => key.midi === 60);
+  assert.equal(c.start, 0);
+  assert.equal(c.end, 10);
+  assert.equal(c.whiteStart, 0);
+  assert.equal(c.whiteEnd, 120 / 7);
+  assert.equal(axes.hitKey(keys, 12, 5, 45, 28).midi, 61);
+  assert.equal(axes.hitKey(keys, 12, 35, 45, 28).midi, 60);
+  assert.equal(axes.hitKey(keys, 120, 35, 45, 28).midi, 71);
+  for (const [name, gutter, markers] of [
+    ['NoteSpectrogramPlugin', 44.8, ['MULTI_F0_KEY_GUTTER_CSS_PX = 28;', 'MULTI_F0_KEY_GUTTER_CSS_PX * 1.6']],
+    ['PitchMeterPlugin', 45, ['PITCH_METER_KEY_GUTTER_CSS_PX = 45;', 'PITCH_METER_BLACK_KEY_DEPTH_CSS_PX = 28;']]
+  ]) {
+    const source = fs.readFileSync(new URL(`../../plugins/${files[name]}.js`, import.meta.url), 'utf8');
+    for (const marker of markers) assert.ok(source.includes(marker));
+    for (const ly of ['Horizontal', 'Vertical']) {
+      const axis = axes.getAxis({ mn: 60, mx: 71, rf: 442, ly }, axes.targets.get(name), { width: 120, height: 120 });
+      assert.equal(axis.gutter, gutter);
+      assert.equal(axis.blackDepth, 28);
+      const position = ly === 'Horizontal' ? 15 : 105;
+      assert.equal(axis.toFreq(position), axes.noteFrequency(61, axis.a4));
+      assert.ok(Math.abs(axis.toPos(axis.toFreq(position)) - position) < 1e-10);
+      assert.equal(axes.hitKey(axis.keys, position, 5, gutter, 28).midi, 61);
+    }
+  }
+});

@@ -134,7 +134,8 @@ export class ExtensionAudioManager {
   incrementPowerDiagnostic() {}
   syncPrimaryWasmAssetMembership() {}
   notifyPipelineAnalysisInvalidated() {}
-  rebuildPipeline() {}
+  rebuildPipeline() { window.FrequencyPreview?.stop?.(); }
+  setFrequencyPreview(frequency) { this.client.sendFrequencyPreview(frequency); }
   dispatchEvent() {}
 
   enqueue(operation) {

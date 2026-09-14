@@ -296,6 +296,7 @@ async function instantiateDspBinding(payload, options) {
       now: options.performanceNow ?? (() => 0)
     },
     currentTime: 0,
+    currentFrame: 0,
     sampleRate: options.sampleRate ?? 48000,
     __instantiateDspBinding: async (payload, factoryOptions) => {
       factories.push({ payload, factoryOptions });
@@ -334,7 +335,8 @@ async function instantiateDspBinding(payload, options) {
     processor,
     send,
     warnings,
-    KeepaliveProcessorClass
+    KeepaliveProcessorClass,
+    setContextFrame(frame) { sandbox.currentFrame = frame; }
   };
 }
 
@@ -593,6 +595,61 @@ function processBlock(processor, value = 1, channelCount = 2, frameCount = 128) 
 function messagesOf(posts, type) {
   return posts.filter(entry => entry.message.type === type);
 }
+
+test('frequency preview mixes only source channels before JS, WASM and bypass processing', async () => {
+  for (const mode of ['js', 'wasm', 'bypass']) {
+    const h = await createWorkletHarness({ outputChannels: 4 });
+    await h.send({ type: 'registerProcessor', pluginType: 'VolumePlugin',
+      processor: 'for (let i = 0; i < data.length; i++) data[i] *= 2; return data;' });
+    if (mode === 'wasm') {
+      await h.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
+      await h.send({ type: 'dspModule', module: {} });
+    }
+    await h.send({ type: 'updatePlugins', plugins: [pluginConfig()], masterBypass: mode === 'bypass' });
+    await h.send({ type: 'frequencyPreview', frequency: 1000 });
+    processBlock(h.processor, 0.125, 4);
+    processBlock(h.processor, 0.125, 4);
+    const input = Array.from({ length: 4 }, () => new Float32Array(128).fill(0.125));
+    const output = input.map(() => new Float32Array(128));
+    h.processor.process([input], [output], {});
+    const gain = mode === 'bypass' ? 1 : 2;
+    assert.ok(Math.abs(Math.max(...output[0]) - (0.125 + 10 ** (-12 / 20)) * gain) < 1e-6, mode);
+    assert.deepEqual(output[0], output[1]);
+    assert.ok(output[2].every(value => Math.abs(value - 0.125 * gain) < 1e-6), mode);
+    assert.deepEqual(output[2], output[3]);
+    assert.ok(input.every(channel => channel.every(value => value === 0.125)));
+    if (mode === 'wasm') assert.ok(h.binding.calls.some(call => call[0] === 'instanceProcess'));
+  }
+});
+
+test('frequency preview ramps, keeps phase on retuning and stops on reset or Nyquist', async () => {
+  const h = await createWorkletHarness();
+  const input = [new Float32Array(64)];
+  assert.equal(h.processor._mixFrequencyPreview(input), input);
+  await h.send({ type: 'frequencyPreview', frequency: 1000 });
+  const first = h.processor._mixFrequencyPreview(input);
+  assert.ok(Math.abs(first[0][12] - 10 ** (-12 / 20) * 13 / 240) < 1e-7);
+  const phase = h.processor.frequencyPreview.phase;
+  const gain = h.processor.frequencyPreview.gain;
+  await h.send({ type: 'frequencyPreview', frequency: 2000 });
+  const next = h.processor._mixFrequencyPreview(input);
+  assert.equal(first, next);
+  assert.ok(Math.abs(next[0][0] - Math.sin(phase) * 10 ** (-12 / 20) * (gain + 1 / 240)) < 1e-7);
+  await h.send({ type: 'frequencyPreview', frequency: null });
+  h.processor._mixFrequencyPreview(input);
+  const fadingGain = h.processor.frequencyPreview.gain;
+  assert.ok(fadingGain > 0 && fadingGain < gain * 2);
+  await h.send({ type: 'frequencyPreview', frequency: 500 });
+  h.processor._mixFrequencyPreview(input);
+  assert.ok(h.processor.frequencyPreview.gain > fadingGain);
+  for (const stop of [{ type: 'reset' }, { type: 'frequencyPreview', frequency: 24000 }]) {
+    await h.send(stop);
+    for (let i = 0; i < 4; i++) h.processor._mixFrequencyPreview(input);
+    assert.equal(h.processor._mixFrequencyPreview(input), input);
+    await h.send({ type: 'frequencyPreview', frequency: 500 });
+    h.processor._mixFrequencyPreview([new Float32Array(512)]);
+  }
+});
 
 test('JavaScript fallback rebases denormal noise before Dynamic Saturation', async () => {
   const harness = await createWorkletHarness();
@@ -1876,20 +1933,20 @@ test('worklet reports the active main-bus latency only when the routed value cha
   await harness.send({ type: 'dspModule', module: { compiled: true } });
 
   let latencyMessages = messagesOf(harness.posts, 'dspLatency');
-  assert.equal(latencyMessages.length, 1);
-  assert.equal(latencyMessages[0].message.samples, 192);
-  assert.equal(latencyMessages[0].message.sampleRate, 48000);
-  assert.equal(latencyMessages[0].message.compensated, true);
+  assert.equal(latencyMessages.length, 2);
+  assert.equal(latencyMessages[1].message.samples, 192);
+  assert.equal(latencyMessages[1].message.sampleRate, 48000);
+  assert.equal(latencyMessages[1].message.compensated, true);
 
   await harness.send({
     type: 'updatePlugin',
     plugin: pluginConfig({ inputBus: 0, outputBus: 1, wasmParams: Float32Array.of(2) })
   });
-  assert.equal(messagesOf(harness.posts, 'dspLatency').length, 1);
+  assert.equal(messagesOf(harness.posts, 'dspLatency').length, 2);
   await harness.send({ type: 'updatePlugins', plugins: [], masterBypass: false });
   latencyMessages = messagesOf(harness.posts, 'dspLatency');
-  assert.equal(latencyMessages.length, 2);
-  assert.equal(latencyMessages[1].message.samples, 0);
+  assert.equal(latencyMessages.length, 3);
+  assert.equal(latencyMessages[2].message.samples, 0);
 });
 
 test('asset latency changes rebuild native and fallback plans without metadata-only churn', async () => {
@@ -1956,7 +2013,7 @@ test('asset latency changes rebuild native and fallback plans without metadata-o
   assert.equal(harness.processor.dspLatencyPlan.totalSamples, 96);
 });
 
-test('native descriptors omit channels that disappear when output width shrinks', async () => {
+test('routing omits channels that disappear when output width shrinks', async () => {
   const binding = createBinding({
     instanceLatency: 64,
     pipelineConfigureStatus: 0
@@ -1970,12 +2027,12 @@ test('native descriptors omit channels that disappear when output width shrinks'
   await harness.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
   await harness.send({ type: 'dspModule', module: {} });
 
-  let configureCall = binding.calls.filter(call => call[0] === 'pipelineConfigure').at(-1);
-  assert.equal(decodeDspPipelineDescriptor(configureCall[1]).nodes.length, 1);
+  assert.equal(harness.processor.dspPipelineReady, false);
+  assert.ok(harness.processor.dspLatencyPlan.outputDelayLine);
   assert.equal(harness.processor.dspPipelineLatencySamples, 64);
 
   await harness.send({ type: 'updateAudioConfig', outputChannels: 2 });
-  configureCall = binding.calls.filter(call => call[0] === 'pipelineConfigure').at(-1);
+  const configureCall = binding.calls.filter(call => call[0] === 'pipelineConfigure').at(-1);
   assert.equal(decodeDspPipelineDescriptor(configureCall[1]).nodes.length, 0);
   assert.equal(harness.processor.dspPipelineLatencySamples, 0);
   assert.equal(harness.processor.dspPipelineReady, true);
@@ -1993,15 +2050,17 @@ test('dsp-off Frequency Shifter fallback aligns routed merges and reports latenc
 
   assert.equal(harness.processor.dspLive, false);
   assert.equal(harness.processor.dspLatencyPlan.totalSamples, 114);
-  assert.deepEqual({ ...messagesOf(harness.posts, 'dspLatency').at(-1).message }, {
-    type: 'dspLatency', samples: 114, sampleRate: 48000, compensated: true
+  assert.deepEqual(JSON.parse(JSON.stringify(messagesOf(harness.posts, 'dspLatency').at(-1).message)), {
+    type: 'dspLatency', samples: 114, sampleRate: 48000, compensated: true,
+    taps: { 7: { input: 114, output: 0, execution: 'js' }, 8: { input: 114, output: 114, execution: 'js' }, 9: { input: 0, output: 0, execution: 'js' } }
   });
   processRoutedImpulse(harness.processor, 114);
 
   await harness.send({ type: 'updateAudioConfig', sampleRate: 96000, outputChannels: 1 });
   assert.equal(harness.processor.dspLatencyPlan.totalSamples, 228);
-  assert.deepEqual({ ...messagesOf(harness.posts, 'dspLatency').at(-1).message }, {
-    type: 'dspLatency', samples: 228, sampleRate: 96000, compensated: true
+  assert.deepEqual(JSON.parse(JSON.stringify(messagesOf(harness.posts, 'dspLatency').at(-1).message)), {
+    type: 'dspLatency', samples: 228, sampleRate: 96000, compensated: true,
+    taps: { 7: { input: 228, output: 0, execution: 'js' }, 8: { input: 228, output: 228, execution: 'js' }, 9: { input: 0, output: 0, execution: 'js' } }
   });
 });
 
@@ -2032,8 +2091,9 @@ test('per-instance WASM fallback uses Frequency Shifter JS latency at the active
   assert.equal(harness.processor.wasmInstances.get(7).ready, false);
   assert.equal(harness.processor.dspPipelineReady, false);
   assert.equal(harness.processor.dspLatencyPlan.totalSamples, 114);
-  assert.deepEqual({ ...messagesOf(harness.posts, 'dspLatency').at(-1).message }, {
-    type: 'dspLatency', samples: 114, sampleRate: 48000, compensated: true
+  assert.deepEqual(JSON.parse(JSON.stringify(messagesOf(harness.posts, 'dspLatency').at(-1).message)), {
+    type: 'dspLatency', samples: 114, sampleRate: 48000, compensated: true,
+    taps: { 7: { input: 114, output: 0, execution: 'js' }, 8: { input: 114, output: 114, execution: 'js' }, 9: { input: 0, output: 0, execution: 'js' } }
   });
   processRoutedImpulse(harness.processor, 114);
 });
@@ -4151,6 +4211,75 @@ test('new power identities adopt the configured UI telemetry gate directly', asy
   assert.equal(harness.processor.powerPolicy.uiTelemetryEnabled, true);
 });
 
+test('display changes preserve warmed compensation in JS and WASM graphs', async () => {
+  for (const execution of ['js', 'wasm']) {
+    for (const routing of ['output', 'merge']) {
+      const binding = createBinding({
+        pipelineConfigureStatus: 0,
+        instanceLatency: id => id === 100 ? 114 : 0,
+        instanceProcessImpl() {}
+      });
+      const harness = await createWorkletHarness({ binding });
+      await registerIdentityFallback(harness);
+      await registerFrequencyShifterFallback(harness);
+      await harness.send({ type: 'registerProcessor', pluginType: 'SpectrumAnalyzerPlugin', processor: 'return data;' });
+      const delayed = pluginConfig({ id: 7, type: execution === 'js' ? 'FrequencyShifterPlugin' : 'VolumePlugin',
+        channel: routing === 'output' ? 'L' : 'A', outputBus: routing === 'merge' ? 1 : 0 });
+      const plugins = routing === 'merge'
+        ? [delayed, pluginConfig({ id: 8, outputBus: 1 }), pluginConfig({ id: 9, inputBus: 1 })]
+        : [delayed];
+      if (execution === 'js') plugins.push(pluginConfig({ id: 10, type: 'SpectrumAnalyzerPlugin', wasmParams: undefined }));
+      await harness.send({ type: 'updatePlugins', plugins, masterBypass: false });
+      if (execution === 'wasm') {
+        await harness.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
+        await harness.send({ type: 'dspModule', module: {} });
+      }
+      assert.equal(harness.processor.dspPipelineReady, false);
+      processBlock(harness.processor);
+      const expected = routing === 'merge' ? 3 : 1;
+      const assertContinuous = () => {
+        const output = processBlock(harness.processor);
+        assert.ok(output[1].every(sample => sample === expected), `${execution} ${routing}`);
+      };
+      assertContinuous();
+      const originalPlan = harness.processor.dspLatencyPlan;
+      const originalLine = routing === 'merge' ? originalPlan.nodeActions.get(8).delayLine : originalPlan.outputDelayLine;
+      if (execution === 'wasm') await harness.send({ type: 'setSpectrumTapRoute', pluginId: 7, enabled: true });
+      for (const type of ['setDisplayDspBypassed', 'configurePowerPolicy']) {
+        for (const bypassed of [true, false]) {
+          await harness.send({ type, bypassed, displayDspBypassed: bypassed, enabled: true,
+            workletGraphGeneration: 0, topologyRevision: 0 });
+          assert.equal(harness.processor.dspPipelineReady, false);
+          const plan = harness.processor.dspLatencyPlan;
+          assert.equal(routing === 'merge' ? plan.nodeActions.get(8).delayLine : plan.outputDelayLine, originalLine);
+          assertContinuous();
+        }
+      }
+      await harness.send({ type: 'setSpectrumTapRoute', pluginId: 7, enabled: false });
+      assertContinuous();
+      assert.equal(binding.calls.filter(call => call[0] === 'pipelineConfigure').length, 0);
+    }
+  }
+});
+
+test('display bypass without display routing leaves the native pipeline configured', async () => {
+  const binding = createBinding({ pipelineConfigureStatus: 0 });
+  const harness = await createWorkletHarness({ binding });
+  await harness.send({ type: 'updatePlugins', plugins: [pluginConfig()], masterBypass: false });
+  await harness.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
+  await harness.send({ type: 'dspModule', module: {} });
+  const configureCount = binding.calls.filter(call => call[0] === 'pipelineConfigure').length;
+  for (const type of ['setDisplayDspBypassed', 'configurePowerPolicy']) {
+    for (const bypassed of [true, false]) {
+      await harness.send({ type, bypassed, displayDspBypassed: bypassed, enabled: true,
+        workletGraphGeneration: 0, topologyRevision: 0 });
+      assert.equal(harness.processor.dspPipelineReady, true);
+      assert.equal(binding.calls.filter(call => call[0] === 'pipelineConfigure').length, configureCount);
+      assert.ok(processBlock(harness.processor)[1].every(sample => sample === 2));
+    }
+  }
+});
+
 test('background display DSP bypass skips analyzer JavaScript while preserving routed audio', async () => {
   const harness = await createWorkletHarness();
   await registerObservedFallback(harness, 'SpectrumAnalyzerPlugin', 100);
@@ -5980,7 +6109,8 @@ test('worklet keeps Tube Simulator WASM-only at supported rates with enough outp
     },
     instanceLatency: 64,
     pipelineConfigureStatus: 0,
-    pipelineGain: 1
+    pipelineGain: 1,
+    wasmGain: 1
   });
   const harness = await createWorkletHarness({ binding });
   const tube = stereoPairWasmPluginConfig();
@@ -6071,13 +6201,14 @@ test('worklet keeps Tube Simulator WASM-only at supported rates with enough outp
     .filter(call => call[0] === 'pipelineConfigure').length;
   await harness.send({ type: 'updateAudioConfig', outputChannels: 4 });
   assert.deepEqual(latestState(), { state: 'active', reason: null });
-  assert.equal(harness.processor.dspPipelinePluginCount, 1);
+  assert.equal(harness.processor.dspPipelineReady, false);
   assert.equal(harness.processor.dspPipelineLatencySamples, 64);
   assert.equal(executionMessages().at(-1).generation, generation + 1);
   assert.equal(
     binding.calls.filter(call => call[0] === 'pipelineConfigure').length,
-    pipelineConfigureCalls + 1
+    pipelineConfigureCalls
   );
+  processBlock(harness.processor, 0.75, 4);
   const fourChannelOutput = processBlock(harness.processor, 0.75, 4);
   assert.ok(fourChannelOutput.every(
     channel => channel.every(sample => sample === 0.75)
@@ -6488,4 +6619,74 @@ test('power EWMA keeps its two-second response across variable render quanta', a
     assert.ok(Math.abs(processor.powerPolicy.inputPowerEwma - 0.25 * (1 - Math.exp(-0.5))) < 1e-12);
     assert.ok(Math.abs(processor.powerPolicy.outputPowerEwma - 0.125 * (1 - Math.exp(-0.5))) < 1e-12);
   }
+});
+
+
+test('visual telemetry end frames use the context clock across processing resets', async () => {
+  const harness = await createWorkletHarness({ bindingOptions: { telemetryBytes: [32, 32] } });
+  await harness.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
+  await harness.send({ type: 'dspModule', module: {} });
+  harness.setContextFrame(96000);
+  harness.processor.pumpDspTelemetry(128);
+  assert.equal(messagesOf(harness.posts, 'dspTelemetry').at(-1).message.endFrame, 96128);
+  await harness.send({ type: 'reset' });
+  harness.setContextFrame(97024);
+  harness.processor.pumpDspTelemetry(128);
+  assert.equal(messagesOf(harness.posts, 'dspTelemetry').at(-1).message.endFrame, 97152);
+  await harness.send({ type: 'setVisualSync', enabled: true });
+  assert.equal(harness.processor.visualSyncEnabled, true);
+  await harness.send({ type: 'setVisualSync', enabled: false });
+  assert.equal(harness.processor.visualSyncEnabled, false);
+});
+
+
+test('visual sync preserves JS measurement capture frames through throttling and tags HQ packets', async () => {
+  const h = await createWorkletHarness();
+  await h.send({ type: 'registerProcessor', pluginType: 'VolumePlugin',
+    processor: 'data.measurements = { value: 42 }; return data;' });
+  await h.send({ type: 'updatePlugins', plugins: [pluginConfig()], masterBypass: false });
+  for (const enabled of [false, true]) {
+    await h.send({ type: 'setVisualSync', enabled });
+    h.processor.lastMessageTime = -1000;
+    h.setContextFrame(48000);
+    processBlock(h.processor);
+    const type = enabled ? 'processBufferSynced' : 'processBuffer';
+    const message = messagesOf(h.posts, type).at(-1).message;
+    assert.equal(message.endFrame, 48128);
+    assert.equal(message.measurements.value, 42);
+    h.setContextFrame(48128);
+    processBlock(h.processor);
+    assert.equal(h.processor.messageQueue.get(7).endFrame, 48256);
+    h.processor.lastMessageTime = -1000;
+    h.setContextFrame(50000);
+    processBlock(h.processor);
+    assert.equal(messagesOf(h.posts, type).at(-2).message.endFrame, 48256);
+  }
+  await h.send({ type: 'registerProcessor', pluginType: 'VolumePlugin', processor: `
+    context.multiresFrame = { frameType: 4, payload: new DataView(new ArrayBuffer(32)), bytes: new Uint8Array(32) };
+    context.multiresSpectrum = { release() {} };
+    data.measurements = { hqFrame: true }; return data;
+  ` });
+  const bytes = new Uint8Array(48);
+  h.processor.hqPacketPool = [{ bytes, header: new DataView(bytes.buffer) }];
+  h.setContextFrame(96000);
+  processBlock(h.processor);
+  assert.equal(messagesOf(h.posts, 'dspTelemetry').at(-1).message.endFrame, 96128);
+});
+
+test('visual sync tap distances follow serial latency and disabled sections', async () => {
+  const h = await createWorkletHarness();
+  h.processor.plugins = [pluginConfig({ id: 1 }), pluginConfig({ id: 2 }),
+    pluginConfig({ id: 3, enabled: false }),
+    pluginConfig({ id: 4, type: 'SectionPlugin', enabled: false }), pluginConfig({ id: 5 })];
+  h.processor.rebuildDspLatencyPlan(new Map([[1, 64], [2, 128], [3, 999], [5, 999]]));
+  const message = messagesOf(h.posts, 'dspLatency').at(-1).message;
+  assert.equal(message.samples, 192);
+  assert.deepEqual(JSON.parse(JSON.stringify(message.taps)), {
+    1: { input: 192, output: 128, execution: 'js' },
+    2: { input: 128, output: 0, execution: 'js' }
+  });
+  h.processor.masterBypass = true;
+  h.processor.rebuildDspLatencyPlan(new Map());
+  assert.deepEqual(Object.keys(messagesOf(h.posts, 'dspLatency').at(-1).message.taps), []);
 });

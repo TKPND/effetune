@@ -65,7 +65,9 @@ export class PluginManager {
             const jsUrls = [
                 'plugins/plugin-base.js',
                 'plugins/graph-point-interaction.js',
+                'plugins/frequency-axis.js',
                 'plugins/spectrum-overlay.js',
+                'plugins/frequency-preview.js',
                 'plugins/multires-spectrum.js',
                 'plugins/theme-palette.js'
             ]
@@ -144,7 +146,17 @@ export class PluginManager {
             try {
                 await loadScriptWithProgress(jsUrls.shift());
             } catch (error) {
+                console.error('Error loading frequency axis helpers:', error);
+            }
+            try {
+                await loadScriptWithProgress(jsUrls.shift());
+            } catch (error) {
                 console.error('Error loading spectrum overlay:', error);
+            }
+            try {
+                await loadScriptWithProgress(jsUrls.shift());
+            } catch (error) {
+                console.error('Error loading frequency preview:', error);
             }
             
             await loadScriptWithProgress(jsUrls.shift());

@@ -394,6 +394,7 @@ test('updateUITexts localizes the view switch button titles and aria labels', as
   const openLibraryButton = new FakeElement('button');
   const documentRef = createDocument({ effectPipelineButton, openLibraryButton });
   const manager = Object.assign(Object.create(UIManager.prototype), {
+    audioManager: { getTotalPipelineLatencySamples: () => 0 },
     doubleBlindTest: null,
     doubleBlindTestButton: null,
     mobileMenu: null,

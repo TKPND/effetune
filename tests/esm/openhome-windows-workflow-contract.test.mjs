@@ -72,6 +72,13 @@ test('Windows desktop packaging is owned by the reusable Electron build', () => 
   assert.match(buildWindows, /npx electron-builder --publish never/);
   assert.match(buildWindows, /npm run smoke:dsp-package/);
   assert.match(buildWindows, /npm run smoke:openhome-package/);
+  assert.match(buildWindows, /^\s+dist\/latest\.yml$/m);
+  assert.match(buildWindows, /^\s+dist\/\*-Setup\.exe\.blockmap$/m);
+  assert.deepEqual(packageJson.build.publish, {
+    provider: 'github',
+    owner: 'Frieve-A',
+    repo: 'effetune',
+  });
 
   const openHomeNative = jobBlock(workflows.ci, 'openhome-native');
   const install = openHomeNative.indexOf('run: npm ci --ignore-scripts');

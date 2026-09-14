@@ -812,9 +812,18 @@ test('Web config controls report a localStorage fallback write failure', async (
 });
 
 test('showConfigDialog opens in Web and hides Electron-only settings', async () => {
+  const visualSyncCalls = [];
   const harness = createConfigHarness({
     config: { language: 'en', pipelineStartup: 'last' },
-    presets: { WebPreset: {} }
+    presets: { WebPreset: {} },
+    window: {
+      audioManager: {
+        async setVisualSyncEnabled(enabled) {
+          visualSyncCalls.push(enabled);
+          return true;
+        }
+      }
+    }
   });
   const localStorage = createLocalStorage({
     effetune_app_config: JSON.stringify({
@@ -822,7 +831,8 @@ test('showConfigDialog opens in Web and hides Electron-only settings', async () 
       startupView: 'library',
       libraryStartupView: 'artists',
       pipelineStartup: 'preset',
-      startupPreset: 'WebPreset'
+      startupPreset: 'WebPreset',
+      visualSync: true
     })
   });
 
@@ -842,6 +852,12 @@ test('showConfigDialog opens in Web and hides Electron-only settings', async () 
     assert.equal(harness.document.getElementById('power-silence-threshold').value, '-80');
     assert.equal(harness.document.getElementById('power-full-suspend-delay').value, '300');
     assert.equal(harness.document.getElementById('language-select').value, 'ja');
+    const visualSync = harness.document.getElementById('visual-sync');
+    assert.equal(visualSync.checked, true);
+    visualSync.checked = false;
+    await visualSync.dispatchEvent('change');
+    assert.equal(JSON.parse(localStorage.snapshot().effetune_app_config).visualSync, false);
+    assert.deepEqual(visualSyncCalls, [false]);
     const themeSelect = harness.document.getElementById('theme-select');
     assert.equal(themeSelect.value, 'graphite');
     themeSelect.value = 'paper';
@@ -1600,6 +1616,27 @@ test('all locales include the Web power-saving settings copy', () => {
   ), true);
 });
 
+test('all locales include the Visual Sync setting copy', () => {
+  const locales = ['en', 'ja', 'ar', 'es', 'fr', 'hi', 'ko', 'pt', 'ru', 'zh'];
+  const keys = [
+    'dialog.config.visualSync.label',
+    'dialog.config.visualSync.help'
+  ];
+
+  for (const locale of locales) {
+    const source = readFileSync(new URL(`../../js/locales/${locale}.json5`, import.meta.url), 'utf8');
+    for (const key of keys) {
+      assert.equal(source.includes(`"${key}":`), true, `${locale} is missing ${key}`);
+    }
+  }
+
+  const english = readFileSync(new URL('../../js/locales/en.json5', import.meta.url), 'utf8');
+  assert.equal(english.includes('"dialog.config.visualSync.label": "Sync Visuals to Audio"'), true);
+  assert.equal(english.includes('Audio may be delayed to keep them synchronized.'), true);
+  const japanese = readFileSync(new URL('../../js/locales/ja.json5', import.meta.url), 'utf8');
+  assert.equal(japanese.includes('同期のために音声が遅れる場合があります。'), true);
+});
+
 test('all locales include the preset dialog copy', () => {
   const locales = ['en', 'ja', 'ar', 'es', 'fr', 'hi', 'ko', 'pt', 'ru', 'zh'];
   const keys = [
@@ -1734,6 +1771,95 @@ test('theme settings use registry order, apply after persistence and restore fai
       assert.equal(select.value, success ? 'paper' : 'midnight');
     });
   }
+});
+
+test('Visual Sync renders, applies after persistence, and restores failed saves', async () => {
+  for (const success of [true, false]) {
+    const applied = [];
+    const harness = createConfigHarness({
+      config: { visualSync: false },
+      saveConfigResult: { success },
+      window: {
+        audioManager: {
+          async setVisualSyncEnabled(enabled) {
+            assert.equal(harness.window.appConfig?.visualSync, true);
+            applied.push(enabled);
+            return true;
+          }
+        }
+      }
+    });
+
+    await withGlobals({ window: harness.window, document: harness.document }, async () => {
+      await showConfigDialog(true, {});
+      const input = harness.document.getElementById('visual-sync');
+      assert.equal(input.checked, false);
+      assert.equal(
+        harness.document.getElementById('visual-sync-label').textContent,
+        'label:dialog.config.visualSync.label'
+      );
+      assert.equal(
+        harness.document.getElementById('visual-sync-help').textContent,
+        'label:dialog.config.visualSync.help'
+      );
+
+      input.checked = true;
+      await withMutedConsole('error', () => input.dispatchEvent('change'));
+
+      assert.equal(
+        harness.calls.filter(call => call[0] === 'saveConfig').at(-1)[1].visualSync,
+        true
+      );
+      assert.deepEqual(applied, success ? [true] : []);
+      assert.equal(input.checked, success);
+    });
+  }
+});
+
+test('Visual Sync applies only the latest change when an older save is delayed', async () => {
+  let releaseFirstSave;
+  let markFirstSaveStarted;
+  const firstSaveGate = new Promise(resolve => { releaseFirstSave = resolve; });
+  const firstSaveStarted = new Promise(resolve => { markFirstSaveStarted = resolve; });
+  const applied = [];
+  const harness = createConfigHarness({
+    config: { visualSync: false },
+    window: {
+      audioManager: {
+        async setVisualSyncEnabled(enabled) {
+          applied.push(enabled);
+          return true;
+        }
+      }
+    }
+  });
+  let saveCount = 0;
+  harness.window.electronAPI.saveConfig = async nextConfig => {
+    harness.calls.push(['saveConfig', { ...nextConfig }]);
+    saveCount++;
+    if (saveCount === 1) {
+      markFirstSaveStarted();
+      await firstSaveGate;
+    }
+    return { success: true };
+  };
+
+  await withGlobals({ window: harness.window, document: harness.document }, async () => {
+    await showConfigDialog(true, {});
+    const input = harness.document.getElementById('visual-sync');
+    input.checked = true;
+    const enable = input.dispatchEvent('change');
+    await firstSaveStarted;
+
+    input.checked = false;
+    const disable = input.dispatchEvent('change');
+    releaseFirstSave();
+    await Promise.all([enable, disable]);
+
+    assert.deepEqual(applied, [false]);
+    assert.equal(harness.window.appConfig.visualSync, false);
+    assert.equal(input.checked, false);
+  });
 });
 
 test('theme normalization preserves missing config keys and all locales label the selector', async () => {

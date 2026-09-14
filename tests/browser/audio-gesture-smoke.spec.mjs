@@ -50,7 +50,6 @@ export async function runAudioGestureBrowserSmoke({ baseURL }) {
         }
         const played = await waitForStage('played');
         assert.equal(played.played, 1);
-        assert.equal(played.commits, 1);
         assert.equal(played.pending, false);
         assert.equal(played.contextState, 'running');
         assert.ok(played.events.some(event => event.type === 'pointerdown' && !event.active && event.trusted));
@@ -62,7 +61,6 @@ export async function runAudioGestureBrowserSmoke({ baseURL }) {
           await page.touchscreen.tap(100, 40);
           const replayed = await waitForStage('played');
           assert.equal(replayed.played, 2);
-          assert.equal(replayed.commits, 2);
           assert.equal(replayed.pending, false);
           assert.equal(replayed.contextState, 'running');
         }

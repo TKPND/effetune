@@ -142,6 +142,7 @@ Large collections load in stages from storage; scanning and loading speed depend
    - [Control effect parameters with MIDI, gamepads, or the keyboard](docs/controller-mapping.md)
 10. Click an effect's Effect Presets button to save or apply settings for that effect only
 11. For fine slider adjustment, hold Shift while dragging; the value changes by one minimum step at a time
+12. On supported frequency and note graphs, drag along the graph's axis to preview that frequency as a -12 dB sine tone through the effect chain. Piano-key displays snap to the nearest semitone; dragging over a key previews that key's pitch
 
 ### Using Presets
 

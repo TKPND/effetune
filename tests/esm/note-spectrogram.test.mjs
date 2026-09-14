@@ -489,9 +489,7 @@ test('Volume bars map level to thickness and pitch resolution to center position
     plugin._paintVolumeHistory(100, plugin._displayPalette());
     let bar = fills.find(fill => fill.width === 1);
     assert.deepEqual([bar.y, bar.height], [70, 40]);
-    assert.deepEqual(bar.color.stops.map(stop => stop.offset), [0, 0.25, 0.5, 0.5, 0.75, 1]);
-    assert.equal(bar.color.stops[1].color, 'rgba(0, 240, 0, 1)');
-    assert.equal(bar.color.stops[4].color, 'rgba(15, 255, 15, 1)');
+    assert.deepEqual(bar.color.stops.map(stop => stop.offset), [0, 0.25, 0.75, 1]);
 
     fills.length = 0;
     plugin.levelHistory[0] = 1;
@@ -507,37 +505,6 @@ test('Volume bars map level to thickness and pitch resolution to center position
     plugin._paintVolumeHistory(100, plugin._displayPalette());
     bar = fills.find(fill => fill.width === 1);
     assert.deepEqual([bar.y, bar.height], [30, 40]);
-});
-
-test('Volume relief keeps the screen-left or screen-top side brighter across layouts', async () => {
-    const plugin = await loadPlugin();
-    const gradients = [];
-    const context = {
-        createLinearGradient(...coordinates) {
-            const gradient = createGradient('linear', coordinates);
-            gradients.push(gradient);
-            return gradient;
-        },
-        fillRect() {}
-    };
-    plugin.mn = 21;
-    plugin.mx = 21;
-    plugin.history[0] = 1;
-    plugin.levelHistory[0] = 0.5;
-    const bar = { midi: 21, best: 0, confidence: 1 };
-    const palette = plugin._displayPalette();
-
-    plugin.ly = 'Vertical';
-    plugin._paintVolumeBar(context, 0, 0, bar, 20, palette);
-    plugin.ly = 'Horizontal';
-    plugin._paintVolumeBar(context, 0, 0, bar, 20, palette);
-
-    const verticalStops = gradients[0].stops;
-    const horizontalStops = gradients[1].stops;
-    assert.equal(verticalStops[1].color, 'rgba(15, 255, 15, 1)');
-    assert.equal(verticalStops[4].color, 'rgba(0, 240, 0, 1)');
-    assert.equal(horizontalStops[1].color, verticalStops[4].color);
-    assert.equal(horizontalStops[4].color, verticalStops[1].color);
 });
 
 test('incremental Volume redraw preserves High bars that cross a neighboring row', async () => {
@@ -573,16 +540,18 @@ test('incremental Volume redraw preserves High bars that cross a neighboring row
     fills.length = 0;
     plugin._paintVolumeColumns(0, 1);
     assert.deepEqual(rasterizeColumn(), fullRedraw);
-    assert.match(fullRedraw[8], /rgba\(15, 255, 15, 1\)/);
+    assert.match(fullRedraw[8], /rgba\(0, 255, 0, 1\)/);
 });
 
-test('Volume backgrounds and guides precede confidence-sorted bars in every redraw path', async () => {
+test('Volume bars use lighter without confidence sorting in every redraw path', async () => {
     const plugin = await loadPlugin();
     const fills = [];
     const context = {
+        globalCompositeOperation: 'source-over',
         createLinearGradient(...coordinates) { return createGradient('linear', coordinates); },
         fillRect(x, y, width, height) {
-            fills.push({ x, y, width, height, color: styleSignature(this.fillStyle) });
+            fills.push({ x, y, width, height, color: styleSignature(this.fillStyle),
+                composite: this.globalCompositeOperation });
         }
     };
     plugin.vl = true;
@@ -604,6 +573,10 @@ test('Volume backgrounds and guides precede confidence-sorted bars in every redr
             .filter(fill => fill.color.startsWith('{'));
         assert.equal(bars.length, 2);
         assert.ok(guide >= 0 && guide < bars[0].index);
+        for (const fill of fills) {
+            assert.equal(fill.composite, fill.color.startsWith('{') ? 'lighter' : 'source-over');
+        }
+        assert.equal(context.globalCompositeOperation, 'source-over');
     };
     const layerColors = () => fills.map(fill => fill.color).filter(color =>
         color === 'stub:graph-grid-strong' || color.startsWith('{'));
@@ -611,9 +584,9 @@ test('Volume backgrounds and guides precede confidence-sorted bars in every redr
     plugin.volumeHistoryDirty = true;
     plugin._paintVolumeHistory(20, plugin._displayPalette());
     verifyOrder();
-    const sortedBars = plugin._volumeBarsForColumn(0);
-    assert.deepEqual(Array.from(sortedBars, bar => bar.midi), [25, 24]);
-    assert.ok(sortedBars[0].confidence < sortedBars[1].confidence);
+    const bars = plugin._volumeBarsForColumn(0);
+    assert.deepEqual(Array.from(bars, bar => bar.midi), [24, 25]);
+    assert.ok(bars[0].confidence > bars[1].confidence);
     const fullRedraw = layerColors();
 
     fills.length = 0;

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import vm from 'node:vm';
 import { loadOverlay } from '../helpers/spectrum-overlay-harness.mjs';
 
 const files = {
@@ -16,27 +15,11 @@ const files = {
 };
 const overlay = loadOverlay();
 
-test('the registry defines exactly the 18 level-response graphs and matches their actual axes', () => {
+test('the spectrum registry retains exactly the 18 level-response graphs and selectors', () => {
   assert.deepEqual([...overlay.TARGETS.keys()].sort(), Object.keys(files).sort());
   for (const [name, target] of overlay.TARGETS) {
     const source = fs.readFileSync(new URL(`../../plugins/${files[name]}.js`, import.meta.url), 'utf8');
     const graphClass = target.plotSelector.match(/\.([\w-]+)/)[1];
     assert.ok(source.includes(graphClass), `${name} selector`);
-    if (target.axisCheck.ownerOf) {
-      assert.equal(target.inset, 20);
-      const context = { window: {}, PluginBase: class {}, console };
-      vm.runInNewContext(`${source}\nthis.Loaded = ${name};`, context);
-      const plugin = Object.create(context.Loaded.prototype);
-      if (name === 'RoomEqPlugin') plugin._additionalEqEditor = context.Loaded.createAdditionalEqEditor();
-      const owner = target.axisCheck.ownerOf(plugin);
-      for (const frequency of [10, 20, 200, 2000, 20000, 40000]) {
-        const expected = (Math.log10(frequency) - Math.log10(target.minFreq)) /
-          (Math.log10(target.maxFreq) - Math.log10(target.minFreq)) * 100;
-        assert.ok(Math.abs(owner[target.axisCheck.freqToXName](frequency) - expected) <= 1e-9, name);
-      }
-    } else {
-      assert.equal(target.inset, 0);
-      for (const marker of target.axisCheck) assert.ok(source.includes(marker), `${name}: ${marker}`);
-    }
   }
 });

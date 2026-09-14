@@ -67,11 +67,8 @@ export class PresetManager {
             }
             this.pluginList.appendChild(presetCountDiv);
 
-            // Hide spinner after preset list is fully initialized
-            this.pluginListManager.hideLoadingSpinner();
         } catch (error) {
             console.error('Error initializing system preset list:', error);
-            this.pluginListManager.hideLoadingSpinner();
         }
     }
 
@@ -107,11 +104,8 @@ export class PresetManager {
             }
             this.pluginList.appendChild(presetCountDiv);
 
-            // Hide spinner after preset list is fully initialized
-            this.pluginListManager.hideLoadingSpinner();
         } catch (error) {
             console.error('Error initializing user preset list:', error);
-            this.pluginListManager.hideLoadingSpinner();
         }
     }
 

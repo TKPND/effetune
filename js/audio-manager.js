@@ -13,6 +13,8 @@ import {
     getPluginExecutionCapabilities
 } from './audio/plugin-execution-capabilities.js';
 import { TelemetryHub } from './audio/telemetry-hub.js';
+import { VISUAL_SYNC_RULES, VISUAL_SYNC_MAX_OUTPUT_DELAY_SECONDS, VISUAL_SYNC_QUEUE_LIMIT,
+    isVisualSyncEnabled, requiredOutputDelayFrames, audiblePerformanceTime } from './audio/visual-sync.js';
 import { PowerPolicyController } from './audio/power-policy-controller.js';
 import { PowerDiagnostics } from './audio/power-diagnostics.js';
 import { AudioPowerState, mergePowerSavingSettings } from './audio/power-policy.js';
@@ -119,6 +121,19 @@ export class AudioManager {
         this.offlineProcessorPromise = null;
         this.eventManager = new EventManager(this);
         this.telemetryHub = new TelemetryHub();
+        this.telemetryHub.onVisualSyncReset = () => this._clearSyncedMeasurements();
+        this.visualSyncEnabled = runtimeOptions.wasmOnly !== true && isVisualSyncEnabled(window.appConfig);
+        this.visualSyncDelayFrames = 0;
+        this.dspLatencyTaps = {};
+        this._dspLatencyTapsWorklet = null;
+        this._dbtOutputDelayFrames = new Map();
+        this._appliedOutputDelayFrames = new Map();
+        this._pendingOutputDelayRequests = new Map();
+        this._visualSyncLatencyContext = null;
+        this._visualSyncDeviceLatencyFrames = 0;
+        this._syncedMeasurements = [];
+        this._syncedMeasurementsTimer = null;
+        this._visualSyncUpdateTimer = null;
         window.dspTelemetryHub = this.telemetryHub;
         this.dspModuleInfo = null;
         this.dspCapabilities = null;
@@ -562,6 +577,10 @@ export class AudioManager {
     }
 
     async closeCapturedStream() {
+        this._clearSyncedMeasurements();
+        this.telemetryHub?.setVisualSyncResolver?.(null);
+        if (this._visualSyncUpdateTimer != null) clearTimeout(this._visualSyncUpdateTimer);
+        this._visualSyncUpdateTimer = null;
         this._removeDspVisibilityListener();
         this.powerPolicyController.dispose();
         this.ioManager.cleanupAudio();
@@ -621,6 +640,10 @@ export class AudioManager {
                 const sourceWorkletNode = this.workletNode;
                 this.telemetryHub.setPort(sourceWorkletNode.port);
                 sourceWorkletNode.port.onmessage = event => this.handleWorkletMessage(event, sourceWorkletNode);
+                if (this.visualSyncEnabled) {
+                    await this.setVisualSyncEnabled(true);
+                    await this._applyWorkletOutputDelays([sourceWorkletNode]);
+                }
             }
             this._pruneInactiveDspWorklets();
             this.dspModuleInfo = null;
@@ -959,6 +982,26 @@ export class AudioManager {
 
     _advanceAudioGraphGeneration() {
         this._cancelPendingDspControlRequests();
+        this._clearSyncedMeasurements();
+        this.telemetryHub?.clearVisualSyncQueue?.();
+        if (this._visualSyncUpdateTimer != null) clearTimeout(this._visualSyncUpdateTimer);
+        this._visualSyncUpdateTimer = null;
+        this._dbtOutputDelayFrames?.clear();
+        const primaryWorklet = this._getPrimaryWorkletNode();
+        let clearedOutputDelay = false;
+        for (const [node, samples] of this._appliedOutputDelayFrames || []) {
+            if (node !== primaryWorklet || this._pendingOutputDelayRequests?.has(node)) {
+                this._appliedOutputDelayFrames.delete(node);
+                clearedOutputDelay ||= samples > 0;
+            }
+        }
+        this._pendingOutputDelayRequests?.clear();
+        if (clearedOutputDelay) this._publishDspLatency();
+        // DBT changes graph ownership while keeping the primary worklet and its latency plan.
+        if (this._dspLatencyTapsWorklet !== this._getPrimaryWorkletNode()) {
+            this.dspLatencyTaps = {};
+            this._dspLatencyTapsWorklet = null;
+        }
         this._cancelPendingWasmAssetReadyRequests();
         this._cancelPendingWasmAssetDescriptorRequests();
         this._cancelPendingSignedExternalAssetRequests();
@@ -1011,6 +1054,27 @@ export class AudioManager {
     broadcastToActiveWorklets(message) {
         for (const node of this._getActivePowerWorklets()) {
             node?.port?.postMessage?.(message);
+        }
+    }
+
+    setFrequencyPreview(frequency) {
+        const active = Number.isFinite(frequency) && frequency > 0;
+        if (this._frequencyPreviewReleaseTimer != null) {
+            clearTimeout(this._frequencyPreviewReleaseTimer);
+            this._frequencyPreviewReleaseTimer = null;
+        }
+        if (active && !this._releaseFrequencyPreviewLease && this.powerPolicyController?.started) {
+            this._releaseFrequencyPreviewLease = this.powerPolicyController.acquireLease(
+                'frequency-preview', { mode: 'force-active' });
+        }
+        this.broadcastToActiveWorklets({ type: 'frequencyPreview', frequency: active ? frequency : null });
+        if (!active && this._releaseFrequencyPreviewLease) {
+            // Keep processing through the worklet's 5 ms release ramp.
+            this._frequencyPreviewReleaseTimer = setTimeout(() => {
+                this._frequencyPreviewReleaseTimer = null;
+                this._releaseFrequencyPreviewLease?.();
+                this._releaseFrequencyPreviewLease = null;
+            }, 20);
         }
     }
 
@@ -1076,6 +1140,17 @@ export class AudioManager {
             resetWorkletTemporalState: true
         }) ?? null;
         this._syncRealtimeOutputKeepalive();
+        if (PIPELINE_CONTENT_MUTATION_TYPES.has(message.type)) {
+            if (message.type === 'reset' && this.visualSyncEnabled) {
+                this.telemetryHub?.clearVisualSyncQueue?.();
+                for (const node of targetNodes) {
+                    this._appliedOutputDelayFrames?.delete(node);
+                    this._pendingOutputDelayRequests?.delete(node);
+                    node.port.postMessage({ type: 'setVisualSync', enabled: true });
+                }
+            }
+            this._scheduleVisualSyncUpdate();
+        }
         if (firstPostError) throw firstPostError;
         return { mutation, postedNodeCount };
     }
@@ -1879,6 +1954,22 @@ export class AudioManager {
         this._finalizeParallelDspBarrier(barrier, [], 'js');
     }
 
+    getTotalPipelineLatencySamples() {
+        return (this.dspPipelineLatencySamples || 0) +
+            (this._appliedOutputDelayFrames?.get(this._getPrimaryWorkletNode()) || 0);
+    }
+
+    _publishDspLatency(sampleRate = this.contextManager?.audioContext?.sampleRate, detail = {}) {
+        this.dispatchEvent('dspLatency', {
+            ...detail,
+            type: 'dspLatency',
+            samples: this.dspPipelineLatencySamples || 0,
+            totalSamples: this.getTotalPipelineLatencySamples(),
+            sampleRate,
+            compensated: this.dspPipelineLatencyCompensated === true
+        });
+    }
+
     _clearDspPipelineLatency(sampleRate = this.audioContext?.sampleRate) {
         if ((this.dspPipelineLatencySamples || 0) === 0 &&
             this.dspPipelineLatencyCompensated !== true) {
@@ -1886,12 +1977,7 @@ export class AudioManager {
         }
         this.dspPipelineLatencySamples = 0;
         this.dspPipelineLatencyCompensated = false;
-        this.dispatchEvent('dspLatency', {
-            type: 'dspLatency',
-            samples: 0,
-            sampleRate,
-            compensated: false
-        });
+        this._publishDspLatency(sampleRate);
     }
 
     _requestDspControl(workletNode, type, replyType, payload, timeoutMs) {
@@ -1951,6 +2037,180 @@ export class AudioManager {
             {},
             timeoutMs
         );
+    }
+
+    _visualSyncPlugin(tapId) {
+        return (this._parallelActive ? this.pipelineA : this.pipeline)?.find(plugin => plugin.id === tapId);
+    }
+
+    _visualSyncGeneration(plugin, ruleKey) {
+        const rule = VISUAL_SYNC_RULES[ruleKey];
+        if (!rule) return 0;
+        const execution = this.dspLatencyTaps?.[plugin.id]?.execution || 'js';
+        return rule.generationFrames(plugin.getParameters?.() || plugin,
+            this.contextManager?.audioContext?.sampleRate || this.audioContext?.sampleRate || 48000, execution);
+    }
+
+    _resolveVisualSyncDue(tapId, endFrame, ruleKey) {
+        if (!this.visualSyncEnabled || !Number.isFinite(endFrame)) return null;
+        const context = this.contextManager?.audioContext;
+        const plugin = this._visualSyncPlugin(tapId);
+        if (!context || !plugin) return null;
+        const key = typeof ruleKey === 'string' ? ruleKey : plugin.constructor.name;
+        const rule = VISUAL_SYNC_RULES[key];
+        const tap = this.dspLatencyTaps?.[tapId];
+        if (!rule?.synced || !tap) return null;
+        const primaryWorklet = this._getPrimaryWorkletNode();
+        const appliedFrames = this._appliedOutputDelayFrames?.get(primaryWorklet) || 0;
+        const requestedFrames = (this._dbtOutputDelayFrames?.get(primaryWorklet) || 0) +
+            (this.visualSyncDelayFrames || 0);
+        if (this._pendingOutputDelayRequests?.has(primaryWorklet) || appliedFrames !== requestedFrames) return null;
+        return audiblePerformanceTime({ endFrame, generationFrames: this._visualSyncGeneration(plugin, key),
+            tapFrames: tap[rule.tap],
+            outputDelayFrames: appliedFrames,
+            sampleRate: context.sampleRate, outputTimestamp: context.getOutputTimestamp?.(),
+            fallback: { currentTime: context.currentTime, outputLatency: context.outputLatency,
+                baseLatency: context.baseLatency, performanceTime: performance.now() } });
+    }
+
+    _clearSyncedMeasurements() {
+        if (this._syncedMeasurementsTimer != null) clearTimeout(this._syncedMeasurementsTimer);
+        this._syncedMeasurementsTimer = null;
+        this._syncedMeasurements = [];
+    }
+
+    _receiveSyncedMeasurements(data) {
+        if (!this.visualSyncEnabled) return;
+        const plugin = this._visualSyncPlugin(data.pluginId);
+        if (!plugin) return;
+        const due = this._resolveVisualSyncDue(data.pluginId, data.endFrame);
+        const now = performance.now();
+        this._syncedMeasurements ??= [];
+        if (this._syncedMeasurements.length >= VISUAL_SYNC_QUEUE_LIMIT) {
+            this._syncedMeasurements.shift();
+            if (this.telemetryHub?.stats) this.telemetryHub.stats.visualSyncDropped++;
+        }
+        this._syncedMeasurements.push({ due: Number.isFinite(due) ? due : now, data, plugin });
+        this._syncedMeasurements.sort((a, b) => a.due - b.due);
+        this._dispatchDueSyncedMeasurements(now);
+        this._scheduleSyncedMeasurements();
+    }
+
+    _dispatchDueSyncedMeasurements(now) {
+        const latest = new Map();
+        while (this._syncedMeasurements.length && this._syncedMeasurements[0].due <= now) {
+            const entry = this._syncedMeasurements.shift();
+            const previous = latest.get(entry.plugin);
+            if (!previous || !(previous.endFrame > entry.data.endFrame)) latest.set(entry.plugin, entry.data);
+        }
+        for (const [plugin, data] of latest) {
+            if (this._visualSyncPlugin(plugin.id) === plugin) plugin.onMessage?.({ ...data, type: 'processBuffer' });
+        }
+    }
+
+    _scheduleSyncedMeasurements() {
+        if (this._syncedMeasurementsTimer != null) clearTimeout(this._syncedMeasurementsTimer);
+        this._syncedMeasurementsTimer = null;
+        if (!this._syncedMeasurements.length) return;
+        this._syncedMeasurements.sort((a, b) => a.due - b.due);
+        this._syncedMeasurementsTimer = setTimeout(() => {
+            this._syncedMeasurementsTimer = null;
+            this._dispatchDueSyncedMeasurements(performance.now());
+            this._scheduleSyncedMeasurements();
+        }, Math.max(0, this._syncedMeasurements[0].due - performance.now()));
+    }
+
+    setVisualSyncEnabled(enabled) {
+        this.visualSyncEnabled = this.runtimeOptions?.wasmOnly !== true && enabled === true;
+        this._clearSyncedMeasurements();
+        this.telemetryHub?.setVisualSyncResolver?.(this.visualSyncEnabled
+            ? (tapId, endFrame, ruleKey) => this._resolveVisualSyncDue(tapId, endFrame, ruleKey) : null);
+        for (const node of this._getActiveDspWorklets()) {
+            node.port.postMessage({ type: 'setVisualSync', enabled: this.visualSyncEnabled });
+        }
+        if (this._visualSyncUpdateTimer != null) clearTimeout(this._visualSyncUpdateTimer);
+        this._visualSyncUpdateTimer = null;
+        return this._updateVisualSyncDelay();
+    }
+
+    _recomputeVisualSyncDelay() {
+        const context = this.contextManager?.audioContext;
+        // Reserve audio delay from a stable device estimate; live clock changes only move visuals.
+        if (context !== this._visualSyncLatencyContext) {
+            this._visualSyncLatencyContext = context;
+            this._visualSyncDeviceLatencyFrames = context
+                ? (context.outputLatency || context.baseLatency || 0) * context.sampleRate : 0;
+        }
+        const targets = [];
+        if (this.visualSyncEnabled && context && !this.masterBypass) {
+            let sectionEnabled = true;
+            for (const plugin of (this._parallelActive ? this.pipelineA : this.pipeline) || []) {
+                const key = plugin.constructor.name;
+                if (key === 'SectionPlugin') { sectionEnabled = plugin.enabled !== false; continue; }
+                if (plugin.enabled === false || !sectionEnabled) continue;
+                if (VISUAL_SYNC_RULES[key]) targets.push({ id: plugin.id, ruleKey: key,
+                    generationFrames: this._visualSyncGeneration(plugin, key) });
+                if (window.SpectrumOverlay?.TARGETS?.has(key)) targets.push({ id: plugin.id,
+                    ruleKey: 'spectrumOverlay', generationFrames: VISUAL_SYNC_RULES.spectrumOverlay.generationFrames() });
+            }
+        }
+        this.visualSyncDelayFrames = context ? requiredOutputDelayFrames({ targets, taps: this.dspLatencyTaps,
+            dbtFrames: this._dbtOutputDelayFrames?.get(this._getPrimaryWorkletNode()) || 0,
+            deviceLatencyFrames: this._visualSyncDeviceLatencyFrames,
+            maxFrames: VISUAL_SYNC_MAX_OUTPUT_DELAY_SECONDS * context.sampleRate }) : 0;
+        return this.visualSyncDelayFrames;
+    }
+
+    _scheduleVisualSyncUpdate() {
+        if (!this.visualSyncEnabled && !this.visualSyncDelayFrames) return;
+        if (this._visualSyncUpdateTimer != null) clearTimeout(this._visualSyncUpdateTimer);
+        this._visualSyncUpdateTimer = setTimeout(() => {
+            this._visualSyncUpdateTimer = null;
+            void this._updateVisualSyncDelay();
+        }, 80);
+    }
+
+    _updateVisualSyncDelay() {
+        this._recomputeVisualSyncDelay();
+        const nodes = [...this._getActiveDspWorklets()];
+        if (!nodes.some(node => this._pendingOutputDelayRequests?.has(node) ||
+            (this._appliedOutputDelayFrames?.get(node) || 0) !==
+                (this._dbtOutputDelayFrames?.get(node) || 0) + this.visualSyncDelayFrames)) {
+            return Promise.resolve(true);
+        }
+        return this._applyWorkletOutputDelays(nodes);
+    }
+
+    async _applyWorkletOutputDelays(nodes, timeoutMs = 2000) {
+        this._recomputeVisualSyncDelay();
+        this._appliedOutputDelayFrames ??= new Map();
+        this._pendingOutputDelayRequests ??= new Map();
+        const results = await Promise.all(nodes.map(node => {
+            const samples = (this._dbtOutputDelayFrames?.get(node) || 0) + (this.visualSyncDelayFrames || 0);
+            const pending = this._pendingOutputDelayRequests.get(node);
+            if (pending?.samples === samples) return pending.promise;
+            if (!pending && this._appliedOutputDelayFrames.get(node) === samples) return true;
+            if (node === this._getPrimaryWorkletNode()) this.telemetryHub?.clearVisualSyncQueue?.();
+            const request = { samples, promise: null };
+            request.promise = this._setWorkletOutputDelay(node, samples, timeoutMs).then(reply => {
+                const applied = reply?.samples === samples;
+                if (this._pendingOutputDelayRequests.get(node) === request) {
+                    this._pendingOutputDelayRequests.delete(node);
+                    if (applied) {
+                        const previousFrames = this._appliedOutputDelayFrames.get(node) || 0;
+                        this._appliedOutputDelayFrames.set(node, samples);
+                        if (node === this._getPrimaryWorkletNode()) {
+                            this.telemetryHub?.clearVisualSyncQueue?.();
+                            if (previousFrames !== samples) this._publishDspLatency();
+                        }
+                    }
+                }
+                return applied;
+            });
+            this._pendingOutputDelayRequests.set(node, request);
+            return request.promise;
+        }));
+        return results.every(Boolean);
     }
 
     _setWorkletOutputDelay(workletNode, samples, timeoutMs) {
@@ -2076,12 +2336,11 @@ export class AudioManager {
         const target = samplesA > samplesB ? samplesA : samplesB;
         const remaining = deadline - Date.now();
         if (!(remaining > 0)) return false;
-        const [delayA, delayB] = await Promise.all([
-            this._setWorkletOutputDelay(workletA, target - samplesA, remaining),
-            this._setWorkletOutputDelay(workletB, target - samplesB, remaining)
-        ]);
-        return !!delayA && !!delayB && this._isParallelDspBarrierCurrent(barrier) &&
-            delayA.samples === target - samplesA && delayB.samples === target - samplesB;
+        this._dbtOutputDelayFrames ??= new Map();
+        this._dbtOutputDelayFrames.set(workletA, target - samplesA);
+        this._dbtOutputDelayFrames.set(workletB, target - samplesB);
+        const aligned = await this._applyWorkletOutputDelays([workletA, workletB], remaining);
+        return aligned && this._isParallelDspBarrierCurrent(barrier);
     }
 
     handleWorkletMessage(event, workletNode = this.workletNode) {
@@ -2317,9 +2576,14 @@ export class AudioManager {
                 : this.audioContext?.sampleRate;
             this.dspPipelineLatencySamples = samples;
             this.dspPipelineLatencyCompensated = compensated;
-            this.dispatchEvent('dspLatency', { ...data, samples, sampleRate, compensated });
+            this.dspLatencyTaps = data.taps || {};
+            this._dspLatencyTapsWorklet = workletNode;
+            this._scheduleVisualSyncUpdate();
+            this._publishDspLatency(sampleRate, data);
         } else if (data.type === 'dspCleanupNeeded') {
             workletNode?.port?.postMessage({ type: 'dspCleanupFailed' });
+        } else if (data.type === 'processBufferSynced') {
+            if (workletNode === this._getPrimaryWorkletNode()) this._receiveSyncedMeasurements(data);
         } else if (data.type === 'dspTelemetry') {
             this.telemetryHub.handleMessage(data, workletNode?.port);
         }
@@ -2408,6 +2672,7 @@ export class AudioManager {
      * @returns {Promise<string>} - Empty string on success, error message on failure
      */
     async rebuildPipeline(isInitializing = false) {
+        globalThis.window?.FrequencyPreview?.stop?.();
         const releasePowerLease = this.powerPolicyController?.started
             ? this.powerPolicyController.acquireLease('pipeline-rebuild', { mode: 'force-active' })
             : null;
@@ -2456,6 +2721,7 @@ export class AudioManager {
         this.registerPipelineProcessors();
         
         const result = await this.pipelineProcessor.rebuildPipeline(isInitializing);
+        this._scheduleVisualSyncUpdate();
         this.updateExposedProperties();
         const primaryWorklet = this._getPrimaryWorkletNode();
         if (primaryWorklet?.port) {
@@ -4248,6 +4514,7 @@ export class AudioManager {
                 }
             };
             wB.port.postMessage({ type: 'setLowLatencyMode', enabled: lowLatency });
+            if (this.visualSyncEnabled) wB.port.postMessage({ type: 'setVisualSync', enabled: true });
 
             const selA = ctx.createGain();
             const selB = ctx.createGain();
@@ -4621,12 +4888,9 @@ export class AudioManager {
 
         const restoreDirectOutput = async (restorePrimaryDsp) => {
             if (wA?.port) {
-                const delayReset = await this._setWorkletOutputDelay(
-                    wA,
-                    0,
-                    assetDeadline - Date.now()
-                );
-                if (!delayReset || delayReset.samples !== 0) return false;
+                this._dbtOutputDelayFrames?.delete(wA);
+                this._dbtOutputDelayFrames?.delete(wB);
+                if (!await this._applyWorkletOutputDelays([wA], assetDeadline - Date.now())) return false;
             }
             releaseParallelGraph();
             if (!restorePrimaryDsp || !wA?.port) return true;

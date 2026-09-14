@@ -638,6 +638,7 @@ export class PipelineItemBuilder {
         }
         ui.appendChild(plugin.createUI());
         window.SpectrumOverlay?.attach(plugin, ui);
+        window.FrequencyPreview?.attach(plugin, ui);
         return ui;
     }
 

@@ -7,6 +7,7 @@ import { flushMicrotasks, withGlobals } from '../helpers/global-test-utils.mjs';
 import * as appBootstrap from '../../js/app-bootstrap.js';
 import * as rendererStartup from '../../js/startup.js';
 import { resetWebAppConfigRuntimeForTests } from '../../js/electron/webSettingsStorage.js';
+import { createUpdateNotification } from '../../js/update-notification.js';
 
 let appModulePromise = null;
 
@@ -301,8 +302,7 @@ function createDependencies(calls, options = {}) {
     pipelineManager,
     expandedPlugins: new Set(),
     audioPlayer: options.audioPlayer ?? null,
-    showLoadingSpinner() { calls.push(['ui.showLoadingSpinner']); },
-    hideLoadingSpinner() { calls.push(['ui.hideLoadingSpinner']); },
+    updateLoadingProgress(percent) { calls.push(['ui.updateLoadingProgress', percent]); },
     initPluginList() { calls.push(['ui.initPluginList']); },
     initDragAndDrop() { calls.push(['ui.initDragAndDrop']); },
     initAudio() { calls.push(['ui.initAudio']); },
@@ -1823,6 +1823,79 @@ test('event listeners and update notifications stay recoverable', async () => {
     await app.handleOutputDeviceChange();
     app._deviceChangeInProgress = false;
   });
+});
+
+test('update notification offers installer download only on supported Electron builds', async () => {
+  const document = createDocument();
+  const calls = [];
+  let finishDownload;
+  const windowRef = {
+    electronAPI: {
+      openExternal(url) {
+        calls.push(['openExternal', url]);
+      },
+      downloadUpdate() {
+        calls.push(['downloadUpdate']);
+        return new Promise(resolve => {
+          finishDownload = resolve;
+        });
+      }
+    },
+    uiManager: {
+      t(key, params) {
+        const messages = {
+          'ui.newVersionAvailable': `Version ${params?.version}`,
+          'ui.downloadUpdate': 'Localized download',
+          'ui.downloadUpdateTitle': 'Localized restart notice',
+          'ui.downloadingUpdate': 'Localized downloading'
+        };
+        return messages[key] ?? key;
+      },
+      setError(key, isError) {
+        calls.push(['setError', key, isError]);
+      }
+    }
+  };
+
+  const unsupported = createUpdateNotification({
+    version: '2.10.0',
+    url: 'https://example.test/release',
+    autoUpdateSupported: false
+  }, { documentRef: document, windowRef });
+  assert.equal(unsupported.children.length, 1);
+
+  const withoutApi = createUpdateNotification({
+    version: '2.10.0',
+    url: 'https://example.test/release',
+    autoUpdateSupported: true
+  }, { documentRef: document, windowRef: { uiManager: windowRef.uiManager } });
+  assert.equal(withoutApi.children.length, 1);
+
+  const notification = createUpdateNotification({
+    version: '2.10.0',
+    url: 'https://example.test/release',
+    autoUpdateSupported: true
+  }, { documentRef: document, windowRef });
+  assert.equal(notification.children.length, 2);
+  assert.equal(notification.children[0].textContent, 'Version 2.10.0');
+  assert.equal(notification.children[1].textContent, 'Localized download');
+  assert.equal(notification.children[1].title, 'Localized restart notice');
+
+  notification.children[0].click();
+  assert.deepEqual(calls[0], ['openExternal', 'https://example.test/release']);
+
+  const downloadButton = notification.children[1];
+  downloadButton.click();
+  downloadButton.click();
+  assert.equal(downloadButton.disabled, true);
+  assert.equal(downloadButton.textContent, 'Localized downloading');
+  assert.equal(calls.filter(call => call[0] === 'downloadUpdate').length, 1);
+
+  finishDownload({ success: false });
+  await flushMicrotasks();
+  assert.equal(downloadButton.disabled, false);
+  assert.equal(downloadButton.textContent, 'Localized download');
+  assert.deepEqual(calls.at(-1), ['setError', 'ui.updateDownloadFailed', true]);
 });
 
 test('app activation and user interaction resume power-managed audio through one route-aware entry point', async () => {

@@ -25,6 +25,7 @@ const fileHandlers = require('./file-handlers');
 const { queueAutoRestart } = require('./relaunch');
 const { armQuitDeadline, QUIT_DEADLINE_DEFAULT_TIMEOUT_SECONDS } = require('./quit-deadline.cjs');
 const { createInstanceRegistry } = require('./instance-registry.cjs');
+const { createAppUpdater } = require('./app-updater.cjs');
 const {
   LibraryCatalogRecovery,
   registerLibraryCatalogRecoveryIpc
@@ -866,6 +867,23 @@ function initGlobalVariables() {
 
 // Store update info for later sending
 let pendingUpdateInfo = null;
+const appUpdater = createAppUpdater({ app });
+let updateInstallPromise = null;
+
+function downloadAndInstallUpdate() {
+  if (updateInstallPromise) return updateInstallPromise;
+  updateInstallPromise = appUpdater.downloadUpdate().then(() => {
+    const mainWindow = constants.getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.once('will-prevent-unload', event => event.preventDefault());
+    }
+    app.quit();
+  }).catch(error => {
+    updateInstallPromise = null;
+    throw error;
+  });
+  return updateInstallPromise;
+}
 
 // Function to get pending update info (for IPC handlers)
 function getPendingUpdateInfo() {
@@ -933,6 +951,7 @@ async function checkForUpdates() {
         version: latestVersionName,
         targetVersion,
         currentVersion,
+        autoUpdateSupported: appUpdater.isSupported(),
         url: 'https://github.com/Frieve-A/effetune/releases/'
       };
       
@@ -1557,5 +1576,6 @@ app.on('window-all-closed', () => {
 module.exports = {
   sendPendingUpdateInfo,
   getPendingUpdateInfo,
-  checkForUpdates
+  checkForUpdates,
+  downloadAndInstallUpdate
 };

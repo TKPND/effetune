@@ -1834,7 +1834,7 @@ test('AudioManager performs a full plugin resync on dspReady and routes telemetr
     assert.equal(manager.dspPipelineLatencyCompensated, true);
     assert.deepEqual(events.at(-1), {
       type: 'dspLatency',
-      data: latencyMessage
+      data: { ...latencyMessage, totalSamples: 96 }
     });
 
     manager.handleWorkletMessage({
@@ -2290,7 +2290,7 @@ test('AudioManager keeps DBT teardown muted until the saved primary exact asset 
       settled = true;
       return result;
     });
-    for (let index = 0; index < 6; index++) await Promise.resolve();
+    await new Promise(resolve => setImmediate(resolve));
     const replay = main.port.messages.filter(entry =>
       entry.message.type === 'setPluginAsset').at(-1).message;
     assert.equal(replay.operationRevision, primary.assetDescriptor.operationRevision);
@@ -3729,7 +3729,7 @@ test('AudioManager invalidates a settled DBT once before changed comparison data
         assert.equal(auxiliary.port.messages.filter(entry =>
           entry.message.type === 'updatePlugin').length, auxiliaryUpdatesBefore);
       }
-      for (let index = 0; index < 4; index++) await Promise.resolve();
+      await manager._parallelTeardownPromise;
       assert.equal(auxiliary.port.onmessage, null);
     });
   }
@@ -4535,5 +4535,282 @@ test('AudioManager auxiliary worklet receives DSP bytes and returns telemetry pa
     assert.equal(returned.transfer.length, 1);
     assert.equal(returned.transfer[0], packet);
     manager.disableParallelPipelines({ restorePrimaryDsp: false });
+  });
+});
+
+
+test('visual sync composes DBT delay without adding fades or duplicating pending delay requests', async () => {
+  await withGlobals({ window: {} }, async () => {
+    const manager = createManager();
+    const main = createNode('main');
+    const { context } = configureParallelManager(manager, main);
+    context.sampleRate = 48000;
+    context.outputLatency = 0.01;
+    context.getOutputTimestamp = () => ({ contextTime: 1, performanceTime: 1000 });
+    manager.pipelineA = manager.pipeline = [{ id: 7, enabled: true,
+      constructor: { name: 'SpectrumAnalyzerPlugin' }, getParameters: () => ({ pt: 12 }) }];
+    manager.dspLatencyTaps = { 7: { input: 0, output: 0, execution: 'wasm' } };
+    manager._dbtOutputDelayFrames = new Map([[main, 100]]);
+    const events = [];
+    const latencyEvents = [];
+    manager.dspPipelineLatencySamples = 96;
+    manager.dispatchEvent = (type, data) => { if (type === 'dspLatency') latencyEvents.push(data); };
+    manager.fadeOutOutput = () => { events.push('fadeOut'); return ++manager._outputFadeToken; };
+    manager.fadeInOutputForToken = token => { assert.equal(token, manager._outputFadeToken); events.push('fadeIn'); };
+    manager._waitForDspTransition = async seconds => { events.push(['wait', seconds]); };
+    const post = main.port.postMessage.bind(main.port);
+    let acknowledge;
+    main.port.postMessage = message => {
+      if (message.type !== 'setOutputDelay') return post(message);
+      events.push(['delay', message.samples]);
+      acknowledge = () => { events.push('ack'); post(message); };
+    };
+    const applying = manager.setVisualSyncEnabled(true);
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    assert.deepEqual(events, [['delay', 3616]]);
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), null);
+    assert.equal(manager.getTotalPipelineLatencySamples(), 96);
+    assert.equal(latencyEvents.length, 0);
+    const repeated = manager._updateVisualSyncDelay();
+    assert.deepEqual(events, [['delay', 3616]]);
+    acknowledge();
+    assert.equal(await applying, true);
+    assert.equal(await repeated, true);
+    assert.deepEqual(events, [['delay', 3616], 'ack']);
+    assert.equal(manager.visualSyncDelayFrames, 3516);
+    assert.equal(manager.getTotalPipelineLatencySamples(), 3712);
+    assert.equal(latencyEvents.at(-1).samples, 96);
+    assert.equal(latencyEvents.at(-1).totalSamples, 3712);
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), 990);
+    const postCount = main.port.messages.length;
+    context.outputLatency += 1 / 48000;
+    context.getOutputTimestamp = () => ({ contextTime: 1, performanceTime: 1400 });
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), 1390);
+    assert.equal(await manager._updateVisualSyncDelay(), true);
+    assert.equal(main.port.messages.length, postCount);
+    assert.equal(manager.visualSyncDelayFrames, 3516);
+    manager.pipeline[0].isVisible = false;
+    assert.equal(manager._recomputeVisualSyncDelay(), 3516);
+    main.port.postMessage = post;
+    manager.masterBypass = true;
+    assert.equal(await manager._updateVisualSyncDelay(), true);
+    assert.equal(main.port.outputDelaySamples, 100);
+    manager.masterBypass = false;
+    assert.equal(await manager._updateVisualSyncDelay(), true);
+    assert.equal(main.port.outputDelaySamples, 3616);
+    const auxiliary = createNode('auxiliary');
+    manager._parallelActive = true;
+    manager._parallelWorkletB = auxiliary;
+    auxiliary.port.onmessage = event => manager.handleWorkletMessage(event, auxiliary);
+    manager._dbtOutputDelayFrames.set(auxiliary, 0);
+    assert.equal(await manager._applyWorkletOutputDelays([main, auxiliary]), true);
+    assert.equal(auxiliary.port.outputDelaySamples, 3516);
+    manager._dbtOutputDelayFrames.delete(main);
+    manager._parallelActive = false;
+    assert.equal(await manager._applyWorkletOutputDelays([main]), true);
+    assert.equal(main.port.outputDelaySamples, 3616);
+    assert.equal(await manager.setVisualSyncEnabled(false), true);
+    assert.equal(main.port.outputDelaySamples, 0);
+    assert.equal(manager.getTotalPipelineLatencySamples(), 96);
+    assert.equal(latencyEvents.at(-1).totalSamples, 96);
+    assert.equal(manager.telemetryHub.visualSyncResolver ?? null, null);
+    assert.deepEqual(events, [['delay', 3616], 'ack']);
+  });
+});
+
+test('visual sync updates the reserved delay only for effective pipeline changes and reset', async () => {
+  await withGlobals({ window: {} }, async () => {
+    const manager = createManager();
+    const main = createNode('main');
+    const { context } = configureParallelManager(manager, main);
+    context.sampleRate = 48000;
+    context.outputLatency = 0.01;
+    const failTransition = () => assert.fail('Visual sync must not initiate an output transition');
+    manager._runDspOutputTransition = failTransition;
+    manager.fadeOutOutput = failTransition;
+    manager.fadeInOutput = failTransition;
+    manager._waitForDspTransition = failTransition;
+    let points = 12;
+    const plugin = { id: 7, enabled: true, constructor: { name: 'SpectrogramPlugin' },
+      getParameters: () => ({ pt: points, sc: 'log-hq' }) };
+    manager.pipelineA = manager.pipeline = [plugin];
+    manager.dspLatencyTaps = { 7: { input: 0, output: 0, execution: 'wasm' } };
+    await manager.setVisualSyncEnabled(true);
+    assert.equal(main.port.outputDelaySamples, 9808);
+    const count = () => main.port.messages.filter(({ message }) => message.type === 'setOutputDelay').length;
+    const initialCount = count();
+    await manager._applyWorkletOutputDelays([main]);
+    await manager._updateVisualSyncDelay();
+    assert.equal(count(), initialCount);
+    points = 13;
+    await manager._updateVisualSyncDelay();
+    assert.equal(main.port.outputDelaySamples, 20048);
+    manager.pipelineA = manager.pipeline = [];
+    await manager._updateVisualSyncDelay();
+    assert.equal(main.port.outputDelaySamples, 0);
+    manager.pipelineA = manager.pipeline = [plugin];
+    await manager._updateVisualSyncDelay();
+    assert.equal(main.port.outputDelaySamples, 20048);
+    plugin.enabled = false;
+    await manager._updateVisualSyncDelay();
+    assert.equal(main.port.outputDelaySamples, 0);
+    plugin.enabled = true;
+    await manager._updateVisualSyncDelay();
+    const beforeReset = count();
+    main.port.outputDelaySamples = 0;
+    manager.commitPowerTopologyMutation({ type: 'reset' });
+    clearTimeout(manager._visualSyncUpdateTimer);
+    manager._visualSyncUpdateTimer = null;
+    await manager._updateVisualSyncDelay();
+    assert.equal(main.port.outputDelaySamples, 20048);
+    assert.equal(count(), beforeReset + 1);
+    manager.contextManager.audioContext = { ...context, outputLatency: 0.02 };
+    await manager._updateVisualSyncDelay();
+    assert.equal(main.port.outputDelaySamples, 19568);
+    await manager.setVisualSyncEnabled(false);
+    assert.equal(main.port.outputDelaySamples, 0);
+  });
+});
+
+test('visual sync coalesces overdue JS measurements before a delayed timer can deliver stale frames', async () => {
+  let now = 1000;
+  let nextTimer = 0;
+  const timers = new Map();
+  await withGlobals({
+    performance: { now: () => now },
+    setTimeout: callback => { timers.set(++nextTimer, callback); return nextTimer; },
+    clearTimeout: timer => timers.delete(timer)
+  }, async () => {
+    const manager = createManager();
+    const deliveries = [];
+    const plugin = { id: 7, onMessage: data => deliveries.push(data.endFrame) };
+    manager.pipeline = [plugin];
+    manager.visualSyncEnabled = true;
+    manager._resolveVisualSyncDue = (_id, endFrame) => endFrame === 3 ? null : 1000 + endFrame * 10;
+    try {
+      manager._receiveSyncedMeasurements({ pluginId: 7, endFrame: 1 });
+      assert.equal(timers.size, 1);
+      now = 1030;
+      manager._receiveSyncedMeasurements({ pluginId: 7, endFrame: 2 });
+      assert.deepEqual(deliveries, [2]);
+      assert.equal(timers.size, 0);
+      manager._receiveSyncedMeasurements({ pluginId: 7, endFrame: 3 });
+      assert.deepEqual(deliveries, [2, 3]);
+      now = 1040;
+      manager._receiveSyncedMeasurements({ pluginId: 7, endFrame: 5 });
+      manager._receiveSyncedMeasurements({ pluginId: 7, endFrame: 6 });
+      now = 1070;
+      const callback = [...timers.values()][0];
+      timers.clear();
+      callback();
+      assert.deepEqual(deliveries, [2, 3, 6]);
+      assert.equal(timers.size, 0);
+    } finally {
+      manager._clearSyncedMeasurements();
+    }
+  });
+});
+
+test('visual sync delivers only current primary JS measurements and extension hosts stay disabled', async () => {
+  await withGlobals({ window: {}, performance: { now: () => 1000 } }, async () => {
+    const manager = createManager();
+    const main = createNode('main');
+    const { context } = configureParallelManager(manager, main);
+    context.sampleRate = 48000;
+    const deliveries = [];
+    manager.pipeline = [{ id: 7, constructor: { name: 'LevelMeterPlugin' }, onMessage: data => deliveries.push(data) }];
+    manager.visualSyncEnabled = true;
+    manager.dspLatencyTaps = { 7: { input: 0, output: 0 } };
+    manager.handleWorkletMessage({ data: { type: 'processBufferSynced', pluginId: 7, endFrame: 48000, measurements: { peak: 1 } } }, main);
+    assert.equal(deliveries[0].type, 'processBuffer');
+    assert.equal(deliveries[0].measurements.peak, 1);
+    manager.runtimeOptions = { wasmOnly: true };
+    await manager.setVisualSyncEnabled(true);
+    assert.equal(manager.visualSyncEnabled, false);
+    assert.equal(main.port.messages.some(({ message }) => message.type === 'setOutputDelay'), false);
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), null);
+  });
+});
+
+
+test('visual sync retains primary latency taps through real DBT enable and disable operations', async () => {
+  const createdWorklets = [];
+  await withGlobals({ AudioWorkletNode: createFakeAudioWorkletClass(createdWorklets),
+    window: { location: { pathname: '/app/index.html', search: '' }, audioPreferences: { useWasmDsp: false } },
+    document: { hidden: false } }, async () => {
+    const manager = createManager();
+    const main = createNode('main');
+    const { context } = configureParallelManager(manager, main);
+    context.sampleRate = 48000;
+    context.outputLatency = 0.01;
+    class SpectrumAnalyzerPlugin extends VolumePlugin {
+      getParameters() { return { pt: 12 }; }
+    }
+    manager.pipeline = manager.pipelineA = [new SpectrumAnalyzerPlugin(7, 'A')];
+    const taps = { 7: { input: 0, output: 0, execution: 'js' } };
+    manager.handleWorkletMessage({ data: { type: 'dspLatency', samples: 0, sampleRate: 48000,
+      compensated: false, taps } }, main);
+    await manager.setVisualSyncEnabled(true);
+    assert.equal(main.port.outputDelaySamples, 1568);
+    assert.equal(await manager.enableParallelPipelines('A'), true);
+    assert.equal(manager.dspLatencyTaps, taps);
+    assert.equal(main.port.outputDelaySamples, 1568);
+    assert.equal(createdWorklets[0].port.outputDelaySamples, 1568);
+    await manager.disableParallelPipelines();
+    assert.equal(manager.dspLatencyTaps, taps);
+    assert.equal(main.port.outputDelaySamples, 1568);
+    assert.equal(manager._recomputeVisualSyncDelay(), 1568);
+    manager.contextManager.workletNode = manager.workletNode = createNode('replacement');
+    manager._advanceAudioGraphGeneration();
+    assert.deepEqual(manager.dspLatencyTaps, {});
+    assert.equal(manager._recomputeVisualSyncDelay(), 0);
+  });
+});
+
+
+test('visual sync resumes from acknowledged delay after configuration changes and reset', async () => {
+  await withGlobals({ window: {} }, async () => {
+    const manager = createManager();
+    const main = createNode('main');
+    const { context } = configureParallelManager(manager, main);
+    context.sampleRate = 48000;
+    context.outputLatency = 0.01;
+    context.getOutputTimestamp = () => ({ contextTime: 1, performanceTime: 1000 });
+    let points = 12;
+    manager.pipeline = [{ id: 7, constructor: { name: 'SpectrumAnalyzerPlugin' },
+      getParameters: () => ({ pt: points }) }];
+    manager.dspLatencyTaps = { 7: { input: 0, output: 0, execution: 'wasm' } };
+    let clears = 0;
+    manager.telemetryHub.clearVisualSyncQueue = () => { clears++; };
+    const post = main.port.postMessage.bind(main.port);
+    const acknowledgements = [];
+    main.port.postMessage = message => {
+      if (message.type === 'setOutputDelay') acknowledgements.push(() => post(message));
+      else post(message);
+    };
+    const enabled = manager.setVisualSyncEnabled(true);
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), null);
+    const beforeAck = clears;
+    acknowledgements.shift()();
+    await enabled;
+    assert.equal(clears, beforeAck + 1);
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), 990);
+    assert.equal(manager.getTotalPipelineLatencySamples(), 3616);
+    points = 13;
+    const changed = manager._updateVisualSyncDelay();
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), null);
+    assert.equal(manager.getTotalPipelineLatencySamples(), 3616);
+    manager.commitPowerTopologyMutation({ type: 'reset' });
+    clearTimeout(manager._visualSyncUpdateTimer);
+    manager._visualSyncUpdateTimer = null;
+    const reset = manager._updateVisualSyncDelay();
+    acknowledgements.shift()();
+    await changed;
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), null);
+    assert.equal(manager.getTotalPipelineLatencySamples(), 0);
+    acknowledgements.shift()();
+    await reset;
+    assert.equal(manager.getTotalPipelineLatencySamples(), 7712);
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), 990);
   });
 });

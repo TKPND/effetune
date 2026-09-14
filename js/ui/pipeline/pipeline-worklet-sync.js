@@ -72,6 +72,7 @@ export class PipelineWorkletSync {
      * Update all plugins in the worklet
      */
     updateWorkletPlugins() {
+        globalThis.window?.FrequencyPreview?.stop?.();
         if (this.isWorkletAvailable()) {
             this.ensureProcessorsRegistered();
             // Prepare plugin data

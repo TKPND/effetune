@@ -52,6 +52,21 @@ test('popup renders the authoritative processing snapshot', () => {
   assert.deepEqual(preset.options.map(option => option.value), ['Warm']);
 });
 
+test('frequency preview uses the volatile extension channel without queuing state requests', () => {
+  const messages = [];
+  const client = Object.assign(Object.create(ExtensionClient.prototype), {
+    id: 'editor', channel: { postMessage: message => messages.push(message) }
+  });
+  const adapter = new ExtensionAudioManager(client, assert.fail);
+  adapter.setFrequencyPreview(440);
+  adapter.setFrequencyPreview(null);
+  assert.deepEqual(messages, [
+    { kind: 'frequencyPreview', clientId: 'editor', frequency: 440 },
+    { kind: 'frequencyPreview', clientId: 'editor', frequency: null }
+  ]);
+  assert.equal(adapter.pendingMutations, 0);
+});
+
 test('editor audio adapter keeps parameter and structural mutations on their intended transports', async () => {
   const requests = [];
   const client = {

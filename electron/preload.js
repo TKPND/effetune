@@ -454,6 +454,8 @@ contextBridge.exposeInMainWorld(
       return ipcRenderer.invoke('get-update-info');
     },
     
+    downloadUpdate: () => ipcRenderer.invoke('download-update'),
+
     // Force check for updates (used in About dialog)
     forceCheckForUpdates: () => {
       return ipcRenderer.invoke('force-check-for-updates');

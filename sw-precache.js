@@ -1,4 +1,4 @@
-self.EFFECTUNE_CACHE_VERSION = "effetune-v2.10.0-df3b9091215f6de3";
+self.EFFECTUNE_CACHE_VERSION = "effetune-v2.10.0-f31444c50c18a570";
 self.EFFECTUNE_PRECACHE_URLS = [
   "./effetune-library.css",
   "./effetune-mobile.css",
@@ -46,6 +46,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/audio/power-topology.js",
   "./js/audio/startup-audio-warmup.js",
   "./js/audio/telemetry-hub.js",
+  "./js/audio/visual-sync.js",
   "./js/crosstalk-cancellation/design-core.js",
   "./js/crosstalk-cancellation/design-worker.js",
   "./js/crosstalk-cancellation/designer.js",
@@ -350,6 +351,8 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./plugins/eq/tilt_eq.js",
   "./plugins/eq/tone_control.css",
   "./plugins/eq/tone_control.js",
+  "./plugins/frequency-axis.js",
+  "./plugins/frequency-preview.js",
   "./plugins/graph-point-interaction.js",
   "./plugins/lofi/am_radio_simulator.css",
   "./plugins/lofi/am_radio_simulator.js",

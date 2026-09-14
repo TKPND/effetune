@@ -421,7 +421,7 @@ test('initPluginList builds categorized plugin rows and loading state', async ()
     manager.initPluginList();
 
     assert.equal(dom.pluginList.children.includes(staleContent), false);
-    assert.equal(manager.progressDisplay.style.display, 'none');
+    assert.equal(dom.pluginList.querySelector('.loading-spinner'), null);
     assert.equal(dom.pluginList.querySelector('#effectCount').textContent, 'ui.effectsAvailable:3');
     assert.deepEqual(dragSetupCalls.filter(call => call[0] !== 'toggleCategoryCollapse'), [
       ['Alpha', 'Alpha'],
@@ -442,18 +442,6 @@ test('initPluginList builds categorized plugin rows and loading state', async ()
     assert.equal(dom.elements.get('tabSwitcher').style.display, 'none');
     await dom.elements.get('effectSearchButton').click();
     assert.equal(dom.elements.get('tabSwitcher').style.display, '');
-
-    manager.showLoadingSpinner();
-    assert.equal(manager.loadingSpinner.style.display, 'block');
-    assert.equal(manager.progressDisplay.textContent, '0%');
-    manager.updateLoadingProgress(-1);
-    assert.equal(manager.progressDisplay.textContent, '0%');
-    manager.updateLoadingProgress(101);
-    assert.equal(manager.progressDisplay.textContent, '100%');
-    manager.updateLoadingProgress(44.4);
-    assert.equal(manager.progressDisplay.textContent, '44%');
-    manager.hideLoadingSpinner();
-    assert.equal(manager.loadingSpinner.style.display, 'none');
 
     windowRef.uiManager = null;
     manager.initPluginList();

@@ -8,17 +8,6 @@ export class PluginListManager {
         this.pluginManager = pluginManager;
         this.pluginList = document.getElementById('pluginList');
         
-        // Create loading spinner
-        this.loadingSpinner = document.createElement('div');
-        this.loadingSpinner.className = 'loading-spinner';
-        this.pluginList.appendChild(this.loadingSpinner);
-        
-        // Create progress display as a separate element
-        this.progressDisplay = document.createElement('div');
-        this.progressDisplay.className = 'loading-spinner-progress';
-        this.progressDisplay.textContent = '0%';
-        this.pluginList.appendChild(this.progressDisplay);
-
         // Initialize managers
         this.searchManager = new SearchManager(this);
         this.collapseManager = new CollapseManager(this);
@@ -147,8 +136,6 @@ export class PluginListManager {
         }
         this.pluginList.appendChild(effectCountDiv);
 
-        // Hide spinner after plugin list is fully initialized
-        this.hideLoadingSpinner();
     }
 
     createPluginItem(plugin) {
@@ -334,25 +321,6 @@ export class PluginListManager {
 
     async refreshPresetsIfVisible() {
         return this.presetManager.refreshPresetsIfVisible();
-    }
-
-    showLoadingSpinner() {
-        this.loadingSpinner.style.display = 'block';
-        this.progressDisplay.style.display = 'flex';
-        this.updateLoadingProgress(0);
-    }
-
-    hideLoadingSpinner() {
-        this.loadingSpinner.style.display = 'none';
-        this.progressDisplay.style.display = 'none';
-    }
-    
-    updateLoadingProgress(percent) {
-        if (percent < 0) percent = 0;
-        if (percent > 100) percent = 100;
-        
-        const formattedPercent = Math.round(percent);
-        this.progressDisplay.textContent = `${formattedPercent}%`;
     }
 
     // Delegate to drag drop manager

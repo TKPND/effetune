@@ -71,6 +71,11 @@
   "build": {
     "appId": "com.frieve.effetune",
     "productName": "EffeTune",
+    "publish": {
+      "provider": "github",
+      "owner": "Frieve-A",
+      "repo": "effetune"
+    },
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -271,6 +276,7 @@
   },
   "dependencies": {
     "@mediabunny/flac-encoder": "1.56.2",
+    "electron-updater": "6.8.9",
     "mediabunny": "1.56.2",
     "music-metadata": "^11.15.0"
   }

@@ -648,6 +648,18 @@ function registerIpcHandlers({ onConfigSaved } = {}) {
     }
   });
 
+  // Download and install a desktop update through the normal quit path.
+  ipcMain.handle('download-update', async () => {
+    try {
+      const { downloadAndInstallUpdate } = require('./main');
+      await downloadAndInstallUpdate();
+      return { success: true };
+    } catch (error) {
+      console.error('IPC handler: Error in download-update:', error);
+      return { success: false };
+    }
+  });
+
   // Handle force check for updates request
   ipcMain.handle('force-check-for-updates', async () => {
     try {

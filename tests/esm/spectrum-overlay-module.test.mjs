@@ -326,3 +326,27 @@ test('below-range spectrum values leave the graph through Canvas clipping instea
   assert.equal(instance.levels[2], -120, 'drawing must retain below-range levels');
   instance.dispose();
 });
+
+
+test('visual sync overlay waits for audible deadlines and clears frames with the hub epoch', () => {
+  const h = createOverlayHarness();
+  installThemePaletteStub(h.window);
+  h.window.dspTelemetryHub = { visualSyncEpoch: 0, resolveDue: () => 600 };
+  const { instance } = h.attach();
+  instance.enable();
+  const message = { type: 'spectrumOverlay', spectrumPluginId: 7, endFrame: 128,
+    outputBuffer: new Float32Array(4096).fill(0.5), bufferPosition: 0, sampleRate: 48000 };
+  instance.onSpectrumMessage(message);
+  h.frame();
+  assert.equal(instance.levels, null);
+  h.advance(584); h.frame();
+  assert.ok(instance.levels[0] > -6.03);
+  assert.equal(instance.lastReceived, 600);
+  h.window.dspTelemetryHub.resolveDue = () => 1000;
+  instance.onSpectrumMessage(message);
+  assert.equal(instance.pendingFrames.length, 1);
+  h.window.dspTelemetryHub.visualSyncEpoch++;
+  h.frame();
+  assert.equal(instance.pendingFrames.length, 0);
+  instance.dispose();
+});

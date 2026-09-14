@@ -77,6 +77,7 @@ async function loadTargetScripts(page) {
     'plugins/theme-palette.js',
     'plugins/plugin-base.js',
     'plugins/graph-point-interaction.js',
+    'plugins/frequency-axis.js',
     'plugins/spectrum-overlay.js',
     ...Object.values(targets).map(target => `plugins/${target.path}.js`)
   ]) {
@@ -478,6 +479,74 @@ test('Spectrum Overlay follows every real graph through the complete plugin CSS 
       assert.deepEqual(controlCollisions.map(({ name, width, dpr, buttonCollisions, scaleCollisions }) => ({
         name, width, dpr, buttonCollisions, scaleCollisions
       })), [], 'Spectrum Overlay controls and dBFS scale must not overlap existing graph controls');
+    } finally {
+      await browser.close();
+    }
+  });
+
+test('Frequency Preview preserves visible graphs through the real canvas CSS cascade',
+  { timeout: 60_000 }, async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      for (const width of [1280, 360]) {
+        const page = await browser.newPage({ viewport: { width, height: 1100 } });
+        try {
+          await page.setContent('<main class="pipeline-item"></main>');
+          await page.evaluate(mobile => {
+            document.body.classList.toggle('layout-mobile', mobile);
+            document.documentElement.classList.toggle('layout-mobile', mobile);
+            window.audioContext = { sampleRate: 48000, destination: { channelCount: 2 } };
+            window.audioManager = { pipeline: [], setFrequencyPreview() {} };
+          }, width === 360);
+          await loadCssInApplicationOrder(page);
+          await loadTargetScripts(page);
+          await page.addScriptTag({ content: await fs.readFile('plugins/frequency-preview.js', 'utf8') });
+          for (const name of ['BandPassFilterPlugin', 'FiveBandPEQPlugin']) {
+            await page.evaluate(async name => {
+              window.previewFixture?.instance?.dispose();
+              window.previewFixture?.plugin.cleanup();
+              const plugin = new window[name]();
+              plugin.id = 1;
+              window.audioManager.pipeline = [plugin];
+              const root = plugin.createUI();
+              document.querySelector('main').replaceChildren(root);
+              window.previewFixture = { plugin, root };
+              await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            }, name);
+            const graph = page.locator(name === 'BandPassFilterPlugin'
+              ? '.band-pass-filter-graph' : '.five-band-peq-graph');
+            const baseline = await graph.screenshot();
+            const geometry = await page.evaluate(async () => {
+              const fixture = window.previewFixture;
+              const instance = fixture.instance = window.FrequencyPreview.attach(fixture.plugin, fixture.root);
+              await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+              const style = getComputedStyle(instance.canvas);
+              const rect = instance.canvas.getBoundingClientRect();
+              return { background: style.backgroundColor, margin: style.margin, border: style.borderWidth,
+                rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+                expected: { left: instance.box.left, top: instance.box.top,
+                  right: instance.box.left + instance.box.width, bottom: instance.box.top + instance.box.height } };
+            });
+            assert.equal(geometry.background, 'rgba(0, 0, 0, 0)', `${name} ${width}px transparent preview`);
+            assert.equal(geometry.margin, '0px', `${name} ${width}px preview margin`);
+            assert.equal(geometry.border, '0px', `${name} ${width}px preview border`);
+            assert.deepEqual(rectangleMismatches(geometry.rect, geometry.expected), [], `${name} ${width}px preview box`);
+            assert.ok(baseline.equals(await graph.screenshot()), `${name} ${width}px original graph stays visible after attach`);
+            const { left, top, right, bottom } = geometry.rect;
+            await page.mouse.move(left + (right - left) * 0.3, top + (bottom - top) * 0.25);
+            await page.mouse.down();
+            assert.equal(await page.evaluate(() => {
+              const canvas = window.previewFixture.instance.canvas;
+              return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0);
+            }), true, `${name} ${width}px preview trace appears`);
+            await page.mouse.up();
+            await page.mouse.move(0, 0);
+            assert.ok(baseline.equals(await graph.screenshot()), `${name} ${width}px original graph stays visible after stop`);
+          }
+        } finally {
+          await page.close();
+        }
+      }
     } finally {
       await browser.close();
     }

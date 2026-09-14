@@ -128,7 +128,8 @@ test('hub dispatches by tap and frame type and returns the transferred packet', 
     framesWithDropFlag: 1,
     coreDroppedFrames: 3,
     subscriberErrors: 1,
-    returnErrors: 0
+    returnErrors: 0,
+    visualSyncDropped: 0
   });
   assert.ok(warnings.some(message => message.includes('draw failed')));
   assert.equal(unsubscribe(), true);
@@ -165,7 +166,8 @@ test('hub returns malformed packets and isolates packet-pool failures', () => {
     framesWithDropFlag: 0,
     coreDroppedFrames: 0,
     subscriberErrors: 0,
-    returnErrors: 0
+    returnErrors: 0,
+    visualSyncDropped: 0
   });
 });
 
@@ -178,4 +180,117 @@ test('hub validates subscriptions and supports explicit cleanup', () => {
   hub.subscribe(1, 1, callback);
   hub.clearSubscriptions();
   assert.equal(hub.unsubscribe(1, 1, callback), false);
+});
+
+
+test('visual sync retains copied frames until their deadline and returns packets immediately', () => {
+  let now = 0;
+  let timer = null;
+  const delivered = [];
+  let returned = 0;
+  const hub = new TelemetryHub({ now: () => now, queueLimit: 2,
+    schedule: callback => { timer = () => { timer = null; callback(); }; return 1; }, cancel: () => { timer = null; },
+    port: { postMessage({ packet }) { returned++; new Uint8Array(packet).fill(0); } } });
+  hub.subscribe(7, 1, frame => delivered.push(frame.payload.getUint8(0)));
+  hub.setVisualSyncResolver((id, endFrame) => endFrame);
+  const send = (due, value) => {
+    const packet = createPacket([{ frameType: 1, tapId: 7, payload: Uint8Array.of(value) }]);
+    hub.handleMessage({ type: 'dspTelemetry', packet, bytes: packet.byteLength, endFrame: due });
+  };
+  send(30, 3); send(10, 1);
+  assert.equal(returned, 2);
+  assert.deepEqual(delivered, []);
+  now = 10; timer();
+  assert.deepEqual(delivered, [1]);
+  send(40, 4); send(50, 5);
+  assert.equal(hub.getStats().visualSyncDropped, 1);
+  now = 50; timer();
+  assert.deepEqual(delivered, [1, 4, 5]);
+  assert.equal(timer, null);
+  for (const clear of [() => hub.clearSubscriptions(), () => hub.setPort(null),
+    () => hub.setVisualSyncResolver(null)]) {
+    send(100, 9);
+    assert.notEqual(timer, null);
+    clear();
+    assert.equal(timer, null);
+    assert.equal(hub.visualSyncQueue.length, 0);
+  }
+});
+
+test('visual sync default timers preserve the browser receiver when scheduling and clearing', t => {
+  let now = 0;
+  let nextTimer = 0;
+  const timers = new Map();
+  const warnings = [];
+  const delivered = [];
+  t.mock.method(globalThis, 'setTimeout', function(callback) {
+    assert.ok(this === undefined || this === globalThis, 'Timer must use the browser global receiver');
+    const timer = ++nextTimer;
+    timers.set(timer, callback);
+    return timer;
+  });
+  t.mock.method(globalThis, 'clearTimeout', function(timer) {
+    assert.ok(this === undefined || this === globalThis, 'Timer must use the browser global receiver');
+    timers.delete(timer);
+  });
+  const hub = new TelemetryHub({ now: () => now, warning: message => warnings.push(message) });
+  hub.subscribe(7, 1, frame => delivered.push(frame.sequence));
+  hub.setVisualSyncResolver((id, endFrame) => endFrame);
+  const send = due => {
+    const packet = createPacket([{ frameType: 1, tapId: 7, sequence: due, payload: new Uint8Array(0) }]);
+    hub.handleMessage({ type: 'dspTelemetry', packet, bytes: packet.byteLength, endFrame: due });
+    assert.deepEqual(warnings, []);
+  };
+  const advance = time => {
+    now = time;
+    const [timer, callback] = timers.entries().next().value;
+    timers.delete(timer);
+    callback();
+  };
+  send(10);
+  send(20);
+  assert.equal(timers.size, 1);
+  assert.deepEqual(delivered, []);
+  advance(10);
+  assert.deepEqual(delivered, [10]);
+  assert.equal(timers.size, 1);
+  advance(20);
+  assert.deepEqual(delivered, [10, 20]);
+  assert.equal(timers.size, 0);
+  for (const clear of [() => hub.setPort(null), () => hub.clearSubscriptions(),
+    () => hub.setVisualSyncResolver(null)]) {
+    send(30);
+    assert.equal(timers.size, 1);
+    clear();
+    assert.equal(timers.size, 0);
+    assert.equal(hub.visualSyncTimer, null);
+  }
+});
+
+test('visual sync delivers overdue queued frames before a newer frame when its timer is delayed', () => {
+  let now = 0;
+  let timer = null;
+  const delivered = [];
+  let returned = 0;
+  const hub = new TelemetryHub({ now: () => now,
+    schedule: callback => { timer = callback; return 1; }, cancel: () => { timer = null; },
+    port: { postMessage() { returned++; } } });
+  hub.subscribe(7, 5, frame => delivered.push(frame.sequence));
+  hub.setVisualSyncResolver((id, endFrame) => endFrame);
+  const send = (sequence, due) => {
+    const packet = createPacket([{ frameType: 5, formatVersion: 2, tapId: 7,
+      sequence, payload: new Uint8Array(0) }]);
+    hub.handleMessage({ type: 'dspTelemetry', packet, bytes: packet.byteLength, endFrame: due });
+  };
+  send(0, 0);
+  send(1, 10);
+  assert.deepEqual(delivered, [0]);
+  assert.notEqual(timer, null);
+  now = 30;
+  send(2, 20);
+  assert.deepEqual(delivered, [0, 1, 2]);
+  assert.equal(returned, 3);
+  assert.equal(hub.visualSyncQueue.length, 0);
+  assert.equal(hub.visualSyncTimer, null);
+  assert.equal(timer, null);
 });

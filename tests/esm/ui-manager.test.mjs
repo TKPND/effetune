@@ -359,6 +359,10 @@ function createManagers(calls) {
     currentPipeline: 'A',
     audioContext: { sampleRate: 48000, destination: { channelCount: 2 } },
     dspPipelineLatencySamples: 0,
+    totalPipelineLatencySamples: 0,
+    getTotalPipelineLatencySamples() {
+      return this.totalPipelineLatencySamples;
+    },
     listeners: new Map(),
     getCurrentPipeline() {
       return this.currentPipeline === 'A' ? this.pipelineA : (this.pipelineB || []);
@@ -576,9 +580,6 @@ async function withUIHarness(options = {}, callback) {
 }
 
 function patchManager(manager, calls) {
-  manager.pluginListManager.showLoadingSpinner = () => calls.push(['pluginList.showLoadingSpinner']);
-  manager.pluginListManager.hideLoadingSpinner = () => calls.push(['pluginList.hideLoadingSpinner']);
-  manager.pluginListManager.updateLoadingProgress = percent => calls.push(['pluginList.updateLoadingProgress', percent]);
   manager.pluginListManager.initPluginList = () => calls.push(['pluginList.initPluginList']);
   manager.pipelineManager.initDragAndDrop = () => calls.push(['pipeline.initDragAndDrop']);
   manager.pipelineManager.updatePipelineUI = (...args) => calls.push(['pipeline.updatePipelineUI', ...args]);
@@ -636,10 +637,10 @@ test('renders and updates pipeline delay and CPU usage meters', async () => {
     const cpuFill = document.getElementById('pipelineCpuMeterFill');
     assert.equal(label.textContent, 'Total Delay: 0 samples');
 
-    audioManager.listeners.get('dspLatency')({ samples: 384 });
+    audioManager.listeners.get('dspLatency')({ samples: 128, totalSamples: 384 });
     assert.equal(label.textContent, 'Total Delay: 384 samples');
 
-    audioManager.listeners.get('dspLatency')({ samples: -1 });
+    audioManager.listeners.get('dspLatency')({ samples: 128, totalSamples: -1 });
     assert.equal(label.textContent, 'Total Delay: 0 samples');
     manager.updatePipelineLatency(Number.NaN);
     assert.equal(label.textContent, 'Total Delay: 0 samples');
@@ -765,15 +766,10 @@ test('constructs, delegates manager methods, translates errors, parses and seria
   ]);
   await withUIHarness({ search: `?p=${validState}` }, async ({ audioManager, calls, manager, timers }) => {
     manager.audioManager.pipeline = [createPlugin('Gain')];
-    manager.showLoadingSpinner();
-    manager.hideLoadingSpinner();
     manager.updateLoadingProgress(42);
     manager.initPluginList();
     manager.initDragAndDrop();
     manager.updatePipelineUI();
-    assert.equal(calls.some(call => call[0] === 'pluginList.showLoadingSpinner'), true);
-    assert.equal(calls.some(call => call[0] === 'pluginList.hideLoadingSpinner'), true);
-    assert.equal(calls.some(call => call[0] === 'pluginList.updateLoadingProgress' && call[1] === 42), true);
     assert.equal(calls.some(call => call[0] === 'pluginList.initPluginList'), true);
     assert.equal(calls.some(call => call[0] === 'pipeline.initDragAndDrop'), true);
     assert.equal(calls.some(call => call[0] === 'pipeline.updatePipelineUI'), true);
@@ -1797,4 +1793,51 @@ test('UI construction synchronously applies saved themes without needing a theme
       assert.equal(document.documentElement.dataset.theme, expected);
     });
   }
+});
+
+
+test('startup progress uses the current overlay, clamps percentages, and translates messages', async () => {
+  const progress = { textContent: '' };
+  const manager = Object.create(UIManager.prototype);
+  await withGlobals({ document: { getElementById: id => id === 'startupProgress' ? progress : null } }, async () => {
+    manager.updateLoadingProgress(-1);
+    assert.equal(progress.textContent, 'Loading effects… 0%');
+    manager.updateLoadingProgress(101);
+    assert.equal(progress.textContent, 'Loading effects… 100%');
+    manager.updateLoadingProgress(44.4);
+    assert.equal(progress.textContent, 'Loading effects… 44%');
+    manager.translations = { 'status.loadingPlugins': 'Effects: {percent}%', 'status.starting': 'Starting…' };
+    manager.updateLoadingProgress(42);
+    assert.equal(progress.textContent, 'Effects: 42%');
+    manager.updateLoadingProgress();
+    assert.equal(progress.textContent, 'Starting…');
+  });
+});
+
+test('pipeline delay uses confirmed totals during pending changes and translated redraws', async () => {
+  await withUIHarness({}, async ({ audioManager, document, manager }) => {
+    const label = document.getElementById('pipelineLatency');
+    const notify = totalSamples => {
+      audioManager.totalPipelineLatencySamples = totalSamples;
+      audioManager.listeners.get('dspLatency')({ samples: 384, totalSamples });
+    };
+    audioManager.dspPipelineLatencySamples = 384;
+    notify(1024);
+    assert.equal(label.textContent, 'Total Delay: 1024 samples');
+
+    audioManager.visualSyncDelayFrames = 5000;
+    manager.updateUITexts();
+    assert.equal(label.textContent, 'Total Delay: 1024 samples');
+
+    notify(5384);
+    assert.equal(label.textContent, 'Total Delay: 5384 samples');
+    manager.translations['ui.pipelineLatency'] = 'Delay: {samples}';
+    manager.updateUITexts();
+    assert.equal(label.textContent, 'Delay: 5384');
+
+    notify(384);
+    assert.equal(label.textContent, 'Delay: 384');
+    manager.updateUITexts();
+    assert.equal(label.textContent, 'Delay: 384');
+  });
 });

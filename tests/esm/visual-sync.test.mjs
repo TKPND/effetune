@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { VISUAL_SYNC_RULES as rules, isVisualSyncEnabled, requiredOutputDelayFrames,
+  audiblePerformanceTime } from '../../js/audio/visual-sync.js';
+
+test('visual sync capture ages follow FFT, staged slot, HQ and pitch window formulas', () => {
+  for (const pt of [8, 12, 14]) {
+    const size = 2 ** pt;
+    assert.equal(rules.SpectrumAnalyzerPlugin.generationFrames({ pt }, 48000, 'js'), size / 2);
+    assert.equal(rules.SpectrumAnalyzerPlugin.generationFrames({ pt }, 48000, 'wasm'),
+      size / 2 + Math.min(512, Math.floor(Math.max(size / 2, 1600) / 16)) * 16);
+    assert.equal(rules.SpectrogramPlugin.generationFrames({ pt }, 48000, 'wasm'), size);
+    assert.equal(rules.SpectrogramPlugin.generationFrames({ pt, sc: 'log-hq' }, 48000, 'js'), size * 2 + 48 + size / 2);
+  }
+  assert.equal(rules.NoteSpectrogramPlugin.generationFrames({}, 48000, 'wasm'), 8192 + 960);
+  assert.equal(rules.PitchMeterPlugin.generationFrames({ rf: 440, mn: 69 }, 48000, 'wasm'), 360 + 480);
+  assert.equal(rules.OscilloscopePlugin.generationFrames({ dt: 0.01 }, 48000, 'wasm'), 240);
+  assert.equal(rules.StereoMeterPlugin.generationFrames({ wt: 0.1 }, 48000, 'wasm'), 2400);
+  assert.equal(rules.spectrumOverlay.generationFrames(), 2048);
+  assert.equal(rules.CompressorPlugin.generationFrames(), 0);
+  assert.equal(rules.UnknownPlugin, undefined);
+  assert.equal(isVisualSyncEnabled({ visualSync: true }), true);
+  for (const config of [undefined, {}, { visualSync: 'true' }]) assert.equal(isVisualSyncEnabled(config), false);
+});
+
+test('visual sync output delay uses the greatest enabled capture deficit and clamps it', () => {
+  const options = { targets: [
+    { id: 1, ruleKey: 'SpectrumAnalyzerPlugin', generationFrames: 4096 },
+    { id: 2, ruleKey: 'SpectrogramPlugin', generationFrames: 8192, enabled: false },
+    { id: 3, ruleKey: 'UnknownPlugin', generationFrames: 9000 }
+  ], taps: { 1: { output: 500 }, 2: { output: 0 }, 3: { output: 0 } },
+  dbtFrames: 100, deviceLatencyFrames: 480, maxFrames: 24000 };
+  assert.equal(requiredOutputDelayFrames(options), 3016);
+  assert.equal(requiredOutputDelayFrames({ ...options, maxFrames: 1000 }), 1000);
+  assert.equal(requiredOutputDelayFrames({ ...options, deviceLatencyFrames: 9000 }), 0);
+  assert.equal(requiredOutputDelayFrames({ ...options, taps: {} }), 0);
+});
+
+test('visual sync audible time maps context frames to the output clock or latency fallback', () => {
+  const options = { endFrame: 48000, sampleRate: 48000, generationFrames: 480,
+    tapFrames: 960, outputDelayFrames: 480,
+    fallback: { currentTime: 1, performanceTime: 1000, outputLatency: 0.1 } };
+  assert.equal(audiblePerformanceTime({ ...options,
+    outputTimestamp: { contextTime: 1, performanceTime: 2000 } }), 2020);
+  assert.ok(Math.abs(audiblePerformanceTime(options) - 1120) < 1e-10);
+});
+
+
+test('Phase Select EQ sync follows the input window and staged completion before its delayed output', () => {
+  const definition = rules.PhaseSelectEqPlugin;
+  assert.equal(definition.tap, 'input');
+  for (const [rate, size] of [[44100, 4096], [48000, 4096], [88200, 8192], [96000, 8192],
+    [176400, 16384], [192000, 16384], [32000, 4096], [768000, 32768]]) {
+    assert.equal(definition.generationFrames({}, rate, 'wasm'), size * 3 / 4);
+    assert.equal(definition.generationFrames({}, rate, 'js'), 0);
+  }
+  const generationFrames = definition.generationFrames({}, 48000, 'wasm');
+  assert.equal(requiredOutputDelayFrames({ targets: [{ id: 7, ruleKey: 'PhaseSelectEqPlugin', generationFrames }],
+    taps: { 7: { input: 5120, output: 0 } }, deviceLatencyFrames: 480, maxFrames: 24000 }), 0);
+  const due = audiblePerformanceTime({ endFrame: 48000, generationFrames, tapFrames: 5120,
+    sampleRate: 48000, outputTimestamp: { contextTime: 1, performanceTime: 1000 } });
+  assert.ok(Math.abs(due - (1000 + 2048 / 48)) < 1e-10);
+});

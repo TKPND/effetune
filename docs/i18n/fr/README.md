@@ -134,6 +134,7 @@ Les grandes collections sont chargées progressivement depuis le stockage ; la v
    - [Contrôler les effets par MIDI, manette ou clavier](controller-mapping.md)
 10. Cliquez sur le bouton Préréglages d’effet de chaque effet pour enregistrer ou appliquer des réglages pour cet effet uniquement
 11. Pour régler précisément un curseur, maintenez la touche Maj enfoncée pendant que vous le faites glisser ; la valeur change alors d'une unité minimale à la fois
+12. Sur les graphiques compatibles dotés d’un axe de fréquences ou de notes, faites glisser le pointeur le long de cet axe pour écouter la fréquence correspondante sous forme de sinus à -12 dB à travers la chaîne d’effets. Lorsqu’un clavier est affiché, la fréquence s’aligne sur le demi-ton le plus proche ; faites glisser le pointeur sur une touche pour écouter sa note
 
 ### Utilisation des préréglages
 

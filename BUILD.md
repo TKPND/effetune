@@ -491,12 +491,19 @@ workflow, and it does not rebuild the separately released Python/npm DSP
 Library matrix. Tags beginning with `dsp-v` belong to the separate DSP library
 release workflow and cannot start the desktop release workflow.
 
+For a Windows release, attach `latest.yml` and
+`EffeTune-<version>-Setup.exe.blockmap` beside the NSIS installer. The in-app
+updater requires these files. They are generated for that exact installer, so
+do not combine a regenerated installer with metadata from another build.
+
 ## Build Output
 
 After a successful build, you'll find the following in the `dist` directory:
 
 - **Windows Portable application**: `EffeTune-x.xx.x-Portable.exe` (where x.xx.x is the version number)
 - **Windows Installer**: `EffeTune-x.xx.x-Setup.exe` (NSIS installer)
+- **Windows update metadata**: `latest.yml`
+- **Windows installer block map**: `EffeTune-x.xx.x-Setup.exe.blockmap`
 - **macOS application**:
   - `EffeTune-x.xx.x-x64.dmg` (Intel Mac)
   - `EffeTune-x.xx.x-arm64.dmg` (Apple Silicon Mac)
@@ -605,4 +612,4 @@ After building the application:
 
 3. **Updates**:
    - Increment the version number in `package.json` for new releases
-   - Consider implementing an auto-update mechanism for future versions
+   - For Windows installer releases, upload the matching `latest.yml` and installer block map with the installer so the in-app update can download it

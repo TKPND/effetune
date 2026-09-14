@@ -421,8 +421,7 @@ class App {
             displayAppVersion()
         ]);
         try {
-            // Show loading spinner
-            this.uiManager.showLoadingSpinner();
+            this.uiManager.updateLoadingProgress(0);
 
             // Open the configured startup view before the effect pipeline can paint.
             // The same promise is awaited once startup content has been handled.
@@ -435,6 +434,8 @@ class App {
             this.uiManager.initPluginList();
             this.uiManager.initDragAndDrop();
             
+            this.uiManager.updateLoadingProgress();
+
             // Initialize audio context and input/output (without AudioWorklet)
             // This allows the audio context to be created early, but defers
             // the heavy AudioWorklet initialization until after GUI is rendered
@@ -457,9 +458,6 @@ class App {
             
             // Initialize basic UI without pipeline
             this.uiManager.updatePipelineUI(true);
-            
-            // Hide loading spinner to show the UI is ready
-            this.uiManager.hideLoadingSpinner();
             
             // Wait for next frame to ensure UI is rendered
             // Use different strategies based on window visibility and startup settings

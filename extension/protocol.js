@@ -76,6 +76,10 @@ export class ExtensionClient extends EventTarget {
         return result;
     }
 
+    sendFrequencyPreview(frequency) {
+        this.channel.postMessage({ kind: 'frequencyPreview', clientId: this.id, frequency });
+    }
+
     close() {
         clearInterval(this.heartbeat);
         this.channel.postMessage({ kind: 'leave', clientId: this.id });

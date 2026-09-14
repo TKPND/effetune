@@ -8,6 +8,9 @@ lang: en
 
 ### Version 2.10.0 (TBD, 2026)
 - Added Pitch Meter and TV Audio Simulator effects
+- Added drag-to-preview sine tones to supported frequency and note graphs
+- Added the Sync Visuals to Audio setting
+- Added in-app update download and restart for the Windows installer version
 - Improved Spectrogram and Spectrum Analyzer
 - Various minor improvements
 

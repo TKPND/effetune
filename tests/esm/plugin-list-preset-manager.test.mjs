@@ -118,9 +118,6 @@ function createPluginListManager(options = {}) {
     getListItemInsertionIndex({ mobile } = {}) {
       calls.push(['getListItemInsertionIndex', mobile]);
       return options.listItemInsertionIndex ?? null;
-    },
-    hideLoadingSpinner() {
-      calls.push(['hideLoadingSpinner']);
     }
   };
 
@@ -266,7 +263,6 @@ test('system preset list renders categories, translated counts, and recovers fro
   assert.equal(pluginListManager.pluginList.children[1].textContent, 'T:ui.systemPresetsAvailable:2');
   assert.equal(pluginListManager.collapseManager.collapsedCategories.Tone, false);
   assert.ok(pluginListManager.calls.some(call => call[0] === 'setupPresetItemDragEvents' && call[1] === 'Warm'));
-  assert.deepEqual(pluginListManager.calls.filter(call => call[0] === 'hideLoadingSpinner'), [['hideLoadingSpinner']]);
 
   const errorCalls = [];
   const errorManager = new PresetManager(createPluginListManager());
@@ -283,7 +279,7 @@ test('system preset list renders categories, translated counts, and recovers fro
     await errorManager.initSystemPresetList();
   });
   assert.deepEqual(errorCalls, [['consoleError', 'Error initializing system preset list:', 'load failed']]);
-  assert.deepEqual(errorManager.pluginListManager.calls, [['hideLoadingSpinner']]);
+  assert.deepEqual(errorManager.pluginListManager.calls, []);
 
   const fallbackManager = new PresetManager(createPluginListManager());
   fallbackManager.presetManager = {
@@ -308,7 +304,6 @@ test('user preset list handles translated, fallback, empty, and error states', a
     await successManager.initUserPresetList();
   });
   assert.equal(successManager.pluginList.children[1].textContent, 'T:ui.userPresetsAvailable:2');
-  assert.deepEqual(successManager.pluginListManager.calls.filter(call => call[0] === 'hideLoadingSpinner'), [['hideLoadingSpinner']]);
 
   const fallbackManager = new PresetManager(createPluginListManager());
   fallbackManager.getUserPresetsData = async () => [];
@@ -339,7 +334,7 @@ test('user preset list handles translated, fallback, empty, and error states', a
     await errorManager.initUserPresetList();
   });
   assert.deepEqual(errorCalls, [['consoleError', 'Error initializing user preset list:', 'user presets failed']]);
-  assert.deepEqual(errorManager.pluginListManager.calls, [['hideLoadingSpinner']]);
+  assert.deepEqual(errorManager.pluginListManager.calls, []);
 });
 
 test('category rows and preset items wire collapse, drag, hover, and fallback tooltips', async () => {

@@ -261,16 +261,16 @@ test('loadPlugins loads resources, tracks progress, registers classes, and toler
   assert.ok(harness.calls.some(call => call[0] === 'consoleError' && String(call[1]).includes('Failed to initialize plugin Throwing')));
   assert.deepEqual(
     harness.calls.filter(call => call[0] === 'progress').map(call => call[1]),
-    [0, 9, 18, 27, 36, 45, 55, 64, 73, 82, 91, 100]
+    [0, 8, 15, 23, 31, 38, 46, 54, 62, 69, 77, 85, 92, 100]
   );
   assert.deepEqual(harness.appended.filter(element => element.tagName === 'SCRIPT')
     .slice(0, 5).map(element => element.src),
   [
     'plugins/plugin-base.js',
     'plugins/graph-point-interaction.js',
+    'plugins/frequency-axis.js',
     'plugins/spectrum-overlay.js',
-    'plugins/multires-spectrum.js',
-    'plugins/theme-palette.js'
+    'plugins/frequency-preview.js'
   ]);
   assert.ok(harness.appended.some(element => element.href === 'plugins/spectrum-overlay.css'));
 });

@@ -123,6 +123,7 @@ test('preload exposes electronAPI invoke and send wrappers', async () => {
     ['signalReadyForUpdates', [], ['renderer-ready-for-updates']],
     ['getUpdateInfo', [], ['get-update-info']],
     ['forceCheckForUpdates', [], ['force-check-for-updates']],
+    ['downloadUpdate', [], ['download-update']],
     ['loadConfig', [], ['load-config']],
     ['saveConfig', [{ language: 'ja' }], ['save-config', { language: 'ja' }]],
     ['setMiniPlayerMode', [{ enabled: true }], ['set-mini-player-mode', { enabled: true }]],

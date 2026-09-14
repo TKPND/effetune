@@ -14,43 +14,17 @@
     const sessionModes = new Map();
 
     const targets = new Map([
-        ['BandPassFilterPlugin', ['band-pass-filter-graph', 10, 40000]],
-        ['CombFilterPlugin', ['comb-filter-graph', 1, 40000]],
-        ['FifteenBandGEQPlugin', ['fifteen-band-geq-graph-container', 20, 20000]],
-        ['HiPassFilterPlugin', ['hi-pass-filter-graph', 10, 40000]],
-        ['LoPassFilterPlugin', ['lo-pass-filter-graph', 10, 40000]],
-        ['LoudnessEqualizerPlugin', ['loudness-equalizer-graph', 20, 20000]],
-        ['NarrowRangePlugin', ['narrow-range-graph', 20, 40000]],
-        ['TiltEQPlugin', ['tilt-eq-graph-container', 20, 20000]],
-        ['ToneControlPlugin', ['tone-control-graph-container', 20, 20000]],
-        ['ChannelDividerPlugin', ['channel-divider-graph', 10, 40000]],
-        ['FIRCrossoverPlugin', ['fir-crossover-graph', 10, 40000]],
-        ['FiveBandDynamicEQ', ['fbdyn-graph', 10, 40000]],
-        ['FiveBandPEQPlugin', ['five-band-peq-graph', 10, 40000, 20]],
-        ['FifteenBandPEQPlugin', ['fifteen-band-peq-graph', 10, 40000, 20]],
-        ['FiveBandFIRPEQPlugin', ['five-band-fir-peq-graph', 10, 40000, 20]],
-        ['RoomEqPlugin', ['room-eq-additional-eq-graph', 10, 40000, 20]],
-        ['EarphoneCableSimPlugin', ['earphone-cable-sim-graph', 10, 40000, 20]],
-        ['SubSynthPlugin', ['sub-synth-graph', 5, 1000]]
-    ].map(([name, [graph, minFreq, maxFreq, inset = 0]]) => [name, {
-        plotSelector: `.${graph}${inset ? '' : ' canvas'}`,
-        ...(inset ? { mountSelector: `.${graph}` } : {}),
-        minFreq, maxFreq, inset,
-        tickFontSize: inset ? 10 : 12,
-        axisFontSize: inset ? 10 : 14
+        'BandPassFilterPlugin', 'CombFilterPlugin', 'FifteenBandGEQPlugin',
+        'HiPassFilterPlugin', 'LoPassFilterPlugin', 'LoudnessEqualizerPlugin',
+        'NarrowRangePlugin', 'TiltEQPlugin', 'ToneControlPlugin', 'ChannelDividerPlugin',
+        'FIRCrossoverPlugin', 'FiveBandDynamicEQ', 'FiveBandPEQPlugin',
+        'FifteenBandPEQPlugin', 'FiveBandFIRPEQPlugin', 'RoomEqPlugin',
+        'EarphoneCableSimPlugin', 'SubSynthPlugin'
+    ].map(name => [name, {
+        ...window.FrequencyAxis.targets.get(name),
+        tickFontSize: window.FrequencyAxis.targets.get(name).inset ? 10 : 12,
+        axisFontSize: window.FrequencyAxis.targets.get(name).inset ? 10 : 14
     }]));
-
-    for (const [name, target] of targets) {
-        if (target.inset) {
-            target.axisCheck = {
-                ownerOf: name === 'RoomEqPlugin' ? plugin => plugin._additionalEqEditor : plugin => plugin,
-                freqToXName: 'freqToX'
-            };
-        } else {
-            target.axisCheck = [`Math.log10(${target.minFreq})`, `Math.log10(${target.maxFreq})`];
-        }
-    }
-    targets.get('FiveBandDynamicEQ').axisCheck = ['const minFreq = 10;', 'const maxFreq = 40000;'];
     targets.get('FiveBandDynamicEQ').axisFontSize = 13;
     for (const name of ['ChannelDividerPlugin', 'FIRCrossoverPlugin', 'SubSynthPlugin']) {
         targets.get(name).tickFontSize = 11;
@@ -159,6 +133,7 @@
             this.canvas = null;
             this.axisTitle = null;
             this.pending = null;
+            this.pendingFrames = [];
             this.inputLevels = null;
             this.levels = null;
             this.differenceX = null;
@@ -214,6 +189,7 @@
             if (this.active) this._post('setSpectrumTap', false);
             this.active = false;
             this.pending = null;
+            this.pendingFrames = [];
             this.node = node;
             if (this.enabled && node) {
                 node.port.addEventListener('message', this.onMessage);
@@ -232,6 +208,7 @@
             else sessionModes.delete(this.plugin.id);
             this._updateButton();
             this.pending = null;
+            this.pendingFrames = [];
             this.inputLevels = null;
             this.levels = null;
             if (mode !== MODE_COMPARE) this._releaseDifferenceWorkspace();
@@ -287,7 +264,7 @@
             if (active !== this.active) {
                 this._post('setSpectrumTap', active);
                 this.active = active;
-                if (!active) this.pending = null;
+                if (!active) { this.pending = null; this.pendingFrames = []; }
             }
             if (this.enabled && this.retryTimer === null) {
                 // PluginBase can swallow an already queued frame when its UI gate closes.
@@ -305,8 +282,7 @@
         }
 
         _isFrequencyView() {
-            return this.plugin.constructor.name !== 'RoomEqPlugin' ||
-                !this.plugin._responseView || this.plugin._responseView === 'frequency';
+            return !this.target.isActive || this.target.isActive(this.plugin);
         }
 
         _createCanvas() {
@@ -346,11 +322,33 @@
             if (!this.active || data.type !== 'spectrumOverlay' ||
                 data.spectrumPluginId !== this.plugin.id ||
                 (data.mode && data.mode !== this.mode)) return;
-            this.pending = data;
-            this.lastReceived = performance.now();
+            const hub = window.dspTelemetryHub;
+            if (this.visualSyncEpoch !== hub?.visualSyncEpoch) {
+                this.pendingFrames = [];
+                this.visualSyncEpoch = hub?.visualSyncEpoch;
+            }
+            const due = hub?.resolveDue(this.plugin.id, data.endFrame, 'spectrumOverlay');
+            if (Number.isFinite(due) && due > performance.now()) {
+                if (this.pendingFrames.length >= 256) this.pendingFrames.shift();
+                this.pendingFrames.push({ data, due });
+                this.pendingFrames.sort((a, b) => a.due - b.due);
+            } else {
+                this.pending = data;
+                this.lastReceived = performance.now();
+            }
         }
 
         _draw() {
+            if (this.visualSyncEpoch !== window.dspTelemetryHub?.visualSyncEpoch) {
+                this.pendingFrames = [];
+                this.visualSyncEpoch = window.dspTelemetryHub?.visualSyncEpoch;
+            }
+            const now = performance.now();
+            while (this.pendingFrames.length && this.pendingFrames[0].due <= now) {
+                const entry = this.pendingFrames.shift();
+                this.pending = entry.data;
+                this.lastReceived = entry.due;
+            }
             if (this.pending) {
                 const { inputBuffer, outputBuffer, buffer, bufferPosition, sampleRate } = this.pending;
                 this.inputLevels = inputBuffer
@@ -575,6 +573,7 @@
             this.axisTitle?.remove();
             this.axisTitle = null;
             this.pending = null;
+            this.pendingFrames = [];
             this.inputLevels = null;
             this.levels = null;
             this._releaseDifferenceWorkspace();
@@ -599,15 +598,7 @@
         TARGETS: targets,
         analyze,
         attach(plugin, uiRoot) {
-            const pipeline = window.pipelineManager?.audioManager?.pipeline || window.audioManager?.pipeline;
-            if (pipeline) {
-                const ids = new Set(pipeline.map(item => item.id));
-                for (const [id, instance] of instances) {
-                    if (!ids.has(id)) {
-                        instance.dispose();
-                    }
-                }
-            }
+            window.FrequencyAxis.pruneDetached(instances);
             instances.get(plugin.id)?.dispose();
             const target = targets.get(plugin.constructor.name);
             if (!target) return null;

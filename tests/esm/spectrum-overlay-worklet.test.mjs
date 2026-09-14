@@ -137,6 +137,7 @@ async function instantiateDspBinding() { return globalThis.__binding; }
     __binding: binding,
     console: { error() {}, log() {}, warn() {} },
     currentTime: 0,
+    currentFrame: 48000,
     performance: { now: () => 0 },
     sampleRate: 48000,
     registerProcessor(name, constructor) {
@@ -167,6 +168,7 @@ async function instantiateDspBinding() { return globalThis.__binding; }
 async function loadAnalyzer() {
   const source = await fs.readFile(overlayPath, 'utf8');
   const sandbox = { Float32Array, Map, Math, window: {} };
+  vm.runInNewContext(await fs.readFile(new URL('../../plugins/frequency-axis.js', import.meta.url), 'utf8'), sandbox);
   vm.runInNewContext(source, sandbox, { filename: overlayPath });
   return sandbox.window.SpectrumOverlay.analyze;
 }
@@ -286,6 +288,7 @@ test('After mode omits Before capture and live mode changes reset only the requi
   for (let block = 0; block < 16; block++) harness.process(sineBlock(block * BLOCK_SIZE));
   let message = spectrumMessages(harness).at(-1);
   assert.equal(message.message.mode, 'after');
+  assert.equal(message.message.endFrame, 48128);
   assert.equal('inputBuffer' in message.message, false);
   assert.equal(message.transfer.length, 1);
   assert.equal(message.transfer[0], message.message.outputBuffer.buffer);

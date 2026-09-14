@@ -1310,6 +1310,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             ? requestedMaxFrameCount
             : ET_DSP_DEFAULT_MAX_FRAMES;
         this.plugins = [];
+        this.frequencyPreview = { frequency: 0, gain: 0, targetGain: 0, phase: 0, buffers: [] };
         this.FADE_DURATION = 0.010; // 10ms fade for smoother transitions (Not used in process, but kept for context)
         this.currentFrame = 0;
         this.pluginProcessors = new Map();
@@ -1500,7 +1501,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                     if (data.enabled) this.spectrumTapRoute.add(data.pluginId);
                     else this.spectrumTapRoute.delete(data.pluginId);
                     // Visibility changes must never rebuild latency compensation.
-                    if (this.isSpectrumTapRoutingActive() !== wasActive) this.refreshDspPipeline();
+                    if (this.isSpectrumTapRoutingActive() !== wasActive) this.refreshDspPipeline(null, true);
                     break;
                 }
                 case 'setSpectrumTap':
@@ -1620,6 +1621,9 @@ class PluginProcessor extends AudioWorkletProcessor {
                         compensated: this.dspPipelineLatencyCompensated
                     });
                     break;
+                case 'setVisualSync':
+                    this.visualSyncEnabled = data.enabled === true;
+                    break;
                 case 'setOutputDelay':
                     this.setOutputDelay(data.samples);
                     this.port.postMessage({
@@ -1658,6 +1662,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                     this.resetConfiguredProcessingState(data.requestId);
                     break;
                 case 'reset':
+                    this.frequencyPreview.targetGain = 0;
                     this._invalidatePowerSkipForMutation();
                     this.clearAudioProcessingOverload();
                     ++this.dspExecutionGeneration;
@@ -1676,6 +1681,14 @@ class PluginProcessor extends AudioWorkletProcessor {
                     this.setOutputDelay(0);
                     this.publishDspPipelineLatency(0, false);
                     break;
+                case 'frequencyPreview': {
+                    const preview = this.frequencyPreview;
+                    const valid = Number.isFinite(data.frequency) && data.frequency > 0 &&
+                        data.frequency < globalThis.sampleRate * 0.5;
+                    if (valid) preview.frequency = data.frequency;
+                    preview.targetGain = valid ? 1 : 0;
+                    break;
+                }
                 case 'userActivity':
                     { // Block scope for const time
                         // Use performance.now() or a similar high-resolution timer if available and appropriate
@@ -1709,8 +1722,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                     const wasDisplayDspBypassed = this.powerPolicy.displayDspBypassed;
                     this.configurePowerPolicy(data);
                     if (this.powerPolicy.displayDspBypassed !== wasDisplayDspBypassed) {
-                        ++this.dspExecutionGeneration;
-                        this.refreshDspPipeline();
+                        this.refreshDisplayDspRouting();
                     }
                     break;
                 }
@@ -1735,8 +1747,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                         const bypassed = data.bypassed === true;
                         if (this.powerPolicy.displayDspBypassed !== bypassed) {
                             this.powerPolicy.displayDspBypassed = bypassed;
-                            ++this.dspExecutionGeneration;
-                            this.refreshDspPipeline();
+                            this.refreshDisplayDspRouting();
                         }
                     }
                     break;
@@ -3493,24 +3504,32 @@ class PluginProcessor extends AudioWorkletProcessor {
         return true;
     }
 
-    refreshDspPipeline(latencySnapshot = null) {
+    refreshDisplayDspRouting() {
+        ++this.dspExecutionGeneration;
+        if (this.spectrumTapRoute.size === 0 && !this.hasActiveDisplayDspExecutionBypass(true)) return;
+        this.refreshDspPipeline(null, true);
+    }
+
+    refreshDspPipeline(latencySnapshot = null, preserveLatencyHistory = false) {
         if (!(latencySnapshot instanceof Map)) {
             this.refreshJsFallbackAdmissions();
             latencySnapshot = this.captureExecutionLatencySnapshot();
         }
         this.dspPipelineReady = false;
         this.dspPipelinePluginCount = 0;
-        this.rebuildDspLatencyPlan(latencySnapshot);
+        this.rebuildDspLatencyPlan(latencySnapshot, preserveLatencyHistory);
         if (!this.dspLive || !this.dspBinding) {
             return;
         }
 
         if (this.masterBypass) return;
 
-        // The native pipeline cannot represent a processing bypass while
-        // preserving the plugin's channel and bus routing. Use the hybrid path
-        // while a visible-only analyzer is suppressed so its existing dry
-        // routing remains exact and every other WASM effect keeps running.
+        // Compensation history must keep one owner when display routing changes.
+        // Individual WASM effects still run on the hybrid path; graphs without
+        // compensation can switch paths without losing delay-line history.
+        if (this.dspLatencyPlan?.nodeActions.size || this.dspLatencyPlan?.outputDelayLine) return;
+
+        // Preserve analyzer dry channel and bus routing while display DSP is bypassed.
         if (this.hasActiveDisplayDspExecutionBypass()) return;
 
         const nodes = [];
@@ -3567,15 +3586,26 @@ class PluginProcessor extends AudioWorkletProcessor {
             ? samples
             : 0;
         const normalizedCompensated = !this.masterBypass && compensated === true;
+        const taps = {};
+        if (!this.masterBypass && this.dspLatencyPlan?.tapPositions) {
+            for (const [id, position] of Object.entries(this.dspLatencyPlan.tapPositions)) {
+                taps[id] = { input: Math.max(0, normalized - position.input),
+                    output: Math.max(0, normalized - position.output), execution: position.execution };
+            }
+        }
+        const tapsKey = JSON.stringify(taps);
         if (normalized === this.dspPipelineLatencySamples &&
-            normalizedCompensated === this.dspPipelineLatencyCompensated) return;
+            normalizedCompensated === this.dspPipelineLatencyCompensated &&
+            tapsKey === this.dspPipelineLatencyTapsKey) return;
+        this.dspPipelineLatencyTapsKey = tapsKey;
         this.dspPipelineLatencySamples = normalized;
         this.dspPipelineLatencyCompensated = normalizedCompensated;
         this.port.postMessage({
             type: 'dspLatency',
             samples: normalized,
             sampleRate: this.dspSampleRate || globalThis.sampleRate,
-            compensated: normalizedCompensated
+            compensated: normalizedCompensated,
+            taps
         });
     }
 
@@ -3583,11 +3613,12 @@ class PluginProcessor extends AudioWorkletProcessor {
         this.dspLatencyPlan = null;
     }
 
-    rebuildDspLatencyPlan(latencySnapshot = null) {
+    rebuildDspLatencyPlan(latencySnapshot = null, preserveLatencyHistory = false) {
         if (!(latencySnapshot instanceof Map)) {
             this.refreshJsFallbackAdmissions();
             latencySnapshot = this.captureExecutionLatencySnapshot();
         }
+        const previousPlan = preserveLatencyHistory ? this.dspLatencyPlan : null;
         this.resetDspLatencyPlan();
         this.executionLatencySnapshot = latencySnapshot;
         if (this.masterBypass) {
@@ -3608,6 +3639,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         const hasContent = Array.from({ length: 5 }, () => new Uint8Array(channelCount));
         hasContent[0].fill(1);
         const nodeActions = new Map();
+        const tapPositions = {};
         let insideSection = false;
         let sectionEnabled = true;
         for (const plugin of this.plugins) {
@@ -3635,6 +3667,8 @@ class PluginProcessor extends AudioWorkletProcessor {
                 ? 0
                 : (latencySnapshot.get(plugin.id) ?? 0);
 
+            let tapInput = 0;
+            let tapOutput = 0;
             const targets = new Uint8Array(channelCount);
             const delays = new Uint32Array(channelCount);
             let maximumDelay = 0;
@@ -3643,6 +3677,10 @@ class PluginProcessor extends AudioWorkletProcessor {
             for (let channel = firstChannel; channel < endChannel; channel++) {
                 const inputLatency = hasContent[inputBus][channel] ? latency[inputBus][channel] : 0;
                 const incomingLatency = inputLatency + pluginLatency;
+                if (hasContent[inputBus][channel]) {
+                    tapInput = inputLatency > tapInput ? inputLatency : tapInput;
+                    tapOutput = incomingLatency > tapOutput ? incomingLatency : tapOutput;
+                }
                 if (!Number.isSafeInteger(incomingLatency) || incomingLatency > 0xffffffff) {
                     console.error('DSP pipeline latency exceeds the supported sample range.');
                     this.publishDspPipelineLatency(0, false);
@@ -3673,11 +3711,18 @@ class PluginProcessor extends AudioWorkletProcessor {
                     maximumDelay = delay > maximumDelay ? delay : maximumDelay;
                 }
             }
+            tapPositions[plugin.id] = { input: tapInput, output: tapOutput,
+                execution: this.dspLive && this.wasmInstances.get(plugin.id)?.ready ? 'wasm' : 'js' };
             if (maximumDelay > 0) {
+                const previousAction = previousPlan?.nodeActions.get(plugin.id);
+                const unchanged = previousAction?.delays.length === channelCount &&
+                    delays.every((delay, channel) => delay === previousAction.delays[channel] &&
+                        targets[channel] === previousAction.targets[channel]);
                 nodeActions.set(plugin.id, {
                     targets,
                     delays,
-                    delayLine: new WorkletSampleDelayLine(channelCount, maximumDelay)
+                    delayLine: unchanged ? previousAction.delayLine :
+                        new WorkletSampleDelayLine(channelCount, maximumDelay)
                 });
             }
         }
@@ -3696,11 +3741,15 @@ class PluginProcessor extends AudioWorkletProcessor {
                 ? outputDelays[channel]
                 : maximumOutputDelay;
         }
+        const outputUnchanged = previousPlan?.outputDelays.length === channelCount &&
+            outputDelays.every((delay, channel) => delay === previousPlan.outputDelays[channel]);
         this.dspLatencyPlan = {
             nodeActions,
+            tapPositions,
             outputDelays,
             outputDelayLine: maximumOutputDelay > 0
-                ? new WorkletSampleDelayLine(channelCount, maximumOutputDelay)
+                ? (outputUnchanged ? previousPlan.outputDelayLine :
+                    new WorkletSampleDelayLine(channelCount, maximumOutputDelay))
                 : null,
             totalSamples
         };
@@ -3920,7 +3969,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             }
         }
         if (hasOutputSignal) this.audioLevelMonitoring.lastOutputActiveTime = time;
-        this.pumpDspTelemetry();
+        this.pumpDspTelemetry(blockSize);
     }
 
     runtimeFallback(plugin, error, stage = 'runtime') {
@@ -3956,7 +4005,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         this.port.postMessage({ type: 'dspCleanupNeeded' });
     }
 
-    pumpDspTelemetry() {
+    pumpDspTelemetry(blockSize = 128) {
         if (!this.dspLive || this.dspPacketPool.length === 0 ||
             (this.powerPolicy.enabled && !this.powerPolicy.uiTelemetryEnabled)) return;
         const packetView = this.dspPacketPool.pop();
@@ -3967,6 +4016,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                 const packet = packetView.buffer;
                 this.port.postMessage({
                     type: 'dspTelemetry',
+                    endFrame: globalThis.currentFrame + blockSize,
                     packet,
                     bytes,
                     droppedFrames: this.dspBinding.lastTelemetryDroppedFrames >>> 0
@@ -4169,8 +4219,8 @@ class PluginProcessor extends AudioWorkletProcessor {
         return this.powerPolicy.displayDspBypassed !== true && this.spectrumTapRoute.size !== 0;
     }
 
-    hasActiveDisplayDspExecutionBypass() {
-        if (this.powerPolicy.displayDspBypassed !== true) return false;
+    hasActiveDisplayDspExecutionBypass(bypassed = this.powerPolicy.displayDspBypassed) {
+        if (bypassed !== true) return false;
         let insideSection = false;
         let sectionEnabled = true;
         for (const plugin of this.plugins) {
@@ -4659,11 +4709,43 @@ class PluginProcessor extends AudioWorkletProcessor {
         return keepAlive;
     }
 
+    _mixFrequencyPreview(input) {
+        const preview = this.frequencyPreview;
+        if ((!preview.targetGain && !preview.gain) || !input?.[0]?.length) return input;
+        const frames = input[0].length;
+        if (preview.buffers.length !== input.length || preview.buffers[0]?.length !== frames) {
+            preview.buffers = input.map(() => new Float32Array(frames));
+        }
+        for (let channel = 0; channel < input.length; channel++) {
+            preview.buffers[channel].set(input[channel]);
+        }
+        const channels = input.length < 2 ? input.length : 2;
+        const phaseStep = 2 * Math.PI * preview.frequency / globalThis.sampleRate;
+        const gainStep = 1 / (globalThis.sampleRate * 0.005);
+        const amplitude = 0.251188643150958;
+        for (let frame = 0; frame < frames; frame++) {
+            if (preview.gain < preview.targetGain) {
+                preview.gain += gainStep;
+                if (preview.gain > preview.targetGain) preview.gain = preview.targetGain;
+            } else if (preview.gain > preview.targetGain) {
+                preview.gain -= gainStep;
+                if (preview.gain < preview.targetGain) preview.gain = preview.targetGain;
+            }
+            const sample = Math.sin(preview.phase) * amplitude * preview.gain;
+            for (let channel = 0; channel < channels; channel++) {
+                preview.buffers[channel][frame] += sample;
+            }
+            preview.phase += phaseStep;
+            if (preview.phase >= 2 * Math.PI) preview.phase -= 2 * Math.PI;
+        }
+        return preview.buffers;
+    }
+
     // Optimized pipeline processing method
     processPipeline(inputs, outputs, parameters) {
         this.flushDeferredDspAssetStages();
         this.pollDspAssetStates();
-        const input = inputs[0];
+        const input = this._mixFrequencyPreview(inputs[0]);
         const output = outputs[0];
 
         // --- 1. Basic Checks & Early Exit ---
@@ -5385,6 +5467,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                          const outputBuffer = Float32Array.from(spectrumTap.outputBuffer);
                          const message = {
                              type: 'spectrumOverlay',
+                             endFrame: globalThis.currentFrame + blockSize,
                              spectrumPluginId: plugin.id,
                              mode: spectrumTap.mode,
                              outputBuffer,
@@ -5511,7 +5594,8 @@ class PluginProcessor extends AudioWorkletProcessor {
                         packet.header.setUint16(14, 0, true);
                         packet.bytes.set(frame.bytes, 16);
                         port.postMessage({ type: 'dspTelemetry', packet: packet.bytes.buffer,
-                            bytes: 16 + frame.bytes.length, droppedFrames: 0 }, [packet.bytes.buffer]);
+                            bytes: 16 + frame.bytes.length, droppedFrames: 0,
+                            endFrame: globalThis.currentFrame + blockSize }, [packet.bytes.buffer]);
                     }
                     analysisContext.multiresSpectrum.release(analysisContext.multiresFrame);
                     result.measurements = null;
@@ -5531,19 +5615,19 @@ class PluginProcessor extends AudioWorkletProcessor {
                     // Drain queue first
                     if (messageQueue.size > 0) {
                         for (const [pluginId, data] of messageQueue) {
-                            port.postMessage({ type: 'processBuffer', pluginId, ...data });
+                            port.postMessage({ type: this.visualSyncEnabled ? 'processBufferSynced' : 'processBuffer', pluginId, ...data });
                             globalThis.MultiresSpectrum?.releaseMeasurements(data.measurements);
                         }
                         messageQueue.clear();
                     }
                     // Send current message immediately
-                    port.postMessage({ type: 'processBuffer', pluginId: plugin.id, measurements });
+                    port.postMessage({ type: this.visualSyncEnabled ? 'processBufferSynced' : 'processBuffer', pluginId: plugin.id, measurements, endFrame: globalThis.currentFrame + blockSize });
                     globalThis.MultiresSpectrum?.releaseMeasurements(measurements);
                     lastMessageTime = currentTimeMs; // Update last sent time
                 } else {
                     // Queue the message if interval hasn't passed
                     globalThis.MultiresSpectrum?.releaseMeasurements(messageQueue.get(plugin.id)?.measurements);
-                    messageQueue.set(plugin.id, { measurements });
+                    messageQueue.set(plugin.id, { measurements, endFrame: globalThis.currentFrame + blockSize });
                 }
                 // Clear measurements after handling to avoid re-sending.
                 result.measurements = null;
@@ -5621,7 +5705,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             audioLevelMonitoring.lastOutputActiveTime = time;
         }
 
-        this.pumpDspTelemetry();
+        this.pumpDspTelemetry(blockSize);
 
         if (powerEnabled) {
             this._finishPowerFullProcess(

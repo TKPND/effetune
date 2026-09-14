@@ -134,6 +134,7 @@ Las colecciones grandes se cargan por etapas desde el almacenamiento; la velocid
    - [Controlar efectos mediante MIDI, mando o teclado](controller-mapping.md)
 10. Haz clic en el botón Preajustes de efecto de cada efecto para guardar o aplicar ajustes solo para ese efecto
 11. Para ajustar un control deslizante con precisión, mantenga pulsada la tecla Shift mientras lo arrastra; el valor cambiará de unidad mínima en unidad mínima
+12. En los gráficos compatibles con eje de frecuencia o notas, arrastra a lo largo del eje para escuchar esa frecuencia como un tono sinusoidal de -12 dB a través de la cadena de efectos. Cuando aparece el teclado, la frecuencia se ajusta al semitono más cercano; si arrastras sobre una tecla, escucharás su nota
 
 ### Uso de Presets
 

@@ -26,12 +26,10 @@ contextManager.setPowerStateDelegate(controller);
 
 // This fixture isolates native autoplay and production gesture/queue coordination.
 // Actual worklet promotion, render proofs, and rollback run in the other power smokes.
-let commits = 0;
 controller._configureWorklets = () => {};
 controller.requestReconcile = () => Promise.resolve();
 controller.handlePageLifecycleEvent = () => {};
 controller._applyWorkletState = async (state, directive) => {
-  commits++;
   controller.effectiveState = state;
   controller.processingDirective = directive;
   return true;
@@ -118,7 +116,7 @@ const service = {
 const bridge = new CatalogPlaybackBridge({ uiManager, service });
 function render() {
   document.querySelector('#status').textContent = JSON.stringify({
-    stage, played, commits, attempts, events, loadFinishedWithActivation,
+    stage, played, attempts, events, loadFinishedWithActivation,
     contextState: audioContext.state, pending: stateManager.state.isPlaybackPending
   });
   console.debug(`[audio-gesture-smoke] ${document.querySelector('#status').textContent}`);

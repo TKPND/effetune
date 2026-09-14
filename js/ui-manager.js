@@ -358,7 +358,7 @@ export class UIManager {
                 }
             });
             this.audioManager.addEventListener('dspLatency', (data) => {
-                this.updatePipelineLatency(data?.samples);
+                this.updatePipelineLatency(data?.totalSamples);
             });
             this.audioManager.addEventListener('pipelineCpuUsage', (data) => {
                 this.updatePipelineCpuUsage(data?.average);
@@ -374,17 +374,17 @@ export class UIManager {
         );
     }
 
-    // Delegate to PluginListManager
-    showLoadingSpinner() {
-        this.pluginListManager.showLoadingSpinner();
-    }
-
-    hideLoadingSpinner() {
-        this.pluginListManager.hideLoadingSpinner();
-    }
-
     updateLoadingProgress(percent) {
-        this.pluginListManager.updateLoadingProgress(percent);
+        this.loadingProgressPercent = percent;
+        const progress = document.getElementById('startupProgress');
+        if (!progress) return;
+        const loadingPlugins = Number.isFinite(percent);
+        const value = loadingPlugins ? Math.round(Math.min(100, Math.max(0, percent))) : null;
+        const key = loadingPlugins ? 'status.loadingPlugins' : 'status.starting';
+        const translated = this.t(key, { percent: value });
+        progress.textContent = translated === key
+            ? (loadingPlugins ? `Loading effects… ${value}%` : 'Starting EffeTune…')
+            : translated;
     }
 
     initPluginList() {
@@ -1276,8 +1276,9 @@ export class UIManager {
      * Update UI elements with translated text
      */
     updateUITexts() {
+        this.updateLoadingProgress(this.loadingProgressPercent);
         this.updateSampleRateStatus();
-        this.updatePipelineLatency(this.audioManager?.dspPipelineLatencySamples ?? 0);
+        this.updatePipelineLatency(this.audioManager.getTotalPipelineLatencySamples());
         this.updatePipelineCpuUsage(this.pipelineCpuAveragePercent);
 
         // Update static UI elements

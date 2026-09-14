@@ -1,3 +1,5 @@
+import { VISUAL_SYNC_QUEUE_LIMIT } from './visual-sync.js';
+
 export const TELEMETRY_HEADER_BYTES = 16;
 
 export const TelemetryFrameType = Object.freeze({
@@ -114,9 +116,19 @@ export function parseTelemetryPacket(packet, bytes, onFrame = null) {
 }
 
 export class TelemetryHub {
-    constructor({ port = null, warning = defaultWarning } = {}) {
+    constructor({ port = null, warning = defaultWarning, now = () => performance.now(),
+        schedule = (callback, delay) => globalThis.setTimeout(callback, delay),
+        cancel = timer => globalThis.clearTimeout(timer), queueLimit = VISUAL_SYNC_QUEUE_LIMIT } = {}) {
         this.port = port;
         this.warning = warning;
+        this.now = now;
+        this.schedule = schedule;
+        this.cancel = cancel;
+        this.queueLimit = queueLimit;
+        this.visualSyncResolver = null;
+        this.visualSyncEpoch = 0;
+        this.visualSyncQueue = [];
+        this.visualSyncTimer = null;
         this.subscribers = new Map();
         this.stats = {
             packets: 0,
@@ -125,11 +137,13 @@ export class TelemetryHub {
             framesWithDropFlag: 0,
             coreDroppedFrames: 0,
             subscriberErrors: 0,
-            returnErrors: 0
+            returnErrors: 0,
+            visualSyncDropped: 0
         };
     }
 
     setPort(port) {
+        this.clearVisualSyncQueue();
         this.port = port;
     }
 
@@ -163,6 +177,68 @@ export class TelemetryHub {
 
     clearSubscriptions() {
         this.subscribers.clear();
+        this.clearVisualSyncQueue();
+    }
+
+    clearVisualSyncQueue() {
+        this.visualSyncEpoch++;
+        this.onVisualSyncReset?.();
+        this.visualSyncQueue.length = 0;
+        if (this.visualSyncTimer !== null) this.cancel(this.visualSyncTimer);
+        this.visualSyncTimer = null;
+    }
+
+    setVisualSyncResolver(resolver) {
+        this.clearVisualSyncQueue();
+        this.visualSyncResolver = resolver;
+    }
+
+    resolveDue(tapId, endFrame, ruleKey = tapId) {
+        return this.visualSyncResolver?.(tapId, endFrame, ruleKey) ?? null;
+    }
+
+    _scheduleVisualSync() {
+        if (this.visualSyncTimer !== null) this.cancel(this.visualSyncTimer);
+        this.visualSyncTimer = null;
+        if (!this.visualSyncQueue.length) return;
+        this.visualSyncQueue.sort((a, b) => a.due - b.due);
+        this.visualSyncTimer = this.schedule(() => {
+            this.visualSyncTimer = null;
+            this._dispatchDueVisualSync(this.now());
+            this._scheduleVisualSync();
+        }, Math.max(0, this.visualSyncQueue[0].due - this.now()));
+    }
+
+    _dispatchDueVisualSync(now) {
+        while (this.visualSyncQueue.length && this.visualSyncQueue[0].due <= now) {
+            const entry = this.visualSyncQueue.shift();
+            this._dispatch(entry.frame, entry.sourcePort);
+        }
+    }
+
+    _receive(frame, sourcePort, endFrame) {
+        const highQuality = frame.formatVersion === 2 &&
+            (frame.frameType === TelemetryFrameType.TAP_SPECTRUM ||
+                frame.frameType === TelemetryFrameType.TAP_SPECTROGRAM_COL);
+        if (highQuality && sourcePort !== this.port) return;
+        const due = this.resolveDue(frame.tapId, endFrame);
+        const now = this.now();
+        if (!Number.isFinite(due) || due <= now) {
+            if (this.visualSyncQueue[0]?.due <= now) {
+                this._dispatchDueVisualSync(now);
+                this._scheduleVisualSync();
+            }
+            this._dispatch(frame, sourcePort);
+            return;
+        }
+        const payload = new DataView(frame.payload.buffer.slice(frame.payload.byteOffset,
+            frame.payload.byteOffset + frame.payload.byteLength));
+        if (this.visualSyncQueue.length >= this.queueLimit) {
+            this.visualSyncQueue.shift();
+            this.stats.visualSyncDropped++;
+        }
+        this.visualSyncQueue.push({ due, sourcePort, frame: Object.freeze({ ...frame, payload }) });
+        this._scheduleVisualSync();
     }
 
     _dispatch(frame, sourcePort) {
@@ -205,7 +281,10 @@ export class TelemetryHub {
             this.stats.coreDroppedFrames += message.droppedFrames;
         }
         try {
-            const result = parseTelemetryPacket(packet, message.bytes, frame => this._dispatch(frame, sourcePort));
+            const result = parseTelemetryPacket(packet, message.bytes, frame => {
+                if (this.visualSyncResolver) this._receive(frame, sourcePort, message.endFrame);
+                else this._dispatch(frame, sourcePort);
+            });
             if (!result.ok) {
                 this.stats.malformedPackets += 1;
                 this.warning(`[dsp-wasm] ignored malformed telemetry packet: ${result.error}`);

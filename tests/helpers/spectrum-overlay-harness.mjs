@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 export const overlaySource = fs.readFileSync(new URL('../../plugins/spectrum-overlay.js', import.meta.url), 'utf8');
+export const frequencyAxisSource = fs.readFileSync(new URL('../../plugins/frequency-axis.js', import.meta.url), 'utf8');
 
 export function loadOverlay(overrides = {}) {
   const context = { window: {}, console, ...overrides };
+  vm.runInNewContext(frequencyAxisSource, context);
   vm.runInNewContext(overlaySource, context);
   return context.window.SpectrumOverlay;
 }

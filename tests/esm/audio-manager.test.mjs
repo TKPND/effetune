@@ -8,6 +8,46 @@ import { MIC_DENIED_PREFIX } from '../../js/audio/audio-io-manager.js';
 import { PipelineWorkletSync } from '../../js/ui/pipeline/pipeline-worklet-sync.js';
 import { flushMicrotasks, withGlobals } from '../helpers/global-test-utils.mjs';
 
+test('frequency preview holds one force-active lease through stop ramps and rapid restarts', async () => {
+  const messages = [[], []];
+  const nodes = messages.map(list => ({ port: { postMessage: message => list.push(message) } }));
+  const leases = [];
+  const timers = new Map();
+  let timerId = 0;
+  const manager = Object.assign(Object.create(AudioManager.prototype), {
+    _getActivePowerWorklets: () => nodes,
+    powerPolicyController: {
+      started: true,
+      acquireLease(reason, options) {
+        const lease = { reason, options, released: false };
+        leases.push(lease);
+        return () => { lease.released = true; };
+      }
+    }
+  });
+  await withGlobals({
+    setTimeout(fn) { timers.set(++timerId, fn); return timerId; },
+    clearTimeout(id) { timers.delete(id); }
+  }, async () => {
+    manager.setFrequencyPreview(440);
+    manager.setFrequencyPreview(880);
+    assert.equal(leases.length, 1);
+    assert.deepEqual(leases[0], { reason: 'frequency-preview', options: { mode: 'force-active' }, released: false });
+    manager.setFrequencyPreview(null);
+    assert.equal(leases[0].released, false);
+    assert.equal(timers.size, 1);
+    manager.setFrequencyPreview(220);
+    assert.equal(timers.size, 0);
+    assert.equal(leases.length, 1);
+    manager.setFrequencyPreview(null);
+    for (const callback of timers.values()) callback();
+    assert.equal(leases[0].released, true);
+    assert.equal(manager._releaseFrequencyPreviewLease, null);
+    assert.deepEqual(messages[0], messages[1]);
+    assert.deepEqual(messages[0].map(message => message.frequency), [440, 880, null, 220, null]);
+  });
+});
+
 function nodeName(node) {
   return node?.name ?? node?.constructor?.name ?? 'target';
 }

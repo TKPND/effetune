@@ -258,6 +258,9 @@ input[type="checkbox"] + label::before {
 
 .update-notification {
     color: var(--et-accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 14px;
     margin-left: 10px;
     transition: color 0.2s ease;
@@ -271,6 +274,11 @@ input[type="checkbox"] + label::before {
     cursor: pointer;
     font: inherit;
     padding: 3px 7px;
+}
+
+.update-release-link:disabled {
+    cursor: wait;
+    opacity: 0.65;
 }
 
 .message-display {
@@ -326,7 +334,7 @@ body.layout-mobile .plugin-list-shell {
     position: sticky; /* Allow vertical positioning */
     top: 20px; /* Initial position from top */
     min-width: 200px;
-    min-height: 200px; /* Ensure minimum height for spinner positioning */
+    min-height: 200px;
     max-height: calc(100vh - 40px); /* Limit height */
     overflow-y: auto; /* Enable vertical scrolling */
     overflow-x: hidden; /* Hide horizontal scrollbar */
@@ -626,23 +634,6 @@ html[data-theme="mint"] .plugin-list {
     border-radius: 50%;
     animation: spin 1s linear infinite;
     z-index: 1000;
-}
-
-.loading-spinner-progress {
-    display: none;
-    justify-content: center;
-    align-items: center;
-    position: absolute;
-    top: calc(50% - 21px);
-    left: calc(50% - 18px);
-    width: 50px;
-    height: 50px;
-    font-size: 12px;
-    font-weight: bold;
-    color: var(--et-surface-47);
-    z-index: 1001;
-    text-align: center;
-    pointer-events: none;
 }
 
 /* Pipeline */
