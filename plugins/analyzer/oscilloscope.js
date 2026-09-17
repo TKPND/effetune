@@ -219,7 +219,7 @@ class OscilloscopePlugin extends PluginBase {
           this.updateParameters();
         },
         // The widget is in ms while the model holds seconds.
-        'ms', 'displayTime', (value) => value * 1000
+        'ms', 'displayTime', (value) => value * 1000, true
       ));
   
       // --- Trigger Mode Control (Auto/Normal) ---
@@ -324,7 +324,7 @@ class OscilloscopePlugin extends PluginBase {
           this.updateParameters();
         },
         // The widget is in ms while the model holds seconds.
-        'ms', 'holdoff', (value) => value * 1000
+        'ms', 'holdoff', (value) => value * 1000, true
       ));
   
       // --- Display Level Control (dB) ---

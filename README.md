@@ -7,6 +7,8 @@
   <install class="button button-secondary"><a href="https://effetune.frieve.com/effetune.html">Install PWA version</a></install>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">Download Desktop App</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">Download VST Version</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">Install Chrome Extension</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">Install Edge Extension</a>
   <a class="button button-secondary" href="dsp/">DSP Library</a>
 </div>
 
@@ -142,6 +144,7 @@ Large collections load in stages from storage; scanning and loading speed depend
    - [Control effect parameters with MIDI, gamepads, or the keyboard](docs/controller-mapping.md)
 10. Click an effect's Effect Presets button to save or apply settings for that effect only
 11. For fine slider adjustment, hold Shift while dragging; the value changes by one minimum step at a time
+   - For sliders with both negative and positive values, the fill extends from 0 to the current value. Ratio sliders use 1.0 as their starting point.
 12. On supported frequency and note graphs, drag along the graph's axis to preview that frequency as a -12 dB sine tone through the effect chain. Piano-key displays snap to the nearest semitone; dragging over a key previews that key's pitch
 
 ### Using Presets
@@ -419,6 +422,7 @@ If the problem persists, report it through [GitHub Issues](https://github.com/Fr
 | Spatial   | MS Matrix | Converts between stereo and Mid/Side for center/ambience adjustments | [Details](docs/plugins/spatial.md#ms-matrix) |
 | Spatial   | Multiband Balance | 5-band frequency-dependent stereo balance control | [Details](docs/plugins/spatial.md#multiband-balance) |
 | Spatial   | Phase Select EQ | Boosts or cuts frequency components selected by L/R phase difference and Balance | [Details](docs/plugins/spatial.md#phase-select-eq) |
+| Spatial   | Spatial Mapper | Separates direct, diffuse, and residual sound for flexible multichannel routing | [Details](docs/plugins/spatial.md#spatial-mapper) |
 | Spatial   | Stereo Blend | Controls stereo width from mono to enhanced stereo | [Details](docs/plugins/spatial.md#stereo-blend) |
 | Others    | Oscillator | Test tone and noise generator for checking speakers/headphones | [Details](docs/plugins/others.md#oscillator) |
 | Control   | Section | Groups effects so a whole section can be bypassed or restored | [Details](docs/plugins/control.md) |

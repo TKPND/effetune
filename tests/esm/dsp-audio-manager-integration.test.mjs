@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { TelemetryHub } from '../../js/audio/telemetry-hub.js';
 import { AudioManager } from '../../js/audio-manager.js';
 import { AudioContextManager } from '../../js/audio/audio-context-manager.js';
 import { SHIPPED_ENABLED_TYPES } from '../../js/audio/dsp-rollout.js';
@@ -4585,7 +4586,7 @@ test('visual sync composes DBT delay without adding fades or duplicating pending
     const postCount = main.port.messages.length;
     context.outputLatency += 1 / 48000;
     context.getOutputTimestamp = () => ({ contextTime: 1, performanceTime: 1400 });
-    assert.equal(manager._resolveVisualSyncDue(7, 48000), 1390);
+    assert.equal(manager._resolveVisualSyncDue(7, 48000), 990);
     assert.equal(await manager._updateVisualSyncDelay(), true);
     assert.equal(main.port.messages.length, postCount);
     assert.equal(manager.visualSyncDelayFrames, 3516);
@@ -4812,5 +4813,29 @@ test('visual sync resumes from acknowledged delay after configuration changes an
     await reset;
     assert.equal(manager.getTotalPipelineLatencySamples(), 7712);
     assert.equal(manager._resolveVisualSyncDue(7, 48000), 990);
+  });
+});
+
+
+test('Visual Sync reserves the telemetry interval and forwards recorded capture timing', async () => {
+  await withGlobals({ window: {} }, async () => {
+    const manager = createManager();
+    const main = createNode('main');
+    const { context } = configureParallelManager(manager, main);
+    context.sampleRate = 48000;
+    context.outputLatency = 0.01;
+    manager.telemetryHub = new TelemetryHub();
+    manager.pipelineA = manager.pipeline = [{ id: 7, enabled: true,
+      constructor: { name: 'NoteSpectrogramPlugin' }, getParameters: () => ({}) }];
+    manager.dspLatencyTaps = { 7: { input: 0, output: 0, execution: 'wasm', instanceId: 100 } };
+    await manager.setVisualSyncEnabled(true);
+    assert.equal(manager.visualSyncDelayFrames, 9600);
+    const payload = new DataView(new ArrayBuffer(3548));
+    payload.setFloat32(0, 48000, true);
+    payload.setFloat32(4, 1, true);
+    const frame = { frameType: 24, formatVersion: 3, payload };
+    const due = manager.telemetryHub.resolveDue(7, 60000, 7, frame, 48000);
+    assert.ok(Math.abs(due - (2000 + (9600 - 8192) / 48)) < 1e-8);
+    await manager.setVisualSyncEnabled(false);
   });
 });

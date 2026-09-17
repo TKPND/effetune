@@ -1518,8 +1518,8 @@ class VinylSimulatorPlugin extends PluginBase {
             {
                 id: 'cutting', label: 'Cutting', create: content => {
                     content.appendChild(this.createParameterControl('Cut Level', -20, 20, 0.1, this.lv, v => this.setParameters({ lv: v }), 'dB', 'lv'));
-                    content.appendChild(this.createParameterControl('HF Cutoff', 6000, 24000, 100, this.hf, v => this.setParameters({ hf: v }), 'Hz', 'hf'));
-                    content.appendChild(this.createParameterControl('Bass Mono Below', 50, 1000, 1, this.mb, v => this.setParameters({ mb: v }), 'Hz', 'mb'));
+                    content.appendChild(this.createParameterControl('HF Cutoff', 6000, 24000, 100, this.hf, v => this.setParameters({ hf: v }), 'Hz', 'hf', null, true));
+                    content.appendChild(this.createParameterControl('Bass Mono Below', 50, 1000, 1, this.mb, v => this.setParameters({ mb: v }), 'Hz', 'mb', null, true));
                     content.appendChild(this.createParameterControl('Side Mix', 0, 100, 1, this.sm, v => this.setParameters({ sm: v }), '%', 'sm'));
                 }
             },

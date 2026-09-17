@@ -3330,6 +3330,11 @@ h1 {
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--et-accent) 24%, transparent), 0 0 12px color-mix(in srgb, var(--et-accent) 18%, transparent);
 }
 
+input[type="range"] {
+    --et-range-fill-start: min(var(--et-range-origin, 0%), var(--et-range-fill, 0%));
+    --et-range-fill-end: max(var(--et-range-origin, 0%), var(--et-range-fill, 0%));
+}
+
 input[type="range"]:not(.vertical-slider) {
     -webkit-appearance: none;
     appearance: none;
@@ -3347,7 +3352,8 @@ input[type="range"]:not(.vertical-slider)::-webkit-slider-runnable-track {
     height: 6px;
     border: 1px solid color-mix(in srgb, var(--et-text-primary) 7%, transparent);
     border-radius: 999px;
-    background: linear-gradient(90deg, color-mix(in srgb, var(--et-accent) 82%, transparent) 0 var(--et-range-fill, 0%), transparent var(--et-range-fill, 0%) 100%), linear-gradient(180deg, var(--et-surface-11), var(--et-surface-5));
+    background: linear-gradient(90deg, transparent 0 var(--et-range-fill-start), color-mix(in srgb, var(--et-accent) 82%, transparent) var(--et-range-fill-start) var(--et-range-fill-end), transparent var(--et-range-fill-end) 100%), linear-gradient(180deg, var(--et-surface-11), var(--et-surface-5));
+    background-repeat: no-repeat;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.54), inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
@@ -3382,7 +3388,8 @@ input[type="range"]:not(.vertical-slider)::-moz-range-track {
     height: 6px;
     border: 1px solid color-mix(in srgb, var(--et-text-primary) 7%, transparent);
     border-radius: 999px;
-    background: linear-gradient(180deg, var(--et-surface-11), var(--et-surface-5));
+    background: linear-gradient(90deg, transparent 0 var(--et-range-fill-start), color-mix(in srgb, var(--et-accent) 82%, transparent) var(--et-range-fill-start) var(--et-range-fill-end), transparent var(--et-range-fill-end) 100%), linear-gradient(180deg, var(--et-surface-11), var(--et-surface-5));
+    background-repeat: no-repeat;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.54), inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
@@ -3394,8 +3401,8 @@ input[type="range"]:not(.vertical-slider):focus-visible::-moz-range-track {
 input[type="range"]:not(.vertical-slider)::-moz-range-progress {
     height: 6px;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--et-accent-pressed), var(--et-accent-hover));
-    box-shadow: 0 0 12px color-mix(in srgb, var(--et-accent) 24%, transparent);
+    background: transparent;
+    box-shadow: none;
 }
 
 input[type="range"]:not(.vertical-slider)::-moz-range-thumb {
@@ -3428,7 +3435,8 @@ input[type="range"].vertical-slider::-webkit-slider-runnable-track {
     width: 6px;
     border: 1px solid color-mix(in srgb, var(--et-text-primary) 7%, transparent);
     border-radius: 999px;
-    background: linear-gradient(0deg, color-mix(in srgb, var(--et-accent) 82%, transparent) 0 var(--et-range-fill, 0%), transparent var(--et-range-fill, 0%) 100%), linear-gradient(90deg, var(--et-surface-11), var(--et-surface-5));
+    background: linear-gradient(0deg, transparent 0 var(--et-range-fill-start), color-mix(in srgb, var(--et-accent) 82%, transparent) var(--et-range-fill-start) var(--et-range-fill-end), transparent var(--et-range-fill-end) 100%), linear-gradient(90deg, var(--et-surface-11), var(--et-surface-5));
+    background-repeat: no-repeat;
     box-shadow: inset 1px 0 3px rgba(0, 0, 0, 0.54), inset 1px 0 0 rgba(255, 255, 255, 0.055);
 }
 
@@ -3463,7 +3471,8 @@ input[type="range"].vertical-slider::-moz-range-track {
     width: 6px;
     border: 1px solid color-mix(in srgb, var(--et-text-primary) 7%, transparent);
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--et-surface-11), var(--et-surface-5));
+    background: linear-gradient(0deg, transparent 0 var(--et-range-fill-start), color-mix(in srgb, var(--et-accent) 82%, transparent) var(--et-range-fill-start) var(--et-range-fill-end), transparent var(--et-range-fill-end) 100%), linear-gradient(90deg, var(--et-surface-11), var(--et-surface-5));
+    background-repeat: no-repeat;
     box-shadow: inset 1px 0 3px rgba(0, 0, 0, 0.54), inset 1px 0 0 rgba(255, 255, 255, 0.055);
 }
 
@@ -3475,8 +3484,8 @@ input[type="range"].vertical-slider:focus-visible::-moz-range-track {
 input[type="range"].vertical-slider::-moz-range-progress {
     width: 6px;
     border-radius: 999px;
-    background: linear-gradient(0deg, var(--et-accent-pressed), var(--et-accent-hover));
-    box-shadow: 0 0 12px color-mix(in srgb, var(--et-accent) 24%, transparent);
+    background: transparent;
+    box-shadow: none;
 }
 
 input[type="range"].vertical-slider::-moz-range-thumb {
@@ -3872,7 +3881,8 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .modal-resonator-tabs,
     .mbs-band-tabs,
     .tube-simulator-tabs,
-    .phase-select-eq-region-tabs
+    .phase-select-eq-region-tabs,
+    .spatial-mapper-tabs
 ) {
     display: flex;
     flex-wrap: wrap;
@@ -3894,7 +3904,8 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .modal-resonator-tab,
     .mbs-band-tab,
     .tube-simulator-tab,
-    .phase-select-eq-region-tab
+    .phase-select-eq-region-tab,
+    .spatial-mapper-tab
 ) {
     box-sizing: border-box;
     display: inline-flex;
@@ -3934,7 +3945,8 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .modal-resonator-tab,
     .mbs-band-tab,
     .tube-simulator-tab,
-    .phase-select-eq-region-tab
+    .phase-select-eq-region-tab,
+    .spatial-mapper-tab
 ):hover {
     background: var(--et-control-hover-gradient);
     border-color: var(--et-surface-38);
@@ -3955,7 +3967,8 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .modal-resonator-tab,
     .mbs-band-tab,
     .tube-simulator-tab,
-    .phase-select-eq-region-tab
+    .phase-select-eq-region-tab,
+    .spatial-mapper-tab
 ):is(.active, [aria-selected="true"]) {
     background: var(--et-control-active-gradient);
     border-color: var(--et-surface-38);
@@ -3976,7 +3989,8 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .modal-resonator-tab,
     .mbs-band-tab,
     .tube-simulator-tab,
-    .phase-select-eq-region-tab
+    .phase-select-eq-region-tab,
+    .spatial-mapper-tab
 ).disabled {
     opacity: 0.6;
 }
@@ -3995,7 +4009,8 @@ body.layout-mobile { --et-effect-tab-height: var(--et-mobile-control-height); }
     .modal-resonator-tab,
     .mbs-band-tab,
     .tube-simulator-tab,
-    .phase-select-eq-region-tab
+    .phase-select-eq-region-tab,
+    .spatial-mapper-tab
 ):focus-visible {
     outline: none;
     box-shadow: var(--et-focus-ring);

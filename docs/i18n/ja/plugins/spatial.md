@@ -1,6 +1,6 @@
 ---
 title: "空間オーディオプラグイン - EffeTune"
-description: "Crossfeed Filter、Crosstalk Cancellation、MS Matrix、Multiband Balance、Phase Select EQ、Stereo Blendなどの空間オーディオプラグイン。"
+description: "Crossfeed Filter、Crosstalk Cancellation、MS Matrix、Multiband Balance、Phase Select EQ、Spatial Mapper、Stereo Blendなどの空間オーディオプラグイン。"
 lang: ja
 ---
 
@@ -15,6 +15,7 @@ lang: ja
 - [MS Matrix](#ms-matrix) - 高度なステレオ調整チェーン向けに、ステレオをMid/Sideへ変換し、また戻します
 - [Multiband Balance](#multiband-balance) - 5バンドの周波数依存ステレオバランス制御
 - [Phase Select EQ](#phase-select-eq) - L/R位相差とBalanceで選んだ周波数成分をブーストまたはカット
+- [Spatial Mapper](#spatial-mapper) - 音をDirect、Diffuse、Residualに分け、チャンネル間で個別にルーティング
 - [Stereo Blend](#stereo-blend) - 極性反転したステレオからモノラル、拡張ステレオまでステレオ幅を制御
 
 ## Crossfeed Filter
@@ -345,6 +346,63 @@ Balanceのグリッドは左右の比率で表示されます。レベル差と�
 - **Low Frequency Transition / High Frequency Transition**: 周波数Coreの下側と上側で、効果が0～100%の間を移行する範囲を設定します。
 - **Low Phase Transition / High Phase Transition**: 0°側と180°側で、効果が0～100%の間を移行する範囲を設定します。
 マップ上のハンドル、スライダー、数値入力は同じ値を編集します。マウスでもタッチ操作でも、選択中のBandは外枠内のドラッグでBand全体が移動し、Coreの辺または隅のドラッグでサイズが変わり、外側の辺のハンドルで各Transitionを変更できます。低位相側のハンドルは中央を越えず、Core Low Phaseは0°、Low Phase Transitionは最大幅で停止します。Core Low Phaseがちょうど0°のときは中央のハンドルを最初に左右どちらへも動かせますが、いったん片側へ動かすと、そのドラッグが終わるまで同じ側に固定されます。
+
+## Spatial Mapper
+
+Spatial Mapperは、周波数帯域ごとに入力チャンネル間の関係を解析し、音をDirect、Diffuse、Residualの3成分へ連続的に分けて、現在のチャンネルバス内で成分ごとにルーティングします。輪郭のはっきりした音を前方に保つ、残響をサラウンドやハイトチャンネルへ送る、センター成分やアンビエンスを抽出する、ステレオ幅を変える、といった用途に使えます。既定の**Transparent**プリセットは元のチャンネル配置を保ちます。
+
+**Direct**は各帯域で支配的な相関の強い音、**Diffuse**は相関が弱く広がった音、**Residual**はどちらにも完全には割り当てられない音です。成分は連続的に分かれるため、設定を変えても音が経路間で急に切り替わることはありません。
+
+Spatial Mapperでは周波数解析による遅延が発生します。EffeTuneはこの遅延を**Total Delay**に含めて表示します。リアルタイムモニターや映像との同期では、この値を確認してください。
+
+### システムプリセット
+
+エフェクトのヘッダーにある**Effect Presets**から、用途に合う初期設定を選べます。
+
+- **Transparent** - 元のチャンネル配置を保つ既定設定です。
+- **Stereo Enhance** - 輪郭のはっきりした音と拡散音の配置を保ちながら、Residual経路でステレオを広げます。
+- **Center Extract** - Direct成分を3番目のチャンネルへ送ります。3チャンネル以上のバスで使用します。
+- **5.1 Upmix** - ステレオをL、R、C、LFE、Ls、Rsの順に配置します。LFEは空のままで、6チャンネル以上のバスが必要です。
+- **7.1.4 Upmix** - ステレオをL、R、C、LFE、Ls、Rs、Lb、Rb、Ltf、Rtf、Ltb、Rtbの順に配置します。LFEは空のままで、12チャンネル以上のバスが必要です。
+- **Ambience Extract** - Diffuse成分だけを残し、DirectとResidualを抑えます。
+
+### ルーティンググリッドの見方と操作
+
+**Component Routing**で**Direct**、**Diffuse**、**Residual**のいずれかのタブを選びます。列は解析する入力チャンネル、行は出力バスのチャンネルです。各セルの小さなスライダーか数値入力欄で、-1.00〜+1.00のリニアゲインを0.01刻みで調整します。0は接続なし、+1.00は正極性でそのまま送出、負値は極性を反転して送出することを表し、負値は赤色で表示されます。中間の値では比例してレベルが下がります。
+
+経路が設定された出力行では、元のバスチャンネルがマッピング結果に置き換わります。**Input Channels**の範囲内にある出力チャンネルは、どの成分もその行へ送られなければ無音になります。範囲外でどの成分も書き込まないチャンネルは、遅延をそろえたまま通過します。
+
+### 音質調整ガイド
+
+1. **中央の音を大きく動かさずにステレオを広げる**
+   - **Stereo Enhance**から始めます。
+   - 広がりの対象をResidualへ多く残したいときだけ、**Directness**または**Diffuse Extraction**を下げます。
+   - **Transparent**と比較し、中央定位が弱くなる、またはモノラル再生で音が失われすぎる場合は変化量を抑えます。
+2. **ステレオからセンターチャンネルを作る**
+   - 3チャンネル以上のバスで**Center Extract**を選びます。
+   - **Directness**と**Separation**を上げると、相関の強い音がDirectへ集まりやすくなります。
+   - ボーカルなど中央の音が安定し、広がった残響が主に左右へ残るよう調整します。
+3. **ステレオをサラウンドやハイトチャンネルへ広げる**
+   - バスを上記のチャンネル順に設定し、**5.1 Upmix**または**7.1.4 Upmix**を選びます。
+   - **Diffuse Extraction**で、サラウンドやハイトへ送る広がった音の量を調整します。
+   - プリセットはLFE信号を生成しません。必要なら別途ベースマネジメントを行います。
+4. **アンビエンスを抽出する**
+   - **Ambience Extract**から始めます。
+   - **Diffuse Extraction**を上げて拡散音の抽出を強め、**Phase Sensitivity**で逆位相がDirect判定をどの程度弱めるかを調整します。
+
+### パラメーター
+
+- **Input Channels**（1〜16）：バスの先頭から何チャンネルを解析するかを設定します。バス幅の方が小さい場合は、存在するチャンネルだけを使います。
+- **Analysis Bands**（8、16、24、32、48）：空間解析の周波数分解能を設定します。帯域数を増やすと周波数による定位の違いを細かく追えますが、処理負荷も増えます。既定値は24です。
+- **Directness**（0〜100%）：支配的で相関の強い音をDirectへ割り当てる強さを設定します。値を上げるほどDirect抽出が強くなります。
+- **Separation**（0〜100%）：音をDirectとDiffuseへ割り当てる選別の強さを設定します。値を上げるほど曖昧な音がResidualへ残り、経路間の違いが強くなります。
+- **Diffuse Extraction**（0〜100%）：相関の弱い音をDiffuseへ割り当てる量を設定します。値を上げるほど、広がった残響がDiffuse経路へ多く送られます。
+- **Phase Sensitivity**（0〜100%）：チャンネル間の逆位相によってDirect判定をどの程度弱めるかを設定します。低い値では、極性が反対でも相関の強い音を通常の相関音に近く扱います。高い値では、その音がDirect以外に残りやすくなります。逆位相の音を自動的にリアへ送る設定ではありません。
+- **Temporal Smoothing**（0〜100%、Fast〜Stable）：解析とルーティングが変化へ追従する速さを設定します。低い値は反応が速く、高い値は定位の揺れやポンピングを抑えますが反応は遅くなります。
+- **Energy Preservation**（Off/On）：Direct、Diffuse、Residualの各経路を個別に正規化し、ルーティング行列による意図しないレベル変化を抑えます。行列のゲイン自体で成分の音量を変えたい場合はOffにします。
+- **Component Routing / Direct**：Directのグリッドを選び、出力ゲインを設定します。
+- **Component Routing / Diffuse**：Diffuseのグリッドを選び、出力ゲインを設定します。
+- **Component Routing / Residual**：Residualのグリッドを選び、出力ゲインを設定します。
 
 ## Stereo Blend
 

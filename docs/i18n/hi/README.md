@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">डेस्कटॉप ऐप डाउनलोड करें</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">VST संस्करण डाउनलोड करें</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">Chrome एक्सटेंशन इंस्टॉल करें</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">Edge एक्सटेंशन इंस्टॉल करें</a>
 </div>
 
 EffeTune रियल-टाइम ऑडियो इफेक्ट प्रोसेसर है, जिसे संगीत सुनने के अनुभव को अपनी पसंद के अनुसार बेहतर बनाने वाले ऑडियो उत्साही लोगों के लिए बनाया गया है। यह किसी भी ऑडियो स्रोत को कई उच्च-गुणवत्ता वाले इफेक्ट्स से प्रोसेस कर सकता है, ताकि आप सुनते समय ही ध्वनि को अपने स्वाद के अनुसार ढाल सकें।
@@ -134,6 +136,7 @@ PC पर Chromium ब्राउज़र चुने हुए संगी�
    - [MIDI, गेमपैड या कीबोर्ड से effect नियंत्रित करें](controller-mapping.md)
 10. केवल उस इफेक्ट की सेटिंग सहेजने या लागू करने के लिए उसका इफ़ेक्ट प्रीसेट बटन क्लिक करें
 11. स्लाइडर को बारीकी से एडजस्ट करने के लिए उसे ड्रैग करते समय Shift दबाए रखें; मान हर बार एक न्यूनतम स्टेप से बदलेगा
+   - ऋणात्मक और धनात्मक दोनों मानों वाले स्लाइडर में रंगा हुआ हिस्सा 0 से वर्तमान मान तक होता है। Ratio स्लाइडर में यह 1.0 से शुरू होता है।
 12. फ़्रीक्वेंसी या नोट अक्ष वाले समर्थित ग्राफ़ में, इफ़ेक्ट चेन से उस फ़्रीक्वेंसी का -12 dB साइन टोन सुनने के लिए अक्ष के साथ ड्रैग करें। पियानो की-बोर्ड दिखने पर टोन सबसे नज़दीकी सेमीटोन पर स्नैप होता है; किसी कुंजी पर ड्रैग करने से उसी कुंजी का सुर सुनाई देता है
 
 ### प्रीसेट्स का उपयोग
@@ -411,6 +414,7 @@ PC पर Chromium ब्राउज़र चुने हुए संगी�
 | Spatial   | MS Matrix | center/ambience adjustments के लिए stereo और Mid/Side के बीच convert करता है | [विवरण](plugins/spatial.md#ms-matrix) |
 | Spatial   | Multiband Balance | 5-band frequency-dependent stereo balance control | [विवरण](plugins/spatial.md#multiband-balance) |
 | Spatial   | Phase Select EQ | L/R phase difference और Balance से चुने गए frequency components को boost या cut करता है | [विवरण](plugins/spatial.md#phase-select-eq) |
+| Spatial   | Spatial Mapper | Direct, Diffuse और Residual ध्वनि को अलग करके flexible multichannel routing करता है | [विवरण](plugins/spatial.md#spatial-mapper) |
 | Spatial   | Stereo Blend | mono से enhanced stereo तक stereo width control करता है | [विवरण](plugins/spatial.md#stereo-blend) |
 | Others    | Oscillator | speakers/headphones जांचने के लिए test tone और noise generator | [विवरण](plugins/others.md#oscillator) |
 | Control   | Section | effects को group करता है ताकि पूरा section bypass या restore किया जा सके | [विवरण](plugins/control.md) |

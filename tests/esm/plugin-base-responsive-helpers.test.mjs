@@ -475,12 +475,16 @@ test('PluginBase parameter controls preserve the last finite value while editing
   assert.equal(Number(slider.value), 0);
 });
 
-test('PluginBase linear controls retain Chorus canonical Delay and Depth values', () => {
+test('Chorus logarithmic Delay and linear Depth retain canonical values', () => {
   const ChorusPlugin = loadModulationPlugin('../../plugins/modulation/chorus.js', 'ChorusPlugin');
   const plugin = new ChorusPlugin();
   plugin.createUI();
   const assertControl = (row, expected) => {
-    assert.equal(Number(row.children[1].value), expected);
+    const slider = row.children[1];
+    const expectedPosition = slider.dataset.rangeFineMin
+      ? 100 * Math.log(expected / 0.5) / Math.log(30 / 0.5)
+      : expected;
+    assert.ok(Math.abs(Number(slider.value) - expectedPosition) < 1e-10);
     assert.equal(Number(row.children[2].value), expected);
   };
 
@@ -708,3 +712,135 @@ test('PluginBase gates every visual RAF callback and records exact diagnostics',
   assert.equal(plugin.renderPowerUiOnce(() => { staticRenders++; }), false);
   assert.equal(staticRenders, 1);
 });
+
+test('logarithmic parameter controls map a ratio fill origin into slider coordinates', () => {
+  const plugin = createPlugin();
+  for (const [minimum, expectedOrigin] of [[0.5, 18.7901824709], [0.05, 50]]) {
+    const row = plugin.createLogarithmicParameterControl(
+      'Ratio', minimum, 20, 0.01, 1, () => {}, '1:', 'rt', null, 1
+    );
+    const slider = row.children[1];
+    assert.ok(Math.abs(Number(slider.dataset.rangeFillOrigin) - expectedOrigin) < 1e-10);
+    assert.equal(Number(slider.dataset.rangeFillOrigin), Number(slider.value));
+  }
+  const frequency = plugin.createLogarithmicParameterControl(
+    'Frequency', 20, 20000, 1, 1000, () => {}, 'Hz'
+  );
+  assert.equal(frequency.children[1].dataset.rangeFillOrigin, undefined);
+});
+
+test('logarithmic slider curves retain linear control display, steps and number entry', () => {
+  for (const [min, max, step, initial, values] of [
+    [0.1, 100, 0.1, 7.75, [0.1, 1, 7.8, 100]],
+    [0.2, 10, 0.01, 1.2, [0.2, 1, 1.37, 10]],
+    [50, 1000, 5, 100, [50, 105, 1000]],
+    [4000, 96000, 100, 44100, [4000, 44100, 96000]],
+    [1, 100, 1, '10', [1, 10, 100]]
+  ]) {
+    const plugin = createPlugin();
+    const calls = [[], []];
+    const rows = [false, true].map((logarithmic, index) => plugin.createParameterControl(
+      'Value', min, max, step, initial, value => calls[index].push(value), '', null, null, logarithmic
+    ));
+    const [linear, logarithmic] = rows;
+    assert.equal(logarithmic.children[2].value, linear.children[2].value);
+    assert.deepEqual(
+      [logarithmic.children[2].min, logarithmic.children[2].max, logarithmic.children[2].step],
+      [linear.children[2].min, linear.children[2].max, linear.children[2].step]
+    );
+    for (const value of values) {
+      linear.children[1].value = String(value);
+      logarithmic.children[1].value = String(100 * Math.log(value / min) / Math.log(max / min));
+      for (const row of rows) row.children[1].dispatch('input');
+      assert.equal(logarithmic.children[2].value, String(value));
+      assert.equal(logarithmic.children[2].value, linear.children[2].value);
+      assert.equal(calls[1].at(-1), calls[0].at(-1));
+    }
+    for (const value of [String(initial), '', String(max + step)]) {
+      for (const row of rows) {
+        row.children[2].value = value;
+        row.children[2].dispatch('input');
+      }
+      assert.equal(logarithmic.children[2].value, linear.children[2].value);
+      assert.deepEqual(calls[1], calls[0]);
+      for (const row of rows) row.children[2].dispatch('blur');
+      assert.equal(logarithmic.children[2].value, linear.children[2].value);
+      assert.deepEqual(calls[1], calls[0]);
+    }
+  }
+});
+
+for (const [name, className, ratioMin] of [
+  ['compressor', 'MultibandCompressorPlugin', 0.5],
+  ['expander', 'MultibandExpanderPlugin', 0.05]
+]) {
+  test(name + ' band sliders preserve parameter units through logarithmic input and model sync', () => {
+    const { context, documentRef } = loadPluginBase({ globals: {
+      IntersectionObserver: class { observe() {} disconnect() {} }
+    } });
+    const elements = [];
+    documentRef.createElement = tag => {
+      const element = new FakeElement(tag);
+      element.setAttribute = () => {};
+      elements.push(element);
+      return element;
+    };
+    documentRef.getElementById = id => elements.find(element => element.id === id) || null;
+    const source = fs.readFileSync(new URL('../../plugins/dynamics/multiband_' + name + '.js', import.meta.url), 'utf8');
+    vm.runInContext(source, context);
+    const plugin = new context.window[className]();
+    plugin.id = 'multiband-test';
+    plugin.updateTransferGraphs = () => {};
+    plugin.startAnimation = () => {};
+    const original = JSON.stringify(plugin.getParameters());
+    plugin.createUI();
+    assert.equal(JSON.stringify(plugin.getParameters()), original);
+    for (let band = 0; band < 5; band++) {
+      for (const [label, key, min, max, step] of [
+        ['Ratio:', 'r', ratioMin, 20, 0.01],
+        ['Attack (ms):', 'a', 0.1, 100, 0.1],
+        ['Release (ms):', 'rl', 1, 1000, 1]
+      ]) {
+        const ids = plugin._bandControlIds(band, label);
+        const slider = documentRef.getElementById(ids.slider);
+        const input = documentRef.getElementById(ids.number);
+        assert.equal(Number(input.value), plugin.bands[band][key]);
+        assert.deepEqual([Number(input.min), Number(input.max), Number(input.step)], [min, max, step]);
+        assert.equal(slider.dataset.rangeFineTarget, ids.number);
+        assert.equal(slider.dataset.rangeFineStep, String(step));
+        const position = value => 100 * Math.log(value / min) / Math.log(max / min);
+        assert.ok(Math.abs(Number(slider.value) - position(plugin.bands[band][key])) < 1e-10);
+        if (key === 'r') assert.ok(Math.abs(Number(slider.dataset.rangeFillOrigin) - position(1)) < 1e-10);
+
+        plugin.selectedBand = band;
+        const otherBands = JSON.stringify(plugin.bands.filter((_, i) => i !== band));
+        slider.value = 50;
+        slider.dispatch('input');
+        const midpoint = min + Math.round((Math.sqrt(min * max) - min) / step) * step;
+        assert.ok(Math.abs(plugin.bands[band][key] - midpoint) < 1e-10);
+        assert.equal(Number(input.value), plugin.bands[band][key]);
+        assert.equal(JSON.stringify(plugin.bands.filter((_, i) => i !== band)), otherBands);
+
+        const exact = key === 'r' ? 1.37 : key === 'a' ? 7.75 : 87.5;
+        input.value = String(exact);
+        input.dispatch('input');
+        assert.equal(plugin.bands[band][key], exact);
+        assert.ok(Math.abs(Number(slider.value) - position(exact)) < 1e-10);
+
+        plugin.bands[band][key] = max;
+        slider.active = true;
+        plugin.syncUIControls();
+        assert.ok(Math.abs(Number(slider.value) - position(exact)) < 1e-10);
+        slider.active = false;
+        plugin.syncUIControls();
+        assert.equal(Number(input.value), max);
+        assert.ok(Math.abs(Number(slider.value) - 100) < 1e-10);
+      }
+      const thresholdIds = plugin._bandControlIds(band, 'Threshold (dB):');
+      const threshold = documentRef.getElementById(thresholdIds.slider);
+      assert.equal(Number(threshold.min), -60);
+      assert.equal(Number(threshold.max), 0);
+      assert.equal(Number(threshold.value), plugin.bands[band].t);
+    }
+  });
+}

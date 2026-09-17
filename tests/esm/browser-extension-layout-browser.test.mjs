@@ -119,3 +119,45 @@ test('extension reuses canonical fixed pipeline, pull-tab, and toolbar geometry'
     await browser.close();
   }
 });
+
+
+test('extension popup keeps long tab titles truncated and Apply reachable', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 340, height: 600 } });
+    const html = read('../../extension/popup.html')
+      .replace('<link rel="stylesheet" href="extension/popup.css">', '')
+      .replace('<script type="module" src="extension/popup.js"></script>', '');
+    await page.setContent(html);
+    await page.addStyleTag({ content: read('../../extension/popup.css') });
+    for (const title of ['Short title', '長いブラウザタブのタイトルです。'.repeat(50), 'x'.repeat(1000)]) {
+      await page.locator('#targetTitle').evaluate((element, text) => {
+        element.textContent = text;
+      }, title);
+      const layout = await page.evaluate(() => {
+        const title = document.getElementById('targetTitle');
+        const apply = document.getElementById('applyPresetButton').getBoundingClientRect();
+        return {
+          width: document.body.getBoundingClientRect().width,
+          scrollWidth: document.documentElement.scrollWidth,
+          titleWidth: title.clientWidth,
+          titleScrollWidth: title.scrollWidth,
+          ellipsis: getComputedStyle(title).textOverflow,
+          applyLeft: apply.left,
+          applyRight: apply.right
+        };
+      });
+      assert.equal(layout.width, 340);
+      assert.equal(layout.scrollWidth, 340);
+      assert.ok(layout.applyLeft > 0 && layout.applyRight <= 340);
+      if (title.length > 100) {
+        assert.ok(layout.titleScrollWidth > layout.titleWidth);
+        assert.equal(layout.ellipsis, 'ellipsis');
+      }
+      await page.locator('#applyPresetButton').evaluate(button => { button.disabled = false; });
+      await page.locator('#applyPresetButton').click({ timeout: 2000 });
+    }
+  } finally {
+    await browser.close();
+  }
+});

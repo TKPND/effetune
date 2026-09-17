@@ -3590,7 +3590,8 @@ class PluginProcessor extends AudioWorkletProcessor {
         if (!this.masterBypass && this.dspLatencyPlan?.tapPositions) {
             for (const [id, position] of Object.entries(this.dspLatencyPlan.tapPositions)) {
                 taps[id] = { input: Math.max(0, normalized - position.input),
-                    output: Math.max(0, normalized - position.output), execution: position.execution };
+                    output: Math.max(0, normalized - position.output), execution: position.execution,
+                    instanceId: position.execution === 'wasm' ? this.wasmInstances.get(Number(id))?.id : 0 };
             }
         }
         const tapsKey = JSON.stringify(taps);
@@ -4017,6 +4018,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                 this.port.postMessage({
                     type: 'dspTelemetry',
                     endFrame: globalThis.currentFrame + blockSize,
+                    contextFrameOffset: globalThis.currentFrame + blockSize - this.currentFrame,
                     packet,
                     bytes,
                     droppedFrames: this.dspBinding.lastTelemetryDroppedFrames >>> 0

@@ -1,4 +1,4 @@
-self.EFFECTUNE_CACHE_VERSION = "effetune-v2.10.0-f31444c50c18a570";
+self.EFFECTUNE_CACHE_VERSION = "effetune-v2.10.0-f3b5659ddd6d6128";
 self.EFFECTUNE_PRECACHE_URLS = [
   "./effetune-library.css",
   "./effetune-mobile.css",
@@ -434,6 +434,8 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./plugins/spatial/multiband_balance.js",
   "./plugins/spatial/phase_select_eq.css",
   "./plugins/spatial/phase_select_eq.js",
+  "./plugins/spatial/spatial_mapper.css",
+  "./plugins/spatial/spatial_mapper.js",
   "./plugins/spatial/stereo_blend.js",
   "./plugins/spectrum-overlay.css",
   "./plugins/spectrum-overlay.js",

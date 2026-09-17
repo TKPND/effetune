@@ -154,6 +154,25 @@ async function withFakeAudio(callback) {
   }
 }
 
+test('OpenHome gateway supports audio and artwork for all 4096 queue entries with a bounded capacity', async t => {
+  const gateway = new OpenHomeMediaGateway({ serverFactory: createServerFactory() });
+  t.after(() => gateway.close());
+  let lastAudio;
+  let lastArtwork;
+  for (let track = 0; track < 4096; track += 1) {
+    lastAudio = await gateway.register(`http://media.test/song-${track}.flac`);
+    lastArtwork = await gateway.register(`http://media.test/artwork-${track}.jpg`);
+  }
+  assert.equal(gateway.registrations.size, 8192);
+  await assert.rejects(gateway.register('http://media.test/overflow.flac'), {
+    code: 'registration-limit'
+  });
+  assert.equal(gateway.release(lastAudio.token), true);
+  assert.equal(gateway.release(lastArtwork.token), true);
+  await gateway.register('http://media.test/replacement.flac');
+  await gateway.register('http://media.test/replacement.jpg');
+  assert.equal(gateway.registrations.size, 8192);
+});
 test('OpenHome gateway sends renderer headers with a bounded Range and omits credentials', async () => {
   const calls = [];
   const gateway = new OpenHomeMediaGateway({

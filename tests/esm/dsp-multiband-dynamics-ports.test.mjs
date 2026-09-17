@@ -29,7 +29,7 @@ const ports = [
     telemetryKind: 0,
     measurement: 'gainReductions',
     memberKeys: ['t', 'r', 'a', 'rl', 'k', 'g'],
-    jsEngineHash: '716b514d98be5b105e74e14ec016585d1cfa7c5ac035a359512a12e4bdc8ecb9'
+    jsEngineHash: 'b576783dfea3376401fc2118b5f7d9fbd43eb5b587621c965fcd3092943d1b5e'
   },
   {
     type: 'MultibandExpanderPlugin',
@@ -40,7 +40,7 @@ const ports = [
     telemetryKind: 1,
     measurement: 'gainBoosts',
     memberKeys: ['t', 'r', 'a', 'rl', 'k', 'g'],
-    jsEngineHash: '6ecc3b8a162440f543af77efe9f8550f89490801e2e11e9ab751c1c6144d8dab'
+    jsEngineHash: '9875c6de1b32b1a83570f2e2989c9338952c4d4b26d0e180bad6f74494c8e022'
   },
   {
     type: 'MultibandTransientPlugin',

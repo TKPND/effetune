@@ -8,6 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 import * as contract from '../../js/ir-library/ir-plugin-contract.js';
 import * as pairing from '../../js/ir-library/ir-true-stereo-pair.js';
+import {
+  capturePreparationStatuses,
+  observePreparationStatus,
+  mirrorPreparationStatus,
+  refreshPreparationStatuses
+} from '../../extension/preparation-status-bridge.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const pluginSource = await fs.readFile(path.join(repoRoot, 'plugins', 'reverb', 'ir_reverb.js'), 'utf8');
@@ -458,6 +464,55 @@ test('IR Reverb tracks only the current unsettled asset resolution', async () =>
     assert.equal(plugin.offlineDspAssetRequired, false);
   } finally {
     plugin.cleanup();
+  }
+});
+
+test('extension IR status follows the audio host across delayed preparation and editor reopening', async () => {
+  const entry = { irId: 'aaaaaaaaaaaaaaaaaaaaaaaa', fileLabel: 'room.wav', composition: 'single', channels: 1 };
+  const libraryService = {
+    store: { async updateAnalysis() {} },
+    get() { return entry; },
+    async resolveDecodedPcm(_id, sampleRate) {
+      return { channels: [new Float32Array([1, 0])], sampleRate };
+    }
+  };
+  const { Plugin } = loadPlugin({ libraryService });
+  const host = new Plugin();
+  const editor = new Plugin();
+  const reopened = new Plugin();
+  for (const plugin of [host, editor, reopened]) {
+    plugin.getSerializableParameters = () => plugin.getParameters();
+  }
+  let statuses = [];
+  observePreparationStatus(host, () => { statuses = capturePreparationStatuses([host]); });
+  mirrorPreparationStatus(editor, () => statuses);
+  mirrorPreparationStatus(reopened, () => statuses);
+  try {
+    await host.loadLibraryEntry(entry);
+    await editor.loadLibraryEntry(entry);
+    assert.equal(editor._statusState, 'preparing');
+    host.onWasmAssetState(0, 3, host.getWasmAssetOperationRevision(0));
+    refreshPreparationStatuses([editor]);
+    assert.equal(editor._statusState, 'ready');
+    assert.match(editor._statusMessage, /room.wav is in use/);
+
+    await reopened.loadLibraryEntry(entry);
+    assert.equal(reopened._statusState, 'ready');
+    editor._setStatus('Loading room.wav…', 'preparing');
+    assert.equal(editor._statusState, 'ready');
+
+    editor._setStatus('Import failed', 'error');
+    assert.equal(editor._statusMessage, 'Import failed');
+    editor.dt = 80;
+    editor._setStatus('Preparing the impulse response…', 'preparing');
+    refreshPreparationStatuses([editor]);
+    assert.equal(editor._statusState, 'preparing');
+    host.dt = 80;
+    host._setStatus('The impulse response was rejected.', 'error');
+    refreshPreparationStatuses([editor]);
+    assert.equal(editor._statusState, 'error');
+  } finally {
+    for (const plugin of [host, editor, reopened]) plugin.cleanup();
   }
 });
 

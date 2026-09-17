@@ -857,7 +857,7 @@ class BrickwallLimiterPlugin extends PluginBase {
         // Release Time
         container.appendChild(this.createParameterControl(
             'Release', 10, 500, 1, this.rl,
-            (value) => this.setRl(value), 'ms', 'rl'
+            (value) => this.setRl(value), 'ms', 'rl', null, true
         ));
 
         // Lookahead Time

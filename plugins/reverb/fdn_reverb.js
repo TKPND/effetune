@@ -419,15 +419,15 @@ class FDNReverbPlugin extends PluginBase {
         container.className = 'plugin-parameter-ui';
 
         // Use the base class createParameterControl helper
-        container.appendChild(this.createParameterControl('Reverb Time', 0.20, 10.00, 0.01, this.rt, (value) => this.setParameters({ rt: value }), 's', 'rt'));
+        container.appendChild(this.createParameterControl('Reverb Time', 0.20, 10.00, 0.01, this.rt, (value) => this.setParameters({ rt: value }), 's', 'rt', null, true));
         container.appendChild(this.createParameterControl('Density', 4, 8, 1, this.dt, (value) => this.setParameters({ dt: value }), 'lines', 'dt'));
         container.appendChild(this.createParameterControl('Pre Delay', 0.0, 100.0, 0.1, this.pd, (value) => this.setParameters({ pd: value }), 'ms', 'pd'));
-        container.appendChild(this.createParameterControl('Base Delay', 10.0, 60.0, 0.1, this.bd, (value) => this.setParameters({ bd: value }), 'ms', 'bd'));
+        container.appendChild(this.createParameterControl('Base Delay', 10.0, 60.0, 0.1, this.bd, (value) => this.setParameters({ bd: value }), 'ms', 'bd', null, true));
         container.appendChild(this.createParameterControl('Delay Spread', 0.0, 25.0, 0.1, this.ds, (value) => this.setParameters({ ds: value }), 'ms', 'ds'));
         container.appendChild(this.createParameterControl('HF Damp', 0.0, 12.0, 0.1, this.hd, (value) => this.setParameters({ hd: value }), 'dB/s', 'hd'));
-        container.appendChild(this.createParameterControl('Low Cut', 20, 500, 1, this.lc, (value) => this.setParameters({ lc: value }), 'Hz', 'lc'));
+        container.appendChild(this.createParameterControl('Low Cut', 20, 500, 1, this.lc, (value) => this.setParameters({ lc: value }), 'Hz', 'lc', null, true));
         container.appendChild(this.createParameterControl('Mod Depth', 0.0, 10, 0.1, this.md, (value) => this.setParameters({ md: value }), 'ct', 'md'));
-        container.appendChild(this.createParameterControl('Mod Rate', 0.10, 5.00, 0.01, this.mr, (value) => this.setParameters({ mr: value }), 'Hz', 'mr'));
+        container.appendChild(this.createParameterControl('Mod Rate', 0.10, 5.00, 0.01, this.mr, (value) => this.setParameters({ mr: value }), 'Hz', 'mr', null, true));
         container.appendChild(this.createParameterControl('Diffusion', 0, 100, 1, this.df, (value) => this.setParameters({ df: value }), '%', 'df'));
         container.appendChild(this.createParameterControl('Wet Mix', 0, 100, 1, this.wm, (value) => this.setParameters({ wm: value }), '%', 'wm'));
         container.appendChild(this.createParameterControl('Dry Mix', 0, 100, 1, this.dm, (value) => this.setParameters({ dm: value }), '%', 'dm'));

@@ -53,7 +53,7 @@ struct AutomationEffectDescriptor {
 };
 
 // clang-format off
-inline constexpr std::array<AutomationParameterDescriptor, 965> kAutomationParameters{{
+inline constexpr std::array<AutomationParameterDescriptor, 970> kAutomationParameters{{
   AutomationParameterDescriptor{"rd", "radio", 0u, "rd", "", "", 0u, AutomationParameterKind::Bool, AutomationEligibility::Stepped, AutomationNormalization::Bool, AutomationValueTransform::Identity, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1u, "Radio", "Radio", "", 0u, 0u, 0u},
   AutomationParameterDescriptor{"tb", "txBandwidth", 0u, "tb", "", "", 1u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 2.0f, 10.0f, 0.1f, 6.0f, 6.0f, 0u, "Tx Bandwidth", "Tx Bandwidth", "kHz", 0u, 0u, 0u},
   AutomationParameterDescriptor{"pe", "preEmphasis", 0u, "pe", "", "", 2u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 100.0f, 1.0f, 50.0f, 50.0f, 0u, "Pre Emphasis", "Pre Emphasis", "%", 0u, 0u, 0u},
@@ -880,6 +880,11 @@ inline constexpr std::array<AutomationParameterDescriptor, 965> kAutomationParam
   AutomationParameterDescriptor{"mx", "mix", 0u, "mx", "", "", 2u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 100.0f, 1.0f, 100.0f, 100.0f, 0u, "Mix", "Mix", "%", 0u, 291u, 0u},
   AutomationParameterDescriptor{"gn", "gain", 0u, "gn", "", "", 3u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, -18.0f, 18.0f, 0.1f, -2.0f, -2.0f, 0u, "Gain", "Gain", "dB", 0u, 291u, 0u},
   AutomationParameterDescriptor{"rj", "rmsJitterNanoseconds", 0u, "rj", "", "", 0u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Logarithmic, AutomationValueTransform::DecibelsFromReference, 0.001f, 0.001f, 10000000.0f, 0.001f, 100.0f, 100.0f, 0u, "Rms Jitter Nanoseconds", "Rms Jitter Nanoseconds", "ns", 0u, 291u, 0u},
+  AutomationParameterDescriptor{"dr", "directness", 0u, "dr", "", "", 2u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 100.0f, 1.0f, 50.0f, 50.0f, 0u, "Directness", "Directness", "%", 0u, 291u, 0u},
+  AutomationParameterDescriptor{"sp", "separation", 0u, "sp", "", "", 3u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 100.0f, 1.0f, 50.0f, 50.0f, 0u, "Separation", "Separation", "%", 0u, 291u, 0u},
+  AutomationParameterDescriptor{"de", "diffuseExtraction", 0u, "de", "", "", 4u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 100.0f, 1.0f, 50.0f, 50.0f, 0u, "Diffuse Extraction", "Diffuse Extraction", "%", 0u, 291u, 0u},
+  AutomationParameterDescriptor{"ph", "phaseSensitivity", 0u, "ph", "", "", 5u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 100.0f, 1.0f, 50.0f, 50.0f, 0u, "Phase Sensitivity", "Phase Sensitivity", "%", 0u, 291u, 0u},
+  AutomationParameterDescriptor{"ts", "temporalSmoothing", 0u, "ts", "", "", 6u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 100.0f, 1.0f, 50.0f, 50.0f, 0u, "Temporal Smoothing", "Temporal Smoothing", "%", 0u, 291u, 0u},
   AutomationParameterDescriptor{"bl", "balance", 0u, "bl", "", "", 0u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, -1.0f, 1.0f, 0.01f, 0.0f, 0.0f, 0u, "Balance", "Balance", "", 0u, 291u, 0u},
   AutomationParameterDescriptor{"stereo", "stereo", 0u, "stereo", "", "", 0u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, -200.0f, 200.0f, 1.0f, 60.0f, 60.0f, 0u, "Stereo", "Stereo", "%", 0u, 291u, 0u},
   AutomationParameterDescriptor{"sl", "subLevel", 0u, "sl", "", "", 0u, AutomationParameterKind::Float, AutomationEligibility::Continuous, AutomationNormalization::Linear, AutomationValueTransform::Identity, 1.0f, 0.0f, 200.0f, 1.0f, 100.0f, 100.0f, 0u, "Sub Level", "Sub Level", "%", 0u, 291u, 0u},
@@ -1383,7 +1388,7 @@ inline constexpr std::array<std::string_view, 359> kAutomationEnumValues{{
   "Ultra"
 }};
 
-inline constexpr std::array<AutomationEffectDescriptor, 102> kAutomationEffects{{
+inline constexpr std::array<AutomationEffectDescriptor, 103> kAutomationEffects{{
   AutomationEffectDescriptor{"AMRadioSimulatorPlugin", 0u, 21u},
   AutomationEffectDescriptor{"AutoFilterPlugin", 21u, 13u},
   AutomationEffectDescriptor{"AutoLevelerPlugin", 34u, 7u},
@@ -1467,25 +1472,26 @@ inline constexpr std::array<AutomationEffectDescriptor, 102> kAutomationEffects{
   AutomationEffectDescriptor{"RSReverbPlugin", 812u, 9u},
   AutomationEffectDescriptor{"SaturationPlugin", 821u, 4u},
   AutomationEffectDescriptor{"SimpleJitterPlugin", 825u, 1u},
-  AutomationEffectDescriptor{"SpectrogramPlugin", 826u, 0u},
-  AutomationEffectDescriptor{"SpectrumAnalyzerPlugin", 826u, 0u},
-  AutomationEffectDescriptor{"StereoBalancePlugin", 826u, 1u},
-  AutomationEffectDescriptor{"StereoBlendPlugin", 827u, 1u},
-  AutomationEffectDescriptor{"StereoMeterPlugin", 828u, 0u},
-  AutomationEffectDescriptor{"SubSynthPlugin", 828u, 8u},
-  AutomationEffectDescriptor{"SWRadioSimulatorPlugin", 836u, 24u},
-  AutomationEffectDescriptor{"TapeArtifactsPlugin", 860u, 8u},
-  AutomationEffectDescriptor{"TiltEQPlugin", 868u, 2u},
-  AutomationEffectDescriptor{"TimeAlignmentPlugin", 870u, 1u},
-  AutomationEffectDescriptor{"ToneControlPlugin", 871u, 3u},
-  AutomationEffectDescriptor{"TransientShaperPlugin", 874u, 7u},
-  AutomationEffectDescriptor{"TremoloPlugin", 881u, 7u},
-  AutomationEffectDescriptor{"TubeSimulatorPlugin", 888u, 24u},
-  AutomationEffectDescriptor{"TVAudioSimulatorPlugin", 912u, 14u},
-  AutomationEffectDescriptor{"VinylArtifactsPlugin", 926u, 12u},
-  AutomationEffectDescriptor{"VinylSimulatorPlugin", 938u, 19u},
-  AutomationEffectDescriptor{"VolumePlugin", 957u, 1u},
-  AutomationEffectDescriptor{"WowFlutterPlugin", 958u, 7u}
+  AutomationEffectDescriptor{"SpatialMapperPlugin", 826u, 5u},
+  AutomationEffectDescriptor{"SpectrogramPlugin", 831u, 0u},
+  AutomationEffectDescriptor{"SpectrumAnalyzerPlugin", 831u, 0u},
+  AutomationEffectDescriptor{"StereoBalancePlugin", 831u, 1u},
+  AutomationEffectDescriptor{"StereoBlendPlugin", 832u, 1u},
+  AutomationEffectDescriptor{"StereoMeterPlugin", 833u, 0u},
+  AutomationEffectDescriptor{"SubSynthPlugin", 833u, 8u},
+  AutomationEffectDescriptor{"SWRadioSimulatorPlugin", 841u, 24u},
+  AutomationEffectDescriptor{"TapeArtifactsPlugin", 865u, 8u},
+  AutomationEffectDescriptor{"TiltEQPlugin", 873u, 2u},
+  AutomationEffectDescriptor{"TimeAlignmentPlugin", 875u, 1u},
+  AutomationEffectDescriptor{"ToneControlPlugin", 876u, 3u},
+  AutomationEffectDescriptor{"TransientShaperPlugin", 879u, 7u},
+  AutomationEffectDescriptor{"TremoloPlugin", 886u, 7u},
+  AutomationEffectDescriptor{"TubeSimulatorPlugin", 893u, 24u},
+  AutomationEffectDescriptor{"TVAudioSimulatorPlugin", 917u, 14u},
+  AutomationEffectDescriptor{"VinylArtifactsPlugin", 931u, 12u},
+  AutomationEffectDescriptor{"VinylSimulatorPlugin", 943u, 19u},
+  AutomationEffectDescriptor{"VolumePlugin", 962u, 1u},
+  AutomationEffectDescriptor{"WowFlutterPlugin", 963u, 7u}
 }};
 // clang-format on
 

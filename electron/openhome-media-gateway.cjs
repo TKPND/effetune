@@ -9,7 +9,8 @@ const LOOPBACK_HOST = '127.0.0.1';
 const MEDIA_PATH_PREFIX = '/openhome-media/';
 const MAX_URI_LENGTH = 8192;
 const MAX_ACTIVE_STREAMS = 4;
-const MAX_REGISTERED_URIS = 4096;
+// Each supported queue entry can register both audio and artwork.
+const MAX_REGISTERED_URIS = 4096 * 2;
 const DNS_LOOKUP_TIMEOUT_MS = 5000;
 const UPSTREAM_TIMEOUT_MS = 15000;
 const MAX_REDIRECTS = 4;

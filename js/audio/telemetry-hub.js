@@ -130,6 +130,7 @@ export class TelemetryHub {
         this.visualSyncQueue = [];
         this.visualSyncTimer = null;
         this.subscribers = new Map();
+        this.sources = new Map();
         this.stats = {
             packets: 0,
             frames: 0,
@@ -145,6 +146,22 @@ export class TelemetryHub {
     setPort(port) {
         this.clearVisualSyncQueue();
         this.port = port;
+        this.sources.clear();
+    }
+
+    setSources(taps) {
+        const sources = new Map();
+        for (const [id, tap] of Object.entries(taps)) {
+            const tapId = Number(id);
+            const previous = this.sources.get(tapId);
+            sources.set(tapId, previous && previous.instanceId === tap.instanceId
+                ? previous : Object.freeze({ instanceId: tap.instanceId }));
+        }
+        this.sources = sources;
+        const queued = this.visualSyncQueue.length;
+        this.visualSyncQueue = this.visualSyncQueue.filter(entry =>
+            !entry.frame.source || entry.frame.source === sources.get(entry.frame.tapId));
+        if (queued !== this.visualSyncQueue.length) this._scheduleVisualSync();
     }
 
     _key(tapId, frameType) {
@@ -193,8 +210,8 @@ export class TelemetryHub {
         this.visualSyncResolver = resolver;
     }
 
-    resolveDue(tapId, endFrame, ruleKey = tapId) {
-        return this.visualSyncResolver?.(tapId, endFrame, ruleKey) ?? null;
+    resolveDue(tapId, endFrame, ruleKey = tapId, frame, contextFrameOffset) {
+        return this.visualSyncResolver?.(tapId, endFrame, ruleKey, frame, contextFrameOffset) ?? null;
     }
 
     _scheduleVisualSync() {
@@ -216,12 +233,12 @@ export class TelemetryHub {
         }
     }
 
-    _receive(frame, sourcePort, endFrame) {
+    _receive(frame, sourcePort, endFrame, contextFrameOffset) {
         const highQuality = frame.formatVersion === 2 &&
             (frame.frameType === TelemetryFrameType.TAP_SPECTRUM ||
                 frame.frameType === TelemetryFrameType.TAP_SPECTROGRAM_COL);
         if (highQuality && sourcePort !== this.port) return;
-        const due = this.resolveDue(frame.tapId, endFrame);
+        const due = this.resolveDue(frame.tapId, endFrame, frame.tapId, frame, contextFrameOffset);
         const now = this.now();
         if (!Number.isFinite(due) || due <= now) {
             if (this.visualSyncQueue[0]?.due <= now) {
@@ -242,6 +259,7 @@ export class TelemetryHub {
     }
 
     _dispatch(frame, sourcePort) {
+        if (frame.source && frame.source !== this.sources.get(frame.tapId)) return;
         const highQuality = frame.formatVersion === 2 &&
             (frame.frameType === TelemetryFrameType.TAP_SPECTRUM ||
                 frame.frameType === TelemetryFrameType.TAP_SPECTROGRAM_COL);
@@ -281,8 +299,10 @@ export class TelemetryHub {
             this.stats.coreDroppedFrames += message.droppedFrames;
         }
         try {
-            const result = parseTelemetryPacket(packet, message.bytes, frame => {
-                if (this.visualSyncResolver) this._receive(frame, sourcePort, message.endFrame);
+            const result = parseTelemetryPacket(packet, message.bytes, parsedFrame => {
+                const source = this.sources.get(parsedFrame.tapId);
+                const frame = source ? Object.freeze({ ...parsedFrame, source }) : parsedFrame;
+                if (this.visualSyncResolver) this._receive(frame, sourcePort, message.endFrame, message.contextFrameOffset);
                 else this._dispatch(frame, sourcePort);
             });
             if (!result.ok) {

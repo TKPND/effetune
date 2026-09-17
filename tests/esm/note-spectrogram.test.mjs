@@ -5,6 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { TelemetryHub, TELEMETRY_HEADER_BYTES } from '../../js/audio/telemetry-hub.js';
+import { audibleFrameTime, audibleContextTime } from '../../js/audio/visual-sync.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const pluginPath = path.join('plugins', 'analyzer', 'note_spectrogram.js');
@@ -1334,5 +1336,63 @@ test('pitch bands, white keys and Normal confidence gradients follow the theme',
                 }
             }
         }
+    }
+});
+
+test('Visual Sync preserves continuous Note Spectrogram history when the output clock observation changes', async t => {
+    for (const arrivalTime of [1020, 1040]) {
+        await t.test('next frame arrives at ' + arrivalTime + ' ms', async () => {
+            let now = 1000;
+            let timer = null;
+            let clockOffset = 0;
+            const delivered = [];
+            const hub = new TelemetryHub({
+                now: () => audibleContextTime({
+                    outputTimestamp: { contextTime: 1, performanceTime: 1000 + clockOffset },
+                    performanceTime: now }),
+                schedule: callback => { timer = () => { timer = null; callback(); }; return 1; },
+                cancel: () => { timer = null; },
+                port: { postMessage({ packet }) { new Uint8Array(packet).fill(0); } }
+            });
+            const plugin = await loadPlugin({ telemetryHub: hub, now: () => now });
+            plugin.id = 7;
+            plugin.ensureDspTelemetrySubscription();
+            hub.subscribe(7, 24, frame => delivered.push(frame.sequence));
+            hub.setVisualSyncResolver((tapId, endFrame) => audibleFrameTime({ endFrame, sampleRate: 48000 }));
+            const send = frameIndex => {
+                const frame = createTelemetryFrame({ frameIndex, hopSeconds: 0.02,
+                    timeSeconds: 1 + frameIndex * 0.02,
+                    levels: new Array(pitchCount).fill(0.75),
+                    volumeLevels: new Array(pitchCount).fill(-12) });
+                const packet = new ArrayBuffer(TELEMETRY_HEADER_BYTES + payloadBytes);
+                const header = new DataView(packet);
+                header.setUint16(0, frame.frameType, true);
+                header.setUint16(2, frame.formatVersion, true);
+                header.setUint32(4, plugin.id, true);
+                header.setUint32(8, frameIndex, true);
+                header.setUint16(12, payloadBytes, true);
+                new Uint8Array(packet, TELEMETRY_HEADER_BYTES).set(new Uint8Array(frame.payload.buffer));
+                hub.handleMessage({ type: 'dspTelemetry', packet, bytes: packet.byteLength,
+                    endFrame: 48000 + frameIndex * 960 });
+            };
+            send(0);
+            clockOffset = 25;
+            now = 1020;
+            send(1);
+            clockOffset = -5;
+            now = arrivalTime;
+            send(2);
+            now = 1045;
+            timer?.();
+            assert.equal(timer, null);
+
+            const written = plugin.history.subarray(0, plugin.writeColumn * pitchCount);
+            assert.equal(written.every(level => level === 0.75), true,
+                'Continuous nonzero analysis must not acquire black history columns');
+            assert.deepEqual(delivered, [0, 1, 2]);
+            assert.equal(plugin.lastFrameIndex, 2);
+            assert.equal(hub.getStats().visualSyncDropped, 0);
+            assert.equal(hub.getStats().coreDroppedFrames, 0);
+        });
     }
 });

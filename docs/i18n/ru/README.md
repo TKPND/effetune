@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">Скачать настольное приложение</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">Скачать VST-версию</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">Установить расширение для Chrome</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">Установить расширение для Edge</a>
 </div>
 
 Приложение для обработки аудио в реальном времени, созданное для аудиофилов, стремящихся улучшить процесс прослушивания музыки. EffeTune позволяет обрабатывать любой аудио источник с помощью различных высококачественных эффектов, давая возможность настроить и усовершенствовать ваш опыт прослушивания в реальном времени.
@@ -134,6 +136,7 @@ EffeTune создан для аудиоэнтузиастов, которые х
    - [Управление эффектами через MIDI, геймпад или клавиатуру](controller-mapping.md)
 10. Нажмите кнопку Пресеты эффекта у эффекта, чтобы сохранить или применить настройки только для этого эффекта
 11. Для точной настройки ползунка удерживайте Shift при перетаскивании; значение будет изменяться на один минимальный шаг
+   - У ползунков с отрицательными и положительными значениями заливка идёт от 0 до текущего значения. У ползунков Ratio она начинается от 1.0.
 12. На поддерживаемых графиках с осью частот или нот перетаскивайте указатель вдоль оси, чтобы прослушать эту частоту в виде синусоидального сигнала -12 дБ через цепочку эффектов. При отображении клавиатуры частота привязывается к ближайшему полутону; перетаскивание по клавише воспроизводит её ноту
 
 ### Использование пресетов
@@ -407,6 +410,7 @@ EffeTune создан для аудиоэнтузиастов, которые х
 | Spatial   | MS Matrix | Преобразует stereo и Mid/Side для настройки центра и пространства | [Подробнее](plugins/spatial.md#ms-matrix) |
 | Spatial   | Multiband Balance | 5-полосное управление стереобалансом по частотам | [Подробнее](plugins/spatial.md#multiband-balance) |
 | Spatial   | Phase Select EQ | Усиливает или ослабляет частотные компоненты, выбранные по разности фаз L/R и Balance | [Подробнее](plugins/spatial.md#phase-select-eq) |
+| Spatial   | Spatial Mapper | Разделяет звук на Direct, Diffuse и Residual для гибкой многоканальной маршрутизации | [Подробнее](plugins/spatial.md#spatial-mapper) |
 | Spatial   | Stereo Blend | Управляет шириной стерео от mono до расширенного stereo | [Подробнее](plugins/spatial.md#stereo-blend) |
 | Others    | Oscillator | Генератор тестовых тонов и шума для проверки колонок и наушников | [Подробнее](plugins/others.md#oscillator) |
 | Control   | Section | Группирует эффекты, чтобы всю секцию можно было bypass или restore | [Подробнее](plugins/control.md) |

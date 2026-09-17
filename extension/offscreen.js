@@ -2,9 +2,10 @@ import { AudioManager } from '../js/audio-manager.js';
 import { PipelineWorkletSync } from '../js/ui/pipeline/pipeline-worklet-sync.js';
 import { applySerializedState } from '../js/utils/serialization-utils.js';
 import { CHANNEL_NAME, MODEL_COMMANDS, isInternalSender, runtimeRequest } from './protocol.js';
-import { initializePluginModel, createPipelineModels, serializePipeline, validatePreset } from './model.js';
+import { initializePluginModel, createPipelineModels, activatePipelineModels, serializePipeline, validatePreset } from './model.js';
 import { getDefaultIrLibraryService } from '../js/ir-library/service.js';
 import { ExtensionIrLibraryHost } from './ir-library.js';
+import { capturePreparationStatuses, observePreparationStatus } from './preparation-status-bridge.js';
 import {
     publishStateThenDspExecution,
     replayDspExecutionStates,
@@ -47,7 +48,8 @@ function getIrLibraryHost() {
 }
 
 function snapshot() {
-    return { ...state, masterBypass: settings.masterBypass, plugins: settings.plugins, presets: settings.presets };
+    return { ...state, masterBypass: settings.masterBypass, plugins: settings.plugins, presets: settings.presets,
+        preparationStatuses: capturePreparationStatuses(audio?.pipeline || [], settings.masterBypass) };
 }
 
 function publish(patch = {}) {
@@ -124,19 +126,7 @@ async function applyPipeline(preset) {
             plugin._setupMessageHandler();
         }
         if (audio.workletNode) {
-            const payload = candidates.map(plugin => plugin.getWorkletPluginData(plugin.extensionInitialParameters));
-            audio.commitPowerTopologyMutation({ type: 'updatePlugins', plugins: payload, masterBypass: audio.masterBypass });
-            audio.syncPrimaryWasmAssetMembership(candidates);
-            const expected = audio._replayPipelineWasmAssets(audio.workletNode, candidates, { trackState: true });
-            if (expected === null || !await audio._waitForWasmAssetsActive(audio.workletNode, expected, undefined, 15000)) {
-                throw new Error('The impulse response could not be activated.');
-            }
-            const latency = await audio._requestWorkletLatency(audio.workletNode, 5000);
-            if (!latency) throw new Error('The audio processor did not confirm the new pipeline.');
-            const execution = new Map(audio.getDspExecutionStateSnapshot().states.map(item => [item.pluginId, item.state]));
-            if (candidates.some(plugin => plugin.enabled && plugin.constructor.name !== 'SectionPlugin' && execution.get(plugin.id) !== 'active')) {
-                throw new Error('The audio processor could not activate every effect.');
-            }
+            await activatePipelineModels(audio, candidates);
         }
         settings = { ...settings, plugins: serializePipeline(candidates), masterBypass: audio.masterBypass };
         await persist();
@@ -267,6 +257,16 @@ const ready = (async () => {
     settings = { plugins: [], presets: {}, masterBypass: false, ...loaded };
     audio = newAudioManager();
     manager = await initializePluginModel();
+    const createPlugin = manager.createPlugin.bind(manager);
+    manager.createPlugin = name => {
+        const plugin = createPlugin(name);
+        observePreparationStatus(plugin, () => {
+            queueMicrotask(() => {
+                if (audio.pipeline.includes(plugin)) publish();
+            });
+        });
+        return plugin;
+    };
     try {
         const models = await createPipelineModels({ plugins: settings.plugins }, manager);
         audio.pipeline = models;

@@ -1293,7 +1293,18 @@ class PluginBase {
     // 0..1 model shown on a -100..100 widget). It is applied only on the inbound
     // sync path; the forward path is unchanged because `setter` already receives
     // display units and converts them back.
-    createParameterControl(label, min, max, step, value, setter, unit = '', modelKey = null, toDisplay = null) {
+    createParameterControl(label, min, max, step, value, setter, unit = '', modelKey = null, toDisplay = null, logarithmic = false) {
+        // Change only range coordinates; retain the existing number input behavior.
+        const toSlider = logarithmic
+            ? val => 100 * Math.log(val / min) / Math.log(max / min)
+            : val => val;
+        const fromSlider = pos => {
+            if (!logarithmic) return pos;
+            const value = min * Math.pow(max / min, pos / 100);
+            const stepped = min + Math.round((value - min) / step) * step;
+            const decimals = step < 0.01 ? 3 : (step < 0.1 ? 2 : (step < 1 ? 1 : 0));
+            return Number(Math.max(min, Math.min(max, stepped)).toFixed(decimals));
+        };
         const row = document.createElement('div');
         row.className = 'parameter-row';
 
@@ -1309,11 +1320,17 @@ class PluginBase {
         slider.type = 'range';
         slider.id = sliderId;
         slider.name = sliderId;
-        slider.min = min;
-        slider.max = max;
-        slider.step = step;
-        slider.value = value;
+        slider.min = logarithmic ? 0 : min;
+        slider.max = logarithmic ? 100 : max;
+        slider.step = logarithmic ? 0.1 : step;
+        slider.value = toSlider(value);
         slider.autocomplete = "off";
+        if (logarithmic) {
+            slider.dataset.rangeFineTarget = valueId;
+            slider.dataset.rangeFineMin = String(min);
+            slider.dataset.rangeFineMax = String(max);
+            slider.dataset.rangeFineStep = String(step);
+        }
 
         const valueInput = document.createElement('input');
         valueInput.type = 'number';
@@ -1326,11 +1343,11 @@ class PluginBase {
         valueInput.autocomplete = "off";
 
         slider.addEventListener('input', (e) => {
-            const val = parseFloat(e.target.value);
+            const val = fromSlider(parseFloat(e.target.value));
             if (!Number.isFinite(val)) return;
             setter(val);
             lastAppliedValue = val;
-            valueInput.value = e.target.value; // Keep number input synced
+            valueInput.value = logarithmic ? String(val) : e.target.value; // Keep number input synced
         });
 
         let lastAppliedValue = parseFloat(value);
@@ -1343,7 +1360,7 @@ class PluginBase {
             const val = parseFloat(e.target.value);
             if (!Number.isFinite(val)) return;
             // Update slider thumb, clamping it within bounds
-            slider.value = Math.max(min, Math.min(max, val));
+            slider.value = toSlider(Math.max(min, Math.min(max, val)));
             setter(val); // Update internal value immediately
             lastAppliedValue = val;
         });
@@ -1358,7 +1375,7 @@ class PluginBase {
                 lastAppliedValue = clampedVal;
             }
             e.target.value = clampedVal;
-            slider.value = clampedVal;
+            slider.value = toSlider(clampedVal);
         };
         valueInput.addEventListener('blur', clampAndUpdate);
         valueInput.addEventListener('keydown', (e) => {
@@ -1373,7 +1390,7 @@ class PluginBase {
             // lastAppliedValue is already in display units, so convert first.
             const numericValue = parseFloat(toDisplay ? toDisplay(modelValue) : modelValue);
             if (!Number.isFinite(numericValue) || numericValue === lastAppliedValue) return;
-            slider.value = numericValue;
+            slider.value = toSlider(numericValue);
             window.uiManager?.refreshRangeFillStyling?.(slider);
             valueInput.value = numericValue.toFixed(step < 0.01 ? 3 : (step < 0.1 ? 2 : (step < 1 ? 1 : 0)));
             lastAppliedValue = numericValue;
@@ -1390,7 +1407,8 @@ class PluginBase {
     // The slider displays logarithmically but the actual value remains linear
     // `toDisplay` behaves exactly as in createParameterControl(): an optional
     // modelValue => displayValue transform applied only on the inbound sync path.
-    createLogarithmicParameterControl(label, min, max, step, value, setter, unit = '', modelKey = null, toDisplay = null) {
+    // `fillOrigin` is expressed in parameter units and converted to slider coordinates.
+    createLogarithmicParameterControl(label, min, max, step, value, setter, unit = '', modelKey = null, toDisplay = null, fillOrigin = null) {
         const row = document.createElement('div');
         row.className = 'parameter-row';
 
@@ -1427,6 +1445,7 @@ class PluginBase {
         slider.max = 100;
         slider.step = 0.1;
         slider.value = linearToLogSlider(value);
+        if (fillOrigin !== null) slider.dataset.rangeFillOrigin = String(linearToLogSlider(fillOrigin));
         slider.autocomplete = "off";
         slider.dataset.rangeFineTarget = valueId;
         slider.dataset.rangeFineMin = String(min);

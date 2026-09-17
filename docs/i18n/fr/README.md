@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">Télécharger l'application de bureau</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">Télécharger la version VST</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">Installer l’extension Chrome</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">Installer l’extension Edge</a>
 </div>
 
 Un processeur d'effets audio en temps réel, conçu pour les passionnés de musique afin d'améliorer leur expérience d'écoute. EffeTune vous permet de traiter n'importe quelle source audio via divers effets de haute qualité, vous offrant la possibilité de personnaliser et de perfectionner votre expérience d'écoute en temps réel.
@@ -134,6 +136,7 @@ Les grandes collections sont chargées progressivement depuis le stockage ; la v
    - [Contrôler les effets par MIDI, manette ou clavier](controller-mapping.md)
 10. Cliquez sur le bouton Préréglages d’effet de chaque effet pour enregistrer ou appliquer des réglages pour cet effet uniquement
 11. Pour régler précisément un curseur, maintenez la touche Maj enfoncée pendant que vous le faites glisser ; la valeur change alors d'une unité minimale à la fois
+   - Pour les curseurs acceptant des valeurs négatives et positives, la zone colorée s’étend de 0 à la valeur actuelle. Les curseurs Ratio prennent 1.0 comme point de départ.
 12. Sur les graphiques compatibles dotés d’un axe de fréquences ou de notes, faites glisser le pointeur le long de cet axe pour écouter la fréquence correspondante sous forme de sinus à -12 dB à travers la chaîne d’effets. Lorsqu’un clavier est affiché, la fréquence s’aligne sur le demi-ton le plus proche ; faites glisser le pointeur sur une touche pour écouter sa note
 
 ### Utilisation des préréglages
@@ -411,6 +414,7 @@ Si le souci persiste, signalez-le sur [GitHub Issues](https://github.com/Frieve-
 | Spatial   | MS Matrix | Convertit entre stéréo et Mid/Side pour ajuster centre et ambiance | [Détails](plugins/spatial.md#ms-matrix) |
 | Spatial   | Multiband Balance | Contrôle de l'équilibre stéréo dépendant de la fréquence sur 5 bandes | [Détails](plugins/spatial.md#multiband-balance) |
 | Spatial   | Phase Select EQ | Accentue ou atténue les composantes fréquentielles selon la différence de phase G/D et Balance | [Détails](plugins/spatial.md#phase-select-eq) |
+| Spatial   | Spatial Mapper | Sépare le son Direct, Diffuse et Residual pour un routage multicanal flexible | [Détails](plugins/spatial.md#spatial-mapper) |
 | Spatial   | Stereo Blend | Contrôle la largeur stéréo du mono à la stéréo élargie | [Détails](plugins/spatial.md#stereo-blend) |
 | Others    | Oscillator | Générateur de sons de test et de bruit pour vérifier enceintes/casques | [Détails](plugins/others.md#oscillator) |
 | Control   | Section | Regroupe les effets pour contourner ou rétablir toute une section | [Détails](plugins/control.md) |

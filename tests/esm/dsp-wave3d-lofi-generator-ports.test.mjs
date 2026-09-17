@@ -29,7 +29,7 @@ const ports = [
     ],
     caseCount: 7,
     goldenBytes: 121804,
-    jsEngineHash: 'edaa323bbf016be24ebd03ce8c54ed0b7f80defe9bb0dcbdf8cc03c78876a36c',
+    jsEngineHash: '8a05b66750523bf6d5423e8c6b080e4637cdbffa3a6b1873b9e2f877cec003b8',
     activeParams: { bd: 8, td: true, zf: 44100, be: 10, sd: 11 }
   },
   {
@@ -70,7 +70,7 @@ const ports = [
     ],
     caseCount: 8,
     goldenBytes: 232331,
-    jsEngineHash: '4a76a2bc625c17d4e6f9641efd927bddf1dc445f807439e95e0de1da2ad4c9a3',
+    jsEngineHash: '04e081c903d536c4be54b41d2aeba2c59f69544d5bd23ac34328983a53e569c9',
     activeParams: { fr: 50, tp: 'Dirty', hm: 100, tn: 20, in: 10, lv: -12 }
   },
   {

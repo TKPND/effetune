@@ -307,7 +307,7 @@ class DelayPlugin extends PluginBase {
 
         container.appendChild(this.createParameterControl(
             'Delay Size', 1, 5000, 1, this.ds,
-            (value) => this.setParameters({ ds: value }), 'ms', 'ds'
+            (value) => this.setParameters({ ds: value }), 'ms', 'ds', null, true
         ));
 
         container.appendChild(this.createParameterControl(

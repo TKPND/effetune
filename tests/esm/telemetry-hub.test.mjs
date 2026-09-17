@@ -183,7 +183,7 @@ test('hub validates subscriptions and supports explicit cleanup', () => {
 });
 
 
-test('visual sync retains copied frames until their deadline and returns packets immediately', () => {
+test('visual sync schedules independent taps by deadline and returns copied packets immediately', () => {
   let now = 0;
   let timer = null;
   const delivered = [];
@@ -192,12 +192,13 @@ test('visual sync retains copied frames until their deadline and returns packets
     schedule: callback => { timer = () => { timer = null; callback(); }; return 1; }, cancel: () => { timer = null; },
     port: { postMessage({ packet }) { returned++; new Uint8Array(packet).fill(0); } } });
   hub.subscribe(7, 1, frame => delivered.push(frame.payload.getUint8(0)));
+  hub.subscribe(8, 1, frame => delivered.push(frame.payload.getUint8(0)));
   hub.setVisualSyncResolver((id, endFrame) => endFrame);
-  const send = (due, value) => {
-    const packet = createPacket([{ frameType: 1, tapId: 7, payload: Uint8Array.of(value) }]);
+  const send = (due, value, tapId = 7) => {
+    const packet = createPacket([{ frameType: 1, tapId, payload: Uint8Array.of(value) }]);
     hub.handleMessage({ type: 'dspTelemetry', packet, bytes: packet.byteLength, endFrame: due });
   };
-  send(30, 3); send(10, 1);
+  send(30, 3); send(10, 1, 8);
   assert.equal(returned, 2);
   assert.deepEqual(delivered, []);
   now = 10; timer();

@@ -328,11 +328,12 @@
                 this.visualSyncEpoch = hub?.visualSyncEpoch;
             }
             const due = hub?.resolveDue(this.plugin.id, data.endFrame, 'spectrumOverlay');
-            if (Number.isFinite(due) && due > performance.now()) {
+            if (Number.isFinite(due) && due > (hub.now?.() ?? performance.now())) {
                 if (this.pendingFrames.length >= 256) this.pendingFrames.shift();
                 this.pendingFrames.push({ data, due });
                 this.pendingFrames.sort((a, b) => a.due - b.due);
             } else {
+                this.pendingFrames.length = 0;
                 this.pending = data;
                 this.lastReceived = performance.now();
             }
@@ -343,11 +344,11 @@
                 this.pendingFrames = [];
                 this.visualSyncEpoch = window.dspTelemetryHub?.visualSyncEpoch;
             }
-            const now = performance.now();
+            const now = window.dspTelemetryHub?.now?.() ?? performance.now();
             while (this.pendingFrames.length && this.pendingFrames[0].due <= now) {
                 const entry = this.pendingFrames.shift();
                 this.pending = entry.data;
-                this.lastReceived = entry.due;
+                this.lastReceived = performance.now();
             }
             if (this.pending) {
                 const { inputBuffer, outputBuffer, buffer, bufferPosition, sampleRate } = this.pending;

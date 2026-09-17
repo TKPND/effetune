@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">デスクトップアプリをダウンロード</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">VST版をダウンロード</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">Chrome拡張版をインストール</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">Edge拡張版をインストール</a>
 </div>
 
 オーディオ愛好家のためのリアルタイムオーディオエフェクトプロセッサです。EffeTuneを使うと、あらゆるオーディオソースに高品質なエフェクトをかけ、リスニング体験をリアルタイムで好みに合わせて調整できます。
@@ -138,6 +140,7 @@ PCのChromium系ブラウザでは、選択した音楽フォルダへのアク�
    - [MIDI、ゲームパッド、キーボードでエフェクトを操作する](controller-mapping.md)
 10. 各エフェクトのエフェクトプリセットボタンをクリックすると、そのエフェクトだけの設定を保存または適用できます
 11. スライダーを細かく調整するには、Shiftキーを押しながらドラッグします。値は最小単位ずつ変化します
+   - 負と正の値を取るスライダーは、0から現在値まで塗りつぶされます。Ratioのスライダーは1.0を起点にします。
 12. 対応する周波数・ノートグラフでは、グラフの軸に沿ってドラッグすると、その周波数の -12 dB サイン波をエフェクトチェーン経由で試聴できます。鍵盤表示では最も近い半音にスナップし、鍵の上をドラッグするとその鍵の音程になります
 
 ### プリセットの使用
@@ -420,6 +423,7 @@ Effect Pipelineヘッダーの **パイプラインプリセット** ボタン�
 | Spatial   | MS Matrix | 中央と左右の響きを調整するため、ステレオとMid/Sideを相互変換 | [詳細](plugins/spatial.md#ms-matrix) |
 | Spatial   | Multiband Balance | 5バンド周波数依存のステレオバランス制御 | [詳細](plugins/spatial.md#multiband-balance) |
 | Spatial   | Phase Select EQ | L/R位相差とBalanceで選んだ周波数成分をブーストまたはカット | [詳細](plugins/spatial.md#phase-select-eq) |
+| Spatial   | Spatial Mapper | 音をDirect、Diffuse、Residualに分けて柔軟にマルチチャンネルへルーティング | [詳細](plugins/spatial.md#spatial-mapper) |
 | Spatial   | Stereo Blend | モノラルから拡張ステレオまでステレオ幅を制御 | [詳細](plugins/spatial.md#stereo-blend) |
 | Others    | Oscillator | スピーカーやヘッドホン確認用のテストトーン/ノイズジェネレーター | [詳細](plugins/others.md#oscillator) |
 | Control   | Section | 複数のエフェクトをグループ化し、セクション全体をバイパスまたは復帰 | [詳細](plugins/control.md) |

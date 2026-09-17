@@ -52,9 +52,9 @@ test('production schemas expose the audited automation population', async () => 
     .filter(([, parameters]) => parameters.length === 0)
     .map(([type]) => type);
 
-  assert.equal(entries.length, 102);
-  assert.equal(entries.filter(([, parameters]) => parameters.length !== 0).length, 88);
-  assert.equal(entries.reduce((count, [, parameters]) => count + parameters.length, 0), 965);
+  assert.equal(entries.length, 103);
+  assert.equal(entries.filter(([, parameters]) => parameters.length !== 0).length, 89);
+  assert.equal(entries.reduce((count, [, parameters]) => count + parameters.length, 0), 970);
   for (const effect of specs) {
     const expectedLeaves = [];
     let packedOffset = 0;
@@ -86,7 +86,7 @@ test('production schemas expose the audited automation population', async () => 
   }
   assert.equal(
     createHash('sha256').update(JSON.stringify(catalog.effects)).digest('hex'),
-    '2be2427a78466c45e3eef1e70ff1095057e1d2325383ae289b12eedb40df27fd'
+    'bd8a8ea684dee63c22317825efb42a7b50ae96ed142df3e5ef68266fb03dcd4d'
   );
   assert.deepEqual(privateEffects, [
     'FIRCrossoverPlugin', 'FiveBandFIRPEQPlugin', 'GroupDelayEqPlugin',
@@ -128,6 +128,12 @@ test('production schemas expose the audited automation population', async () => 
     },
     reconfiguresTemporalState: {
       PitchShifterPlugin: ['windowSize', 'crossfadeTime']
+    },
+    reconfiguresSpatialAnalysisOrRouting: {
+      SpatialMapperPlugin: [
+        'inputChannels', 'bands', 'energyPreservation',
+        'directMatrix', 'diffuseMatrix', 'residualMatrix'
+      ]
     },
     lacksDeterministicTransitionParity: {
       VinylSimulatorPlugin: ['stylusShape']

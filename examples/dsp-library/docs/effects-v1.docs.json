@@ -117,6 +117,7 @@
     "MSMatrix": { "displayName": "MS Matrix", "category": "spatial", "summary": "Encodes, decodes, or adjusts mid-side stereo components.", "sourceGenerating": false },
     "MultibandBalance": { "displayName": "Multiband Balance", "category": "spatial", "summary": "Adjusts left-right balance independently across frequency bands.", "sourceGenerating": false },
     "PhaseSelectEQ": { "displayName": "Phase Select EQ", "category": "spatial", "summary": "Applies gain only where frequency, absolute stereo phase difference, and left/right Balance fall within configured regions.", "sourceGenerating": false },
+    "SpatialMapper": { "displayName": "Spatial Mapper", "category": "spatial", "summary": "Separates direct, diffuse, and residual sound and routes each component across a multichannel bus.", "sourceGenerating": false },
     "StereoBlend": { "displayName": "Stereo Blend", "category": "spatial", "summary": "Blends stereo channels to adjust width and channel separation.", "sourceGenerating": false }
   }
 }

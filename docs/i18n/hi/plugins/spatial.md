@@ -1,6 +1,6 @@
 ---
 title: "स्पैशियल प्लगइन - EffeTune"
-description: "Crossfeed Filter, Crosstalk Cancellation, MS Matrix, Multiband Balance, Phase Select EQ और Stereo Blend सहित spatial audio प्लगइन।"
+description: "Crossfeed Filter, Crosstalk Cancellation, MS Matrix, Multiband Balance, Phase Select EQ, Spatial Mapper और Stereo Blend सहित spatial audio प्लगइन।"
 lang: hi
 ---
 
@@ -15,6 +15,7 @@ lang: hi
 - [MS Matrix](#ms-matrix) - advanced stereo adjustment chains के लिए stereo को Mid/Side में और वापस stereo में बदलता है
 - [Multiband Balance](#multiband-balance) - 5-बैंड आवृत्ति-आधारित स्टीरियो संतुलन नियंत्रण
 - [Phase Select EQ](#phase-select-eq) - L/R phase difference और Balance से चुने गए frequency components को boost या cut करता है
+- [Spatial Mapper](#spatial-mapper) - ध्वनि को Direct, Diffuse और Residual में अलग करके हर component को channels में route करता है
 - [Stereo Blend](#stereo-blend) - polarity-swapped stereo से mono और enhanced stereo तक stereo width नियंत्रित करता है
 
 ## Crossfeed Filter
@@ -322,6 +323,52 @@ Balance grid left:right ratio दिखाता है। Balance 0%, ±17%, ±
 - **Low Phase Transition / High Phase Transition**: 0° और 180° की ओर effect के fade की दूरी तय करते हैं।
 
 Map handles, sliders और numeric inputs वही values बदलते हैं। mouse या touch से selected Band के outer frame के अंदर drag करके पूरा Band ले जाएँ, Core के edges या corners drag करके उसका आकार बदलें, और outer-edge handles से हर Transition अलग-अलग बदलें। low-phase handle center पर रुकता है: Core Low Phase 0° पर और Low Phase Transition अपनी maximum width पर रुकता है। Core Low Phase ठीक 0° हो तो center handle शुरू में किसी भी तरफ जा सकता है; पहली movement के बाद drag समाप्त होने तक उसी तरफ lock रहता है।
+
+## Spatial Mapper
+
+Spatial Mapper frequency bands में input channels के संबंध का विश्लेषण करता है, ध्वनि को लगातार Direct, Diffuse और Residual components में अलग करता है और हर component को मौजूदा channel bus में route करता है। इससे स्पष्ट ध्वनि को सामने रखा जा सकता है, ambience को surround या height channels में भेजा जा सकता है, center या ambience निकाला जा सकता है और stereo width बदली जा सकती है। डिफ़ॉल्ट **Transparent** preset मूल channel placement बनाए रखता है।
+
+**Direct** में हर band की dominant coherent ध्वनि होती है। **Diffuse** में कम coherent और फैली हुई ध्वनि होती है। **Residual** वह सामग्री रखता है जो बाकी दोनों में पूरी तरह नहीं आती। विभाजन धीरे-धीरे होता है, इसलिए settings बदलते समय ध्वनि routes के बीच अचानक switch नहीं होती।
+
+Frequency analysis के कारण Spatial Mapper कुछ latency जोड़ता है। EffeTune इसे **Total Delay** में शामिल करता है। Real-time monitoring और audio/video synchronization में इस मान को ध्यान में रखें।
+
+### System Presets
+
+पूरी शुरुआती configuration चुनने के लिए effect header में **Effect Presets** पर क्लिक करें।
+
+- **Transparent** - मूल channel placement बनाए रखता है और डिफ़ॉल्ट preset है।
+- **Stereo Enhance** - स्पष्ट और diffuse ध्वनि की जगह बनाए रखते हुए Residual route से stereo input को चौड़ा करता है।
+- **Center Extract** - Direct को channel 3 में भेजता है। कम से कम तीन channels वाला bus चाहिए।
+- **5.1 Upmix** - Stereo को L, R, C, LFE, Ls, Rs क्रम में रखता है। LFE खाली रहता है और कम से कम छह bus channels चाहिए।
+- **7.1.4 Upmix** - Stereo को L, R, C, LFE, Ls, Rs, Lb, Rb, Ltf, Rtf, Ltb, Rtb क्रम में रखता है। LFE खाली रहता है और कम से कम बारह bus channels चाहिए।
+- **Ambience Extract** - Diffuse को रखता है और Direct तथा Residual को दबाता है।
+
+### Routing Grid पढ़ना और बदलना
+
+**Component Routing** में **Direct**, **Diffuse** या **Residual** tab चुनें। Columns analyzed input channels हैं और rows output bus channels हैं। हर cell में छोटे स्लाइडर या संख्या दर्ज करने के फ़ील्ड से linear gain को -1.00 से +1.00 तक 0.01 के चरणों में समायोजित करें: 0 connection हटाता है, +1.00 पूरे positive polarity स्तर पर भेजता है और negative value polarity उलटकर भेजती है। Negative values लाल दिखाई देती हैं।
+
+Route वाली output row उस bus channel को mapped result से बदल देती है। **Input Channels** की range में आने वाला output channel तब silent हो जाता है जब उसकी row में कोई component route न हो। इस range के बाहर के channels, जब उनमें कोई component नहीं लिखा जाता, समान delay के साथ pass through होते हैं।
+
+### सुनने के लिए समायोजन गाइड
+
+1. स्पष्ट ध्वनि को कम हिलाते हुए stereo चौड़ा करने के लिए **Stereo Enhance** से शुरू करें। Residual में अधिक सामग्री रखने की जरूरत हो तभी **Directness** या **Diffuse Extraction** घटाएँ। **Transparent** से तुलना करें और center image कमजोर होने या mono में बहुत सामग्री खोने पर बदलाव कम करें।
+2. Stereo से center channel बनाने के लिए कम से कम तीन-channel bus पर **Center Extract** चुनें। अधिक coherent सामग्री को Direct में केंद्रित करने के लिए **Directness** और **Separation** बढ़ाएँ।
+3. Stereo को surround या height channels में फैलाने के लिए bus को ऊपर दिए क्रम में सेट करके **5.1 Upmix** या **7.1.4 Upmix** चुनें। उन channels में जाने वाली फैली ध्वनि की मात्रा **Diffuse Extraction** से बदलें। Presets LFE signal नहीं बनाते; जरूरत हो तो bass management अलग से जोड़ें।
+4. Ambience अलग करने के लिए **Ambience Extract** से शुरू करें। **Diffuse Extraction** बढ़ाएँ और **Phase Sensitivity** से तय करें कि opposite phase Direct classification को कितना कम करे।
+
+### Parameters
+
+- **Input Channels** (1 से 16): Bus की शुरुआत से analyze होने वाले channels की संख्या। Bus में कम channels हों तो उपलब्ध channels इस्तेमाल होते हैं।
+- **Analysis Bands** (8, 16, 24, 32 या 48): Spatial analysis का frequency resolution। अधिक bands frequency के अनुसार placement को अधिक बारीकी से follow करते हैं, पर processing भी बढ़ती है। डिफ़ॉल्ट 24 है।
+- **Directness** (0% से 100%): Direct को दी जाने वाली dominant coherent सामग्री की मात्रा। अधिक value Direct extraction को मजबूत करती है।
+- **Separation** (0% से 100%): सामग्री को Direct और Diffuse में देने की selectivity। अधिक value अस्पष्ट सामग्री को Residual में छोड़कर routes का अंतर बढ़ाती है।
+- **Diffuse Extraction** (0% से 100%): Diffuse को दी जाने वाली कम-coherence सामग्री की मात्रा। अधिक value अधिक फैली ambience को Diffuse route में भेजती है।
+- **Phase Sensitivity** (0% से 100%): Channel phase opposition Direct classification को कितना कम करे। कम values opposite-polarity coherent सामग्री को अन्य coherent ध्वनि जैसा मानती हैं; अधिक values ऐसी सामग्री को Direct से बाहर रखती हैं। यह opposite-phase ध्वनि को अपने आप rear channels में नहीं भेजता।
+- **Temporal Smoothing** (0% से 100%, Fast से Stable): Analysis और routing बदलावों को कितनी तेजी से follow करें। कम values जल्दी प्रतिक्रिया देती हैं; अधिक values image movement और pumping कम करती हैं, लेकिन धीमी प्रतिक्रिया देती हैं।
+- **Energy Preservation** (Off/On): Routing matrices से अनचाहे level बदलाव रोकने के लिए Direct, Diffuse और Residual routes को अलग-अलग normalize करता है। Matrix gain से ही component level बदलना हो तो इसे Off करें।
+- **Component Routing / Direct**: Direct grid चुनकर output gains सेट करता है।
+- **Component Routing / Diffuse**: Diffuse grid चुनकर output gains सेट करता है।
+- **Component Routing / Residual**: Residual grid चुनकर output gains सेट करता है।
 
 ## Stereo Blend
 

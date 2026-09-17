@@ -3,6 +3,39 @@ import { publishDspParamPackers } from '../js/audio/dsp-wasm-loader.js';
 import * as generatedParams from '../js/audio/dsp-params.generated.js';
 import { getSerializablePluginStateShort, convertLongToShortFormat, applySerializedState } from '../js/utils/serialization-utils.js';
 import { getPluginExecutionChannelMode, getPluginExecutionUnsupportedReason } from '../js/audio/plugin-execution-capabilities.js';
+import { getReachableEnabledPlugins } from '../js/audio/power-topology.js';
+
+export async function activatePipelineModels(audio, plugins) {
+    const activePlugins = audio.masterBypass ? [] : getReachableEnabledPlugins(plugins);
+    const payload = plugins.map(plugin => plugin.getWorkletPluginData(plugin.extensionInitialParameters));
+    audio.commitPowerTopologyMutation({ type: 'updatePlugins', plugins: payload, masterBypass: audio.masterBypass });
+    audio.syncPrimaryWasmAssetMembership(plugins);
+    const expected = audio._replayPipelineWasmAssets(audio.workletNode, plugins, {
+        trackState: true,
+        assetReadinessPlugins: activePlugins
+    });
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+        const revision = audio.getDspExecutionStateSnapshot().topologyRevision;
+        if (expected === null || !await audio._waitForWasmAssetsActive(
+            audio.workletNode, expected, undefined, Math.max(0, deadline - Date.now())
+        )) throw new Error('The effect filters could not be activated.');
+        const latency = await audio._requestWorkletLatency(
+            audio.workletNode, Math.max(1, Math.min(5000, deadline - Date.now()))
+        );
+        if (!latency) throw new Error('The audio processor did not confirm the new pipeline.');
+        const snapshot = audio.getDspExecutionStateSnapshot();
+        // Asset completion can update parameters from a later MessagePort listener,
+        // after this latency request was sent. Confirm that update on the next barrier.
+        if (snapshot.topologyRevision !== revision) continue;
+        const execution = new Map(snapshot.states.map(item => [item.pluginId, item.state]));
+        if (activePlugins.some(plugin => execution.get(plugin.id) !== 'active')) {
+            throw new Error('The audio processor could not activate every effect.');
+        }
+        return;
+    }
+    throw new Error('The audio processor did not confirm the new pipeline.');
+}
 
 export async function initializePluginModel() {
     publishDspParamPackers(generatedParams);
@@ -77,7 +110,14 @@ export async function createPipelineModels(preset, manager, sampleRate = 48000) 
                 throw new Error('An impulse response is missing. Import its file in IR Reverb, then load this preset again.');
             }
             if (prepared?.assets) {
-                for (const [slot, descriptor] of prepared.assets) plugin.setWasmAsset(slot, descriptor);
+                for (const [slot, descriptor] of prepared.assets) {
+                    const revision = plugin.setWasmAsset(slot, descriptor);
+                    // FIR effects must recognize the offline-prepared asset's completion
+                    // even when their separate live design has not finished yet.
+                    if (slot === 0 && Object.hasOwn(plugin, '_candidateAssetRevision')) {
+                        plugin._candidateAssetRevision = revision;
+                    }
+                }
             }
             plugin.extensionInitialParameters = prepared?.parameters || parameters;
         }

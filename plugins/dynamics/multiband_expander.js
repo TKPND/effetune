@@ -893,7 +893,11 @@ class MultibandExpanderPlugin extends PluginBase {
         const slider = document.getElementById(ids.slider);
         const number = document.getElementById(ids.number);
         if (slider && !heldByUser(slider)) {
-          slider.value = band[key];
+          const min = Number(slider.dataset.rangeFineMin);
+          const max = Number(slider.dataset.rangeFineMax);
+          slider.value = min > 0
+            ? 100 * Math.log(band[key] / min) / Math.log(max / min)
+            : band[key];
           window.uiManager?.refreshRangeFillStyling?.(slider);
         }
         if (number && !heldByUser(number)) number.value = band[key];
@@ -1235,11 +1239,20 @@ class MultibandExpanderPlugin extends PluginBase {
       content.className = `multiband-expander-band-content plugin-parameter-ui ${i === 0 ? 'active' : ''}`;
       content.setAttribute('data-instance-id', this.instanceId);
 
-      const createControl = (label, min, max, step, value, setter, bandIndex) => {
+      const createControl = (label, min, max, step, value, setter, bandIndex, fillOrigin = null, logarithmic = false) => {
         const row = document.createElement('div');
         row.className = 'parameter-row';
 
         const { slider: sliderId, number: numberId } = this._bandControlIds(bandIndex, label);
+        const toSlider = logarithmic
+          ? val => 100 * Math.log(val / min) / Math.log(max / min)
+          : val => val;
+        const fromSlider = pos => {
+          if (!logarithmic) return pos;
+          const value = min * Math.pow(max / min, pos / 100);
+          const stepped = min + Math.round((value - min) / step) * step;
+          return Number(Math.max(min, Math.min(max, stepped)).toFixed(2));
+        };
 
         const labelEl = document.createElement('label');
         labelEl.textContent = label;
@@ -1249,11 +1262,18 @@ class MultibandExpanderPlugin extends PluginBase {
         slider.type = 'range';
         slider.id = sliderId;
         slider.name = sliderId;
-        slider.min = min;
-        slider.max = max;
-        slider.step = step;
-        slider.value = value;
+        slider.min = logarithmic ? 0 : min;
+        slider.max = logarithmic ? 100 : max;
+        slider.step = logarithmic ? 0.1 : step;
+        slider.value = toSlider(value);
+        if (fillOrigin !== null) slider.dataset.rangeFillOrigin = String(toSlider(fillOrigin));
         slider.autocomplete = "off";
+        if (logarithmic) {
+          slider.dataset.rangeFineTarget = numberId;
+          slider.dataset.rangeFineMin = String(min);
+          slider.dataset.rangeFineMax = String(max);
+          slider.dataset.rangeFineStep = String(step);
+        }
 
         const numberInput = document.createElement('input');
         numberInput.type = 'number';
@@ -1265,14 +1285,15 @@ class MultibandExpanderPlugin extends PluginBase {
         numberInput.value = value;
         numberInput.autocomplete = "off";
         slider.addEventListener('input', (e) => {
-          setter(parseFloat(e.target.value));
-          numberInput.value = e.target.value;
+          const val = fromSlider(parseFloat(e.target.value));
+          setter(val);
+          numberInput.value = logarithmic ? String(val) : e.target.value;
         });
         numberInput.addEventListener('input', (e) => {
           const parsedValue = parseFloat(e.target.value) || 0;
           const val = parsedValue < min ? min : (parsedValue > max ? max : parsedValue);
           setter(val);
-          slider.value = val;
+          slider.value = toSlider(val);
           e.target.value = val;
         });
         row.appendChild(labelEl);
@@ -1283,9 +1304,9 @@ class MultibandExpanderPlugin extends PluginBase {
 
       const band = this.bands[i];
       content.appendChild(createControl('Threshold (dB):', -60, 0, 1, band.t, this.setT.bind(this), i));
-      content.appendChild(createControl('Ratio:', 0.05, 20, 0.01, band.r, this.setR.bind(this), i));
-      content.appendChild(createControl('Attack (ms):', 0.1, 100, 0.1, band.a, this.setA.bind(this), i));
-      content.appendChild(createControl('Release (ms):', 1, 1000, 1, band.rl, this.setRl.bind(this), i));
+      content.appendChild(createControl('Ratio:', 0.05, 20, 0.01, band.r, this.setR.bind(this), i, 1, true));
+      content.appendChild(createControl('Attack (ms):', 0.1, 100, 0.1, band.a, this.setA.bind(this), i, null, true));
+      content.appendChild(createControl('Release (ms):', 1, 1000, 1, band.rl, this.setRl.bind(this), i, null, true));
       content.appendChild(createControl('Knee (dB):', 0, 12, 1, band.k, this.setK.bind(this), i));
       content.appendChild(createControl('Gain (dB):', -12, 12, 0.1, band.g, this.setG.bind(this), i));
       bandContents.appendChild(content);

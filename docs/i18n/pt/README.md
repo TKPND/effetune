@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">Baixar Desktop App</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">Baixar versão VST</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">Instalar extensão para Chrome</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">Instalar extensão para Edge</a>
 </div>
 
 Um processador de efeitos de áudio em tempo real, projetado para entusiastas do áudio aprimorarem sua experiência de escuta. EffeTune permite que você processe qualquer fonte de áudio através de vários efeitos de alta qualidade, possibilitando personalizar e aperfeiçoar sua experiência de escuta em tempo real.
@@ -134,6 +136,7 @@ Coleções grandes são carregadas do armazenamento em etapas; a velocidade de v
    - [Controlar efeitos por MIDI, comando ou teclado](controller-mapping.md)
 10. Clique no botão Predefinições de efeito de cada efeito para salvar ou aplicar configurações apenas desse efeito
 11. Para ajustar um controle deslizante com precisão, mantenha a tecla Shift pressionada enquanto o arrasta; o valor muda uma unidade mínima de cada vez
+   - Nos controles deslizantes que aceitam valores negativos e positivos, o preenchimento vai de 0 até o valor atual. Os controles Ratio usam 1.0 como ponto de partida.
 12. Nos gráficos compatíveis com eixo de frequência ou de notas, arraste ao longo do eixo para ouvir essa frequência como um tom senoidal de -12 dB através da cadeia de efeitos. Quando o teclado está visível, a frequência se ajusta ao semitom mais próximo; ao arrastar sobre uma tecla, você ouve a nota dessa tecla
 
 ### Usando Presets
@@ -411,6 +414,7 @@ Se o problema continuar, reporte em [GitHub Issues](https://github.com/Frieve-A/
 | Spatial   | MS Matrix | Converte entre estéreo e Mid/Side para ajustes de centro e ambiência | [Detalhes](plugins/spatial.md#ms-matrix) |
 | Spatial   | Multiband Balance | Controle de balanço estéreo dependente de frequência de 5 bandas | [Detalhes](plugins/spatial.md#multiband-balance) |
 | Spatial   | Phase Select EQ | Realça ou atenua componentes de frequência conforme a diferença de fase L/R e Balance | [Detalhes](plugins/spatial.md#phase-select-eq) |
+| Spatial   | Spatial Mapper | Separa o som Direct, Diffuse e Residual para roteamento multicanal flexível | [Detalhes](plugins/spatial.md#spatial-mapper) |
 | Spatial   | Stereo Blend | Controla a largura estéreo, de mono a estéreo ampliado | [Detalhes](plugins/spatial.md#stereo-blend) |
 | Others    | Oscillator | Gerador de tons de teste e ruído para verificar alto-falantes/fones | [Detalhes](plugins/others.md#oscillator) |
 | Control   | Section | Agrupa efeitos para que uma seção inteira possa ser colocada em bypass ou restaurada | [Detalhes](plugins/control.md) |

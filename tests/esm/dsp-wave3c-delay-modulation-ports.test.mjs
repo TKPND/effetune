@@ -33,7 +33,7 @@ const ports = [
     ],
     caseCount: 10,
     identityCase: 'dry-only-warms-lines',
-    jsEngineHash: 'd8198e69d856151f7314b95d98bcd89f6c8541cd285545dae458f5b15072dc3d',
+    jsEngineHash: '50f93510adde2e3777c478df64224646d5738ac6478fec4e2d9e043b03b5253d',
     activeParams: { pd: 0, ds: 1, dp: 75, hd: 8000, ld: 120, mx: 65, fb: 80, pp: 100 }
   },
   {
@@ -61,7 +61,7 @@ const ports = [
     ],
     caseCount: 8,
     identityCase: 'zero-depth-random-state',
-    jsEngineHash: '5e594efb9dee178b6f89e31d34a893b7bfa6c242f69a3f83544eb17714176181',
+    jsEngineHash: 'd8b80864aa37e1cc6d387afcb0b61f099795cc62bd251fea668f0944fdf1c766',
     activeParams: { rt: 13, dp: 8, rn: 24, rc: 300, rs: -4, cp: 90, cs: 40 }
   }
 ];

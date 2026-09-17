@@ -7,7 +7,7 @@ permalink: /dsp/effects/
 ---
 # Effects
 
-Browse all 102 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
+Browse all 103 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
 
 <label for="effect-filter">Filter effects</label>
 <input id="effect-filter" type="search" placeholder="Name, type, category, seeded, or asset" data-dsp-effect-filter>
@@ -148,6 +148,7 @@ Browse all 102 semantic types registered in the v1 binding catalog. The list rem
 - [MS Matrix](/dsp/effects/ms-matrix/) (`MSMatrix`) — Encodes, decodes, or adjusts mid-side stereo components. <span data-effect-tags="spatial  "></span>
 - [Multiband Balance](/dsp/effects/multiband-balance/) (`MultibandBalance`) — Adjusts left-right balance independently across frequency bands. <span data-effect-tags="spatial  "></span>
 - [Phase Select EQ](/dsp/effects/phase-select-eq/) (`PhaseSelectEQ`) — Applies gain only where frequency, absolute stereo phase difference, and left/right Balance fall within configured regions. <span data-effect-tags="spatial  "></span>
+- [Spatial Mapper](/dsp/effects/spatial-mapper/) (`SpatialMapper`) — Separates direct, diffuse, and residual sound and routes each component across a multichannel bus. <span data-effect-tags="spatial  "></span>
 - [Stereo Blend](/dsp/effects/stereo-blend/) (`StereoBlend`) — Blends stereo channels to adjust width and channel separation. <span data-effect-tags="spatial  "></span>
 
 ## Others

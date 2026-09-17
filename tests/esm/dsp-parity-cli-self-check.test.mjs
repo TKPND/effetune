@@ -277,7 +277,7 @@ test('release acceptance completion follows the requested backend set', () => {
     },
     stateContracts: contracts
   });
-  const python = backend('python-native', 953, 2, stateContracts([
+  const python = backend('python-native', 960, 2, stateContracts([
     'sameSeed', 'differentSeed', 'reset', 'closeIdempotent', 'closedRejects',
     'modulationCrossField', 'frequencyShifterLatency'
   ]));
@@ -286,8 +286,8 @@ test('release acceptance completion follows the requested backend set', () => {
     'statefulStream', 'modulationCrossField', 'frequencyShifterLatency'
   ]);
   const javascript = [
-    backend('javascript-baseline', 953, 2, javascriptContracts),
-    backend('javascript-simd', 953, 2, javascriptContracts)
+    backend('javascript-baseline', 960, 2, javascriptContracts),
+    backend('javascript-simd', 960, 2, javascriptContracts)
   ];
   const worklets = (prefix, total, expectedValidationRejections) => ({
     status: 'completed',
@@ -297,8 +297,8 @@ test('release acceptance completion follows the requested backend set', () => {
   });
   const full = {
     backends: [python, ...javascript],
-    workletGolden: worklets('chromium-audioworklet', 104, 2),
-    workletNonIdentity: worklets('chromium-audioworklet-nonidentity', 95, 0)
+    workletGolden: worklets('chromium-audioworklet', 105, 2),
+    workletNonIdentity: worklets('chromium-audioworklet-nonidentity', 96, 0)
   };
 
   assert.equal(isAcceptanceComplete(full), true);

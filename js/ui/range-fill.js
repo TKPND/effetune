@@ -9,7 +9,14 @@ export function updateRangeFill(input) {
         ? ((value - minimum) / span) * 100
         : 0;
     const clamped = percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+    const explicitOrigin = Number.parseFloat(input.dataset?.rangeFillOrigin);
+    const origin = Number.isFinite(explicitOrigin)
+        ? explicitOrigin
+        : (minimum < 0 && maximum > 0 ? 0 : minimum);
+    const originPercent = span > 0 ? ((origin - minimum) / span) * 100 : 0;
+    const clampedOrigin = originPercent < 0 ? 0 : (originPercent > 100 ? 100 : originPercent);
     input.style?.setProperty?.('--et-range-fill', `${clamped}%`);
+    input.style?.setProperty?.('--et-range-origin', `${clampedOrigin}%`);
 }
 
 export function refreshRangeFills(root) {

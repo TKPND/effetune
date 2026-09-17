@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { VISUAL_SYNC_RULES as rules, isVisualSyncEnabled, requiredOutputDelayFrames,
-  audiblePerformanceTime } from '../../js/audio/visual-sync.js';
+  audibleFrameTime, audibleContextTime } from '../../js/audio/visual-sync.js';
 
 test('visual sync capture ages follow FFT, staged slot, HQ and pitch window formulas', () => {
   for (const pt of [8, 12, 14]) {
@@ -36,13 +36,14 @@ test('visual sync output delay uses the greatest enabled capture deficit and cla
   assert.equal(requiredOutputDelayFrames({ ...options, taps: {} }), 0);
 });
 
-test('visual sync audible time maps context frames to the output clock or latency fallback', () => {
+test('visual sync deadlines stay on the sample timeline while delivery follows the output clock', () => {
   const options = { endFrame: 48000, sampleRate: 48000, generationFrames: 480,
     tapFrames: 960, outputDelayFrames: 480,
     fallback: { currentTime: 1, performanceTime: 1000, outputLatency: 0.1 } };
-  assert.equal(audiblePerformanceTime({ ...options,
-    outputTimestamp: { contextTime: 1, performanceTime: 2000 } }), 2020);
-  assert.ok(Math.abs(audiblePerformanceTime(options) - 1120) < 1e-10);
+  assert.equal(audibleFrameTime(options), 1020);
+  assert.equal(audibleContextTime({ ...options.fallback,
+    outputTimestamp: { contextTime: 1, performanceTime: 900 } }), 1100);
+  assert.equal(audibleContextTime(options.fallback), 900);
 });
 
 
@@ -57,7 +58,7 @@ test('Phase Select EQ sync follows the input window and staged completion before
   const generationFrames = definition.generationFrames({}, 48000, 'wasm');
   assert.equal(requiredOutputDelayFrames({ targets: [{ id: 7, ruleKey: 'PhaseSelectEqPlugin', generationFrames }],
     taps: { 7: { input: 5120, output: 0 } }, deviceLatencyFrames: 480, maxFrames: 24000 }), 0);
-  const due = audiblePerformanceTime({ endFrame: 48000, generationFrames, tapFrames: 5120,
+  const due = audibleFrameTime({ endFrame: 48000, generationFrames, tapFrames: 5120,
     sampleRate: 48000, outputTimestamp: { contextTime: 1, performanceTime: 1000 } });
   assert.ok(Math.abs(due - (1000 + 2048 / 48)) < 1e-10);
 });

@@ -347,7 +347,7 @@ class HumGeneratorPlugin extends PluginBase {
         // Frequency control
         container.appendChild(this.createParameterControl(
             'Frequency', 10.0, 120.0, 0.1, this.fr,
-            (value) => this.setParameters({ fr: value }), 'Hz', 'fr'
+            (value) => this.setParameters({ fr: value }), 'Hz', 'fr', null, true
         ));
 
         // Type selection (radio buttons)
@@ -395,7 +395,7 @@ class HumGeneratorPlugin extends PluginBase {
         // Tone control
         container.appendChild(this.createParameterControl(
             'Tone', 1.0, 20.0, 0.1, this.tn,
-            (value) => this.setParameters({ tn: value }), 'kHz', 'tn'
+            (value) => this.setParameters({ tn: value }), 'kHz', 'tn', null, true
         ));
 
         // Instability control

@@ -114,7 +114,7 @@ class BandwidthExtenderPlugin extends PluginBase {
             value => this.setParameters({ cm: value }), 'cm'));
         this._manualCutoffRow = this.createParameterControl(
             'Manual Cutoff', 6000, 24000, 100, this.cf,
-            value => this.setParameters({ cf: value }), 'Hz', 'cf');
+            value => this.setParameters({ cf: value }), 'Hz', 'cf', null, true);
         container.appendChild(this._manualCutoffRow);
         container.appendChild(this._createStatusElement());
         this._syncCutoffVisibility();

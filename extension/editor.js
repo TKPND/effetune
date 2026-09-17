@@ -1,5 +1,6 @@
 import { ExtensionClient } from './protocol.js';
 import { ExtensionIrLibraryClient } from './ir-library.js';
+import { hasPreparationStatus, mirrorPreparationStatus, refreshPreparationStatuses } from './preparation-status-bridge.js';
 import { initializePluginModel, serializePipeline } from './model.js';
 import { PipelineManager } from '../js/ui/pipeline-manager.js';
 import { PluginListManager } from '../js/ui/plugin-list-manager.js';
@@ -312,6 +313,7 @@ export class ExtensionEditor {
     this.pluginManager.createPlugin = name => {
       const plugin = createPlugin(name);
       plugin.setWasmAssetTargetResolver?.(() => []);
+      mirrorPreparationStatus(plugin, () => this.snapshot?.preparationStatuses);
       return plugin;
     };
     this.uiManager = createUiManager(
@@ -367,6 +369,9 @@ export class ExtensionEditor {
   bindEvents() {
     this.client.addEventListener('state', event => this.restoreSnapshot(event.detail));
     this.client.addEventListener('workletMessage', event => {
+      if (['assetState', 'assetLoadRejected'].includes(event.detail?.type) &&
+          this.audioManager.pipeline.some(plugin =>
+            plugin.id === event.detail.pluginId && hasPreparationStatus(plugin))) return;
       this.audioManager.telemetryHub.handleMessage(event.detail);
       this.audioManager.workletPort.deliver(event.detail);
     });
@@ -439,6 +444,7 @@ export class ExtensionEditor {
     this.syncRuntimeState(snapshot);
     this.renderSession();
     if (!force && this.audioManager.pendingMutations > 0) return;
+    refreshPreparationStatuses(this.audioManager.pipeline);
     if (!rebuild) return;
 
     this.audioManager.suppressMutations = true;

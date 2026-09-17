@@ -548,6 +548,13 @@ class NoteSpectrogramPlugin extends PluginBase {
         }
         const snapshot = this.parseTelemetryFrame(frame);
         if (!snapshot || !this.history || !this.intensity) return;
+        if (frame.source && frame.source !== this.telemetrySource) {
+            this.telemetrySource = frame.source;
+            this.activeGeneration = null;
+            this.generationFence = null;
+            this.modeTimeFence = null;
+            this.clearHistory();
+        }
 
         if (this.activeGeneration === null) {
             const afterTimeFence = this.modeTimeFence === null ||

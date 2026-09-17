@@ -6,8 +6,8 @@ lang: en
 
 # Version History
 
-### Version 2.10.0 (TBD, 2026)
-- Added Pitch Meter and TV Audio Simulator effects
+### Version 2.10.0 (Sep 18, 2026)
+- Added Pitch Meter, Spatial Mapper and TV Audio Simulator effects
 - Added drag-to-preview sine tones to supported frequency and note graphs
 - Added the Sync Visuals to Audio setting
 - Added in-app update download and restart for the Windows installer version

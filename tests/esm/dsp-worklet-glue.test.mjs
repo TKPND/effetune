@@ -2052,7 +2052,7 @@ test('dsp-off Frequency Shifter fallback aligns routed merges and reports latenc
   assert.equal(harness.processor.dspLatencyPlan.totalSamples, 114);
   assert.deepEqual(JSON.parse(JSON.stringify(messagesOf(harness.posts, 'dspLatency').at(-1).message)), {
     type: 'dspLatency', samples: 114, sampleRate: 48000, compensated: true,
-    taps: { 7: { input: 114, output: 0, execution: 'js' }, 8: { input: 114, output: 114, execution: 'js' }, 9: { input: 0, output: 0, execution: 'js' } }
+    taps: { 7: { input: 114, output: 0, execution: 'js', instanceId: 0 }, 8: { input: 114, output: 114, execution: 'js', instanceId: 0 }, 9: { input: 0, output: 0, execution: 'js', instanceId: 0 } }
   });
   processRoutedImpulse(harness.processor, 114);
 
@@ -2060,7 +2060,7 @@ test('dsp-off Frequency Shifter fallback aligns routed merges and reports latenc
   assert.equal(harness.processor.dspLatencyPlan.totalSamples, 228);
   assert.deepEqual(JSON.parse(JSON.stringify(messagesOf(harness.posts, 'dspLatency').at(-1).message)), {
     type: 'dspLatency', samples: 228, sampleRate: 96000, compensated: true,
-    taps: { 7: { input: 228, output: 0, execution: 'js' }, 8: { input: 228, output: 228, execution: 'js' }, 9: { input: 0, output: 0, execution: 'js' } }
+    taps: { 7: { input: 228, output: 0, execution: 'js', instanceId: 0 }, 8: { input: 228, output: 228, execution: 'js', instanceId: 0 }, 9: { input: 0, output: 0, execution: 'js', instanceId: 0 } }
   });
 });
 
@@ -2093,7 +2093,7 @@ test('per-instance WASM fallback uses Frequency Shifter JS latency at the active
   assert.equal(harness.processor.dspLatencyPlan.totalSamples, 114);
   assert.deepEqual(JSON.parse(JSON.stringify(messagesOf(harness.posts, 'dspLatency').at(-1).message)), {
     type: 'dspLatency', samples: 114, sampleRate: 48000, compensated: true,
-    taps: { 7: { input: 114, output: 0, execution: 'js' }, 8: { input: 114, output: 114, execution: 'js' }, 9: { input: 0, output: 0, execution: 'js' } }
+    taps: { 7: { input: 114, output: 0, execution: 'js', instanceId: 0 }, 8: { input: 114, output: 114, execution: 'js', instanceId: 0 }, 9: { input: 0, output: 0, execution: 'js', instanceId: 0 } }
   });
   processRoutedImpulse(harness.processor, 114);
 });
@@ -2871,6 +2871,7 @@ test('worklet transfers telemetry packets, accepts pool returns, and falls back 
   assert.equal(harness.processor.dspPacketPool.length, 3);
   assert.ok(harness.processor.dspPacketPool.every(packet => packet instanceof Uint8Array));
   const firstPacketView = harness.processor.dspPacketPool.at(-1);
+  harness.setContextFrame(48000);
 
   processBlock(harness.processor);
   const firstTelemetryRead = binding.calls.find(call => call[0] === 'telemetryRead');
@@ -2878,6 +2879,7 @@ test('worklet transfers telemetry packets, accepts pool returns, and falls back 
   const telemetry = messagesOf(harness.posts, 'dspTelemetry');
   assert.equal(telemetry.length, 1);
   assert.equal(telemetry[0].message.bytes, 32);
+  assert.equal(telemetry[0].message.contextFrameOffset, 48000);
   assert.equal(telemetry[0].message.droppedFrames, 4);
   assert.equal(telemetry[0].transfer.length, 1);
   assert.equal(telemetry[0].transfer[0], telemetry[0].message.packet);
@@ -6683,10 +6685,25 @@ test('visual sync tap distances follow serial latency and disabled sections', as
   const message = messagesOf(h.posts, 'dspLatency').at(-1).message;
   assert.equal(message.samples, 192);
   assert.deepEqual(JSON.parse(JSON.stringify(message.taps)), {
-    1: { input: 192, output: 128, execution: 'js' },
-    2: { input: 128, output: 0, execution: 'js' }
+    1: { input: 192, output: 128, execution: 'js', instanceId: 0 },
+    2: { input: 128, output: 0, execution: 'js', instanceId: 0 }
   });
   h.processor.masterBypass = true;
   h.processor.rebuildDspLatencyPlan(new Map());
   assert.deepEqual(Object.keys(messagesOf(h.posts, 'dspLatency').at(-1).message.taps), []);
+});
+
+
+test('latency telemetry identifies recreated WASM analyzers even when their delays are unchanged', async () => {
+  const h = await createWorkletHarness();
+  h.processor.plugins = [pluginConfig({ id: 7 })];
+  h.processor.dspLive = true;
+  h.processor.wasmInstances.set(7, { id: 100, ready: true });
+  h.processor.rebuildDspLatencyPlan(new Map([[7, 0]]));
+  assert.equal(messagesOf(h.posts, 'dspLatency').at(-1).message.taps[7].instanceId, 100);
+  const count = messagesOf(h.posts, 'dspLatency').length;
+  h.processor.wasmInstances.set(7, { id: 200, ready: true });
+  h.processor.rebuildDspLatencyPlan(new Map([[7, 0]]));
+  assert.equal(messagesOf(h.posts, 'dspLatency').length, count + 1);
+  assert.equal(messagesOf(h.posts, 'dspLatency').at(-1).message.taps[7].instanceId, 200);
 });

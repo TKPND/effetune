@@ -1,6 +1,6 @@
 ---
 title: "Plugins de Áudio Espacial - EffeTune"
-description: "Plugins de áudio espacial, incluindo Crossfeed Filter, Crosstalk Cancellation, MS Matrix, Multiband Balance, Phase Select EQ e Stereo Blend."
+description: "Plugins de áudio espacial, incluindo Crossfeed Filter, Crosstalk Cancellation, MS Matrix, Multiband Balance, Phase Select EQ, Spatial Mapper e Stereo Blend."
 lang: pt
 ---
 
@@ -15,6 +15,7 @@ Uma coleção de plugins que aprimoram como a música soa em seus fones de ouvid
 - [MS Matrix](#ms-matrix) - Converte estéreo para Mid/Side e de volta para cadeias avançadas de ajuste estéreo
 - [Multiband Balance](#multiband-balance) - Controle de balanço estéreo dependente de frequência de 5 bandas
 - [Phase Select EQ](#phase-select-eq) - Realça ou atenua componentes de frequência conforme a diferença de fase L/R e Balance
+- [Spatial Mapper](#spatial-mapper) - Separa o som Direct, Diffuse e Residual e roteia cada componente entre os canais
 - [Stereo Blend](#stereo-blend) - Controla a largura estéreo de estéreo com polaridade lateral invertida, passando por mono, até estéreo expandido
 
 ## Crossfeed Filter
@@ -322,6 +323,52 @@ Essas faixas de fase representam tendências comuns, não posições fixas das f
 - **Low Phase Transition / High Phase Transition**: Definem quanto o efeito diminui em direção a 0° e 180°.
 
 As alças do mapa, os controles deslizantes e os campos numéricos editam os mesmos valores. Com mouse ou toque, arraste dentro do quadro externo do Band selecionado para mover o Band inteiro, as bordas ou os cantos do Core para redimensioná-lo e as alças da borda externa para ajustar cada Transition separadamente. Uma alça de fase baixa para no centro: Core Low Phase para em 0° e Low Phase Transition na largura máxima. Quando Core Low Phase está exatamente em 0°, a alça central pode começar para qualquer lado; após o primeiro movimento, permanece travada nesse lado até o fim do arraste.
+
+## Spatial Mapper
+
+O Spatial Mapper analisa a relação entre os canais de entrada por faixas de frequência, separa gradualmente o som em componentes Direct, Diffuse e Residual e roteia cada componente no bus de canais atual. Use-o para manter sons bem definidos na frente, enviar ambiência aos canais surround ou de altura, extrair o centro ou a ambiência e alterar a largura estéreo. O preset padrão **Transparent** preserva a posição original dos canais.
+
+**Direct** contém o som coerente dominante de cada faixa. **Diffuse** contém o som menos coerente e distribuído. **Residual** preserva o conteúdo que não foi totalmente atribuído aos outros dois. A separação é gradual, por isso os sons não mudam bruscamente de rota quando os controles são ajustados.
+
+O Spatial Mapper adiciona latência devido à análise de frequência. O EffeTune inclui essa latência em **Total Delay**. Leve-a em conta no monitoramento em tempo real e na sincronização entre áudio e vídeo.
+
+### Presets do sistema
+
+Clique em **Effect Presets** no cabeçalho do efeito para escolher uma configuração inicial completa.
+
+- **Transparent** - Preserva a posição original dos canais e é o preset padrão.
+- **Stereo Enhance** - Amplia uma entrada estéreo pela rota Residual, preservando a posição dos sons definidos e difusos.
+- **Center Extract** - Envia Direct ao canal 3. Use um bus com pelo menos três canais.
+- **5.1 Upmix** - Distribui o estéreo na ordem L, R, C, LFE, Ls, Rs. Mantém o LFE vazio e exige pelo menos seis canais.
+- **7.1.4 Upmix** - Distribui o estéreo na ordem L, R, C, LFE, Ls, Rs, Lb, Rb, Ltf, Rtf, Ltb, Rtb. Mantém o LFE vazio e exige pelo menos doze canais.
+- **Ambience Extract** - Mantém Diffuse e suprime Direct e Residual.
+
+### Como ler e editar a grade de roteamento
+
+Em **Component Routing**, escolha a aba **Direct**, **Diffuse** ou **Residual**. As colunas são os canais de entrada analisados e as linhas são os canais do bus de saída. Use o pequeno controle deslizante ou o campo numérico de cada célula para ajustar o ganho linear de -1,00 a +1,00 em passos de 0,01: 0 desconecta, +1,00 envia o componente com polaridade positiva completa e um valor negativo o envia com polaridade invertida. Valores negativos aparecem em vermelho.
+
+Uma linha de saída roteada substitui o canal correspondente do bus pelo resultado mapeado. Um canal de saída dentro do intervalo de **Input Channels** fica em silêncio quando nenhum componente é roteado para sua linha. Os canais fora desse intervalo atravessam o efeito com a mesma latência quando nenhum componente escreve neles.
+
+### Guia de aprimoramento da audição
+
+1. Para ampliar o estéreo sem mover tanto os sons definidos, comece com **Stereo Enhance**. Reduza **Directness** ou **Diffuse Extraction** apenas se mais material precisar permanecer em Residual. Compare com **Transparent** e reduza o efeito se o centro enfraquecer ou se muito conteúdo desaparecer em mono.
+2. Para criar um canal central a partir do estéreo, use um bus com pelo menos três canais e escolha **Center Extract**. Aumente **Directness** e **Separation** para concentrar mais conteúdo coerente em Direct.
+3. Para expandir o estéreo aos canais surround ou de altura, configure o bus na ordem indicada e escolha **5.1 Upmix** ou **7.1.4 Upmix**. Ajuste **Diffuse Extraction** para controlar quanto som distribuído chega a esses canais. Os presets não geram sinal LFE; adicione gerenciamento de graves separadamente se necessário.
+4. Para isolar a ambiência, comece com **Ambience Extract**. Aumente **Diffuse Extraction** e use **Phase Sensitivity** para definir quanto a oposição de fase reduz a classificação Direct.
+
+### Parâmetros
+
+- **Input Channels** (1 a 16): Define quantos canais, a partir do início do bus, são analisados. Se o bus tiver menos canais, são usados os disponíveis.
+- **Analysis Bands** (8, 16, 24, 32 ou 48): Define a resolução de frequência da análise espacial. Mais faixas acompanham melhor as mudanças de posição conforme a frequência, mas exigem mais processamento. O padrão é 24.
+- **Directness** (0% a 100%): Controla quanto conteúdo coerente dominante é atribuído a Direct. Valores maiores reforçam a extração Direct.
+- **Separation** (0% a 100%): Controla a seletividade da atribuição a Direct e Diffuse. Valores maiores deixam mais conteúdo ambíguo em Residual e aumentam o contraste entre as rotas.
+- **Diffuse Extraction** (0% a 100%): Controla quanto conteúdo de baixa coerência é atribuído a Diffuse. Valores maiores enviam mais ambiência distribuída a essa rota.
+- **Phase Sensitivity** (0% a 100%): Controla quanto a oposição de fase entre canais reduz a classificação Direct. Valores baixos tratam o conteúdo coerente de polaridade oposta de modo semelhante aos demais; valores altos deixam mais conteúdo fora de Direct. Esse controle não envia automaticamente sons em oposição de fase aos canais traseiros.
+- **Temporal Smoothing** (0% a 100%, Fast a Stable): Controla a velocidade com que a análise e as rotas acompanham as mudanças. Valores baixos reagem mais rápido; valores altos reduzem o movimento da imagem e o bombeamento, mas respondem mais devagar.
+- **Energy Preservation** (Off/On): Normaliza separadamente as rotas Direct, Diffuse e Residual para evitar mudanças de nível indesejadas causadas pelas matrizes. Desative quando o próprio ganho da matriz precisar mudar o nível do componente.
+- **Component Routing / Direct**: Seleciona a grade Direct e define seus ganhos de saída.
+- **Component Routing / Diffuse**: Seleciona a grade Diffuse e define seus ganhos de saída.
+- **Component Routing / Residual**: Seleciona a grade Residual e define seus ganhos de saída.
 
 ## Stereo Blend
 

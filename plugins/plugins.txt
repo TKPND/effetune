@@ -120,6 +120,7 @@ spatial/crosstalk_cancellation: Crosstalk Cancellation | Spatial | CrosstalkCanc
 spatial/ms_matrix: MS Matrix | Spatial | MSMatrixPlugin
 spatial/multiband_balance: Multiband Balance | Spatial | MultibandBalancePlugin | css
 spatial/phase_select_eq: Phase Select EQ | Spatial | PhaseSelectEqPlugin | css
+spatial/spatial_mapper: Spatial Mapper | Spatial | SpatialMapperPlugin | css
 spatial/stereo_blend: Stereo Blend | Spatial | StereoBlendPlugin
 others/oscillator: Oscillator | Others | OscillatorPlugin
 control/section: Section | Control | SectionPlugin

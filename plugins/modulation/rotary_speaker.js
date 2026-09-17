@@ -308,7 +308,7 @@ class RotarySpeakerPlugin extends PluginBase {
         this._uiControls = {};
         this._uiControls.ss = this.createSelectControl('Speed State', ['Stop', 'Slow', 'Fast'], this.ss, this.setSs.bind(this), 'ss');
         this._uiControls.sp = this.createParameterControl('Speed', 25, 200, 1, this.sp, this.setSp.bind(this), '%', 'sp');
-        this._uiControls.ac = this.createParameterControl('Acceleration', 0.1, 10, 0.1, this.ac, this.setAc.bind(this), 's', 'ac');
+        this._uiControls.ac = this.createParameterControl('Acceleration', 0.1, 10, 0.1, this.ac, this.setAc.bind(this), 's', 'ac', null, true);
         this._uiControls.xo = this.createLogarithmicParameterControl('Crossover', 200, 2000, 1, this.xo, this.setXo.bind(this), 'Hz', 'xo');
         this._uiControls.rb = this.createParameterControl('Rotor Balance', -100, 100, 1, this.rb, this.setRb.bind(this), '%', 'rb');
         this._uiControls.sw = this.createParameterControl('Stereo Width', 0, 100, 1, this.sw, this.setSw.bind(this), '%', 'sw');

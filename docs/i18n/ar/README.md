@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">نزّل تطبيق سطح المكتب</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">نزّل إصدار VST</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">تثبيت إضافة Chrome</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">تثبيت إضافة Edge</a>
 </div>
 
 معالج تأثيرات صوتية فوري، مصمم لعشاق الصوت لتحسين تجربة الاستماع للموسيقى. يتيح لك EffeTune معالجة أي مصدر صوتي عبر تأثيرات عالية الجودة متنوعة، مما يمكنك من تخصيص وتحسين تجربة الاستماع في الوقت الحقيقي.
@@ -134,6 +136,7 @@
    - [التحكم في المؤثرات عبر MIDI أو ذراع الألعاب أو لوحة المفاتيح](controller-mapping.md)
 10. انقر زر **الإعدادات المسبقة للتأثير** في كل تأثير لحفظ إعدادات ذلك التأثير فقط أو تطبيقها
 11. لضبط شريط التمرير بدقة، اضغط مع الاستمرار على Shift أثناء سحبه؛ ستتغير القيمة بمقدار أصغر خطوة في كل مرة
+   - في أشرطة التمرير التي تقبل قيماً سالبة وموجبة، يمتد الجزء الملون من 0 إلى القيمة الحالية. وتستخدم أشرطة Ratio القيمة 1.0 كنقطة بداية.
 12. في الرسوم المدعومة ذات محور التردد أو النغمات، اسحب على امتداد المحور لمعاينة ذلك التردد كنغمة جيبية بمستوى -12 dB تمر عبر سلسلة التأثيرات. عند عرض لوحة مفاتيح البيانو، تنجذب المعاينة إلى أقرب نصف درجة؛ ويؤدي السحب فوق مفتاح إلى معاينة نغمة ذلك المفتاح
 
 ### استخدام الإعدادات المسبقة
@@ -411,6 +414,7 @@
 | Spatial | MS Matrix | يحول بين الستيريو وMid/Side لضبط المركز والأجواء | [تفاصيل](plugins/spatial.md#ms-matrix) |
 | Spatial | Multiband Balance | تحكم خماسي النطاق في توازن الستيريو حسب التردد | [تفاصيل](plugins/spatial.md#multiband-balance) |
 | Spatial | Phase Select EQ | يعزز أو يخفض مكونات التردد المحددة حسب فرق الطور بين L/R وBalance | [تفاصيل](plugins/spatial.md#phase-select-eq) |
+| Spatial | Spatial Mapper | يفصل الصوت إلى Direct وDiffuse وResidual لتوجيه مرن متعدد القنوات | [تفاصيل](plugins/spatial.md#spatial-mapper) |
 | Spatial | Stereo Blend | يتحكم في عرض الستيريو من mono إلى ستيريو معزز | [تفاصيل](plugins/spatial.md#stereo-blend) |
 | Others | Oscillator | مولد نغمات وضوضاء اختبار لفحص السماعات أو سماعات الرأس | [تفاصيل](plugins/others.md#oscillator) |
 | Control | Section | يجمع التأثيرات بحيث يمكن تجاوز قسم كامل أو إعادته | [تفاصيل](plugins/control.md) |

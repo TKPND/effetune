@@ -159,6 +159,7 @@ test('rollout enables only shipped kernels with matching generated layouts', () 
     'MSMatrixPlugin',
     'MultibandBalancePlugin',
     'PhaseSelectEqPlugin',
+    'SpatialMapperPlugin',
     'StereoBlendPlugin'
   ]);
   assert.equal(Object.isFrozen(SHIPPED_ENABLED_TYPES), true);

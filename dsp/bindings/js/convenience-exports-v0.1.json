@@ -102,6 +102,7 @@
     {"type":"MSMatrix","class":"MSMatrix","factory":"createMSMatrix"},
     {"type":"MultibandBalance","class":"MultibandBalance","factory":"createMultibandBalance"},
     {"type":"PhaseSelectEQ","class":"PhaseSelectEQ","factory":"createPhaseSelectEQ"},
+    {"type":"SpatialMapper","class":"SpatialMapper","factory":"createSpatialMapper"},
     {"type":"StereoBlend","class":"StereoBlend","factory":"createStereoBlend"}
   ]
 }

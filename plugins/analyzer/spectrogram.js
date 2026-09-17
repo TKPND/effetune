@@ -469,7 +469,7 @@ class SpectrogramPlugin extends PluginBase {
             if (this.sc !== 'log-hq' || snapshot.points !== this.pt ||
                 producer !== (this._dspTelemetryHub?.port ?? null)) return;
             this.hqReceiver ??= new globalThis.MultiresSpectrum.FrameReceiver();
-            if (!this.hqReceiver.accept(snapshot, producer)) return;
+            if (!this.hqReceiver.accept(snapshot, frame.source ?? producer)) return;
             if (this.hqReceiver.streamChanged) {
                 this.resetDspSpectrogramHistory();
                 this.clearSpectrogramImage();

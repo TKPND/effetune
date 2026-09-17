@@ -251,7 +251,7 @@ class BitCrusherPlugin extends PluginBase {
         // Use helper for ZOH Frequency control
         container.appendChild(this.createParameterControl(
             'ZOH Frequency', 4000, 96000, 100, this.zf, 
-            (value) => this.setZf(value), 'Hz', 'zf'
+            (value) => this.setZf(value), 'Hz', 'zf', null, true
         ));
         
         // Use helper for Bit Error control

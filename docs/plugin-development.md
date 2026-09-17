@@ -358,6 +358,10 @@ Do not post messages or allocate payloads from `process()`.
 
 - Prefer `PluginBase` helpers: `createParameterControl()`, `createSelectControl()`,
   `createCheckboxControl()`, `createRadioGroup()`, and `createGraphContainer()`.
+- For a positive range that benefits from logarithmic adjustment, pass `true` as
+  the final `logarithmic` argument of `createParameterControl()` (after `toDisplay`).
+  This changes the slider curve while preserving number entry, display formatting,
+  parameter units, and the existing step size.
 - Pass the plugin property name the value came from as the helper's `modelKey` argument
   so the control follows changes made outside the UI (host automation, preset recall);
   add a `toDisplay` transform when the widget unit differs from the stored unit. A

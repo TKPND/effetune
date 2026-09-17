@@ -133,9 +133,10 @@ test('Phase Select EQ accepts indexed compact keys when no regions array is pres
 test('Phase Select EQ is shipped in Spatial order with telemetry type 20', () => {
   const balanceIndex = SHIPPED_ENABLED_TYPES.indexOf('MultibandBalancePlugin');
   assert.notEqual(balanceIndex, -1);
-  assert.deepEqual(SHIPPED_ENABLED_TYPES.slice(balanceIndex, balanceIndex + 3), [
+  assert.deepEqual(SHIPPED_ENABLED_TYPES.slice(balanceIndex, balanceIndex + 4), [
     'MultibandBalancePlugin',
     'PhaseSelectEqPlugin',
+    'SpatialMapperPlugin',
     'StereoBlendPlugin'
   ]);
   assert.equal(TelemetryFrameType.TAP_PHASE_SELECT_MAP, 20);

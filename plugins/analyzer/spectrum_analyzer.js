@@ -420,7 +420,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             if (this.sc !== 'log-hq' || snapshot.points !== this.pt ||
                 producer !== (this._dspTelemetryHub?.port ?? null)) return;
             this.hqReceiver ??= new globalThis.MultiresSpectrum.FrameReceiver();
-            if (!this.hqReceiver.accept(snapshot, producer)) return;
+            if (!this.hqReceiver.accept(snapshot, frame.source ?? producer)) return;
             this.hqGeneration = snapshot.generation;
             this.hqFrameIndex = snapshot.frameIndex;
         } else if (this.sc === 'log-hq') return;

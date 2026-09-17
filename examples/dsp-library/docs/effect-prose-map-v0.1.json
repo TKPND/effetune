@@ -102,6 +102,7 @@
     "MSMatrix": ["docs/plugins/spatial.md", "MS Matrix"],
     "MultibandBalance": ["docs/plugins/spatial.md", "Multiband Balance"],
     "PhaseSelectEQ": ["docs/plugins/spatial.md", "Phase Select EQ"],
+    "SpatialMapper": ["docs/plugins/spatial.md", "Spatial Mapper"],
     "StereoBlend": ["docs/plugins/spatial.md", "Stereo Blend"]
   }
 }

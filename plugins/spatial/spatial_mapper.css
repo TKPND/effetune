@@ -1,0 +1,130 @@
+.spatial-mapper-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+}
+
+.spatial-mapper-routing {
+    margin-top: 20px;
+}
+
+.spatial-mapper-routing h3 {
+    margin: 0 0 10px;
+    color: var(--et-text-primary);
+    font-size: 1rem;
+}
+
+.spatial-mapper-tab {
+    flex: 1 1 100px;
+}
+
+.spatial-mapper-routing-wrapper {
+    width: 100%;
+    max-height: 540px;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.spatial-mapper-routing-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    table-layout: auto;
+}
+
+.spatial-mapper-routing-table th,
+.spatial-mapper-routing-table td {
+    border: 1px solid var(--et-surface-20);
+    border-width: 0 1px 1px 0;
+    padding: 5px;
+    text-align: center;
+}
+
+.spatial-mapper-routing-table tr > :first-child {
+    box-sizing: border-box;
+    width: 64px;
+    border-left-width: 1px;
+}
+
+.spatial-mapper-routing-table thead tr:first-child > th {
+    border-top-width: 1px;
+}
+
+.spatial-mapper-routing-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: color-mix(in srgb, var(--et-surface-13), var(--et-graph-bg-deep) 25%);
+    color: var(--et-text-primary);
+    white-space: nowrap;
+}
+
+.spatial-mapper-routing-table thead tr:nth-child(2) th {
+    top: 32px;
+}
+
+.spatial-mapper-routing-table .spatial-mapper-sticky-row {
+    left: 0;
+    z-index: 1;
+}
+
+.spatial-mapper-routing-table .spatial-mapper-sticky-corner {
+    left: 0;
+    z-index: 3;
+}
+
+.spatial-mapper-routing-control.parameter-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    min-width: 150px;
+    gap: 8px;
+    margin: 0;
+}
+
+.spatial-mapper-ui .spatial-mapper-routing-control input[type="range"] {
+    flex: 1 1 0;
+    width: 0;
+    min-width: 80px;
+    margin: 0;
+}
+
+.spatial-mapper-ui .spatial-mapper-routing-control input[type="number"] {
+    box-sizing: border-box;
+    flex: none;
+    width: 62px;
+    border: 1px solid var(--et-surface-33);
+    border-radius: 3px;
+    padding: 5px 3px;
+    background: var(--et-surface-13);
+    color: var(--et-text-primary);
+    text-align: right;
+}
+
+.spatial-mapper-routing-table input[type="number"].negative {
+    border-color: var(--et-danger) !important;
+    color: var(--et-danger) !important;
+}
+
+body.layout-mobile .spatial-mapper-controls {
+    grid-template-columns: 1fr;
+}
+
+body.layout-mobile .spatial-mapper-ui .spatial-mapper-routing-control {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    min-width: 96px;
+    gap: 4px;
+}
+
+body.layout-mobile .spatial-mapper-ui .spatial-mapper-routing-control input[type="range"]:not(.vertical-slider) {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+}
+
+body.layout-mobile .spatial-mapper-ui .spatial-mapper-routing-control input[type="number"] {
+    width: 70px;
+    min-height: 38px;
+    font-size: 16px;
+}

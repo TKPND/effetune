@@ -1112,12 +1112,22 @@
       }
     },
     {
+      "type": "SpatialMapper",
+      "internalType": "SpatialMapperPlugin",
+      "latency": {
+        "kind": "sampleRateDependent",
+        "dependsOn": [
+          "sampleRate"
+        ]
+      }
+    },
+    {
       "type": "StereoBlend",
       "internalType": "StereoBlendPlugin"
     }
   ],
   "contractDigests": {
-    "publicCatalogSha256": "33699aef3c5e5cd794683287d75764d4b1c233a5bb961a8543adf7ee1806d75b",
-    "privateLayoutSha256": "90541227a97596a51d47ec770a1e32b817bcf9b96bda7591f0a96a8c5e65ad84"
+    "publicCatalogSha256": "ddd6609f70b55274f872ece7b2f8fca57b0f8c42736307748a276fee8d7ef0fb",
+    "privateLayoutSha256": "bf3475e88d0983c14c97bf3eee4f3d09b4f85e52de3b5caefda85c2affe85789"
   }
 }

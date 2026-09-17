@@ -489,6 +489,11 @@ if((BUILD_TESTING AND NOT EMSCRIPTEN) OR ET_NATIVE_TEST_WARNING_CHECK)
     INCLUDE_DIRS core generated/cpp
     WRAP_MALLOC)
   et_add_dsp_test(
+    effetune_dsp_spatial_mapper_tests
+    SOURCES plugins/spatial/spatial_mapper/native_test.cpp
+    INCLUDE_DIRS core generated/cpp
+    WRAP_MALLOC)
+  et_add_dsp_test(
     effetune_dsp_reverb_tests
     SOURCES plugins/reverb/reverb_native_test.cpp
     INCLUDE_DIRS core

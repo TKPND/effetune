@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">下载桌面应用</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">下载 VST 版</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">安装 Chrome 扩展</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">安装 Edge 扩展</a>
 </div>
 
 一个实时音频效果处理器，旨在为音频爱好者提升音乐聆听体验。EffeTune 允许您通过各种高质量效果处理任何音频源，从而实时定制并完善您的聆听体验。
@@ -134,6 +136,7 @@ PC 上的 Chromium 浏览器可以在不同会话间保留对所选音乐文件�
    - [使用MIDI、游戏手柄或键盘控制效果器](controller-mapping.md)
 10. 点击效果的效果预设按钮可仅保存或应用该效果的设置
 11. 如需精细调整滑块，请按住 Shift 键拖动；数值会按最小单位逐步变化
+   - 可设置负值和正值的滑块会填充从 0 到当前值的区间。Ratio 滑块以 1.0 为填充起点。
 12. 在支持的频率轴或音符轴图表上，沿图表轴拖动即可通过效果链试听该频率的 -12 dB 正弦音。显示键盘时，频率会吸附到最近的半音；在琴键上拖动则会试听该键的音高
 
 ### 使用 Presets
@@ -410,6 +413,7 @@ PC 上的 Chromium 浏览器可以在不同会话间保留对所选音乐文件�
 | Spatial   | MS Matrix | 在立体声和 Mid/Side 之间转换，用于调整中央与氛围成分 | [详情](plugins/spatial.md#ms-matrix) |
 | Spatial   | Multiband Balance | 5 频段频率相关立体声平衡控制 | [详情](plugins/spatial.md#multiband-balance) |
 | Spatial   | Phase Select EQ | 按 L/R 相位差和 Balance 选择并提升或衰减频率成分 | [详情](plugins/spatial.md#phase-select-eq) |
+| Spatial   | Spatial Mapper | 将声音分为 Direct、Diffuse 和 Residual，以便灵活进行多通道路由 | [详情](plugins/spatial.md#spatial-mapper) |
 | Spatial   | Stereo Blend | 从单声道到增强立体声控制声场宽度 | [详情](plugins/spatial.md#stereo-blend) |
 | Others    | Oscillator | 用于检查扬声器/耳机的测试音和噪声发生器 | [详情](plugins/others.md#oscillator) |
 | Control   | Section | 将效果分组，让整个区段可被旁路或恢复 | [详情](plugins/control.md) |

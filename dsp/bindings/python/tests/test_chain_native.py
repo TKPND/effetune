@@ -1177,7 +1177,7 @@ class NativeChainTests(unittest.TestCase):
             topology="automatic",
         )
         source_four_channels = np.vstack((source, source))
-        self.assertEqual(len(EFFECT_METADATA["effects"]), 102)
+        self.assertEqual(len(EFFECT_METADATA["effects"]), 103)
         for metadata in EFFECT_METADATA["effects"]:
             effect_type = metadata["type"]
             definition = metadata["parameters"][0] if metadata["parameters"] else None

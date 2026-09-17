@@ -1,6 +1,6 @@
 ---
 title: "공간 오디오 플러그인 - EffeTune"
-description: "Crossfeed Filter, Crosstalk Cancellation, MS Matrix, Multiband Balance, Phase Select EQ, Stereo Blend를 포함한 공간 오디오 플러그인입니다."
+description: "Crossfeed Filter, Crosstalk Cancellation, MS Matrix, Multiband Balance, Phase Select EQ, Spatial Mapper, Stereo Blend를 포함한 공간 오디오 플러그인입니다."
 lang: ko
 ---
 
@@ -15,6 +15,7 @@ lang: ko
 - [MS Matrix](#ms-matrix) - 고급 스테레오 조정 체인을 위해 스테레오를 Mid/Side로 변환하고 다시 되돌림
 - [Multiband Balance](#multiband-balance) - 5밴드 주파수 의존 스테레오 밸런스 제어
 - [Phase Select EQ](#phase-select-eq) - L/R 위상차와 Balance로 선택한 주파수 성분을 부스트 또는 컷
+- [Spatial Mapper](#spatial-mapper) - 소리를 Direct, Diffuse, Residual로 분리해 각 성분을 채널에 라우팅
 - [Stereo Blend](#stereo-blend) - Side 극성이 반전된 스테레오부터 모노, 향상된 스테레오까지 스테레오 폭 제어
 
 ## Crossfeed Filter
@@ -322,6 +323,52 @@ Balance 그리드는 왼쪽:오른쪽 비율을 표시합니다. Balance 0%, ±1
 - **Low Phase Transition / High Phase Transition**: 0° 쪽과 180° 쪽에서 효과가 줄어드는 범위를 설정합니다.
 
 맵의 핸들, 슬라이더, 숫자 입력은 같은 값을 편집합니다. 마우스나 터치로 선택한 Band의 바깥 프레임 안을 드래그하면 Band 전체가 이동하고, Core의 변이나 모서리를 드래그하면 크기가 바뀌며, 바깥 프레임의 핸들로 각 Transition을 따로 조절할 수 있습니다. 낮은 Phase 쪽 핸들은 중앙을 넘지 않습니다. Core Low Phase는 0°에서, Low Phase Transition은 최대 폭에서 멈춥니다. Core Low Phase가 정확히 0°이면 중앙 핸들을 처음에는 어느 쪽으로도 움직일 수 있지만, 한쪽으로 움직인 뒤에는 드래그가 끝날 때까지 그쪽에 고정됩니다.
+
+## Spatial Mapper
+
+Spatial Mapper는 주파수 밴드별로 입력 채널 사이의 관계를 분석하고, 소리를 Direct, Diffuse, Residual 성분으로 연속적으로 분리한 뒤 현재 채널 버스 안에서 각 성분을 라우팅합니다. 또렷한 소리를 전방에 유지하거나, 잔향을 서라운드 및 높이 채널로 보내거나, 센터 또는 앰비언스를 추출하거나, 스테레오 폭을 바꿀 때 사용할 수 있습니다. 기본 **Transparent** 프리셋은 원래 채널 배치를 유지합니다.
+
+**Direct**에는 각 밴드에서 지배적이고 상관성이 높은 소리가 포함됩니다. **Diffuse**에는 상관성이 낮고 넓게 분포한 소리가 포함됩니다. **Residual**은 어느 쪽에도 완전히 배정되지 않은 내용을 유지합니다. 분리는 연속적으로 이루어지므로 설정을 바꿀 때 소리가 라우트 사이에서 갑자기 전환되지 않습니다.
+
+Spatial Mapper는 주파수 분석으로 인한 지연을 추가합니다. EffeTune은 이 지연을 **Total Delay**에 포함해 표시합니다. 실시간 모니터링이나 오디오와 영상의 동기화에 사용할 때 확인하십시오.
+
+### 시스템 프리셋
+
+이펙트 헤더의 **Effect Presets**를 클릭해 완성된 시작 설정을 선택할 수 있습니다.
+
+- **Transparent** - 원래 채널 배치를 유지하는 기본 프리셋입니다.
+- **Stereo Enhance** - 또렷한 소리와 확산음의 위치는 유지하면서 Residual 라우트로 스테레오를 넓힙니다.
+- **Center Extract** - Direct를 3번 채널로 보냅니다. 3채널 이상의 버스가 필요합니다.
+- **5.1 Upmix** - 스테레오를 L, R, C, LFE, Ls, Rs 순서로 배치합니다. LFE는 비워 두며 6채널 이상의 버스가 필요합니다.
+- **7.1.4 Upmix** - 스테레오를 L, R, C, LFE, Ls, Rs, Lb, Rb, Ltf, Rtf, Ltb, Rtb 순서로 배치합니다. LFE는 비워 두며 12채널 이상의 버스가 필요합니다.
+- **Ambience Extract** - Diffuse만 유지하고 Direct와 Residual을 억제합니다.
+
+### 라우팅 그리드 읽기 및 편집
+
+**Component Routing**에서 **Direct**, **Diffuse**, **Residual** 탭 중 하나를 선택합니다. 열은 분석할 입력 채널이고 행은 출력 버스 채널입니다. 각 셀의 작은 슬라이더나 숫자 입력란으로 -1.00부터 +1.00까지 0.01 단위로 선형 게인을 조절합니다. 0은 연결 안 함, +1.00은 전체 레벨의 양극성 출력, 음수는 극성을 반전한 출력을 뜻하며 음수는 빨간색으로 표시됩니다.
+
+라우팅된 출력 행은 해당 버스 채널을 매핑 결과로 교체합니다. **Input Channels** 범위 안의 출력 채널은 어떤 성분도 해당 행으로 라우팅되지 않으면 무음이 됩니다. 범위 밖의 채널은 어떤 성분도 쓰지 않을 때 지연을 맞춘 상태로 통과합니다.
+
+### 청취 조정 가이드
+
+1. 또렷한 소리의 위치를 크게 바꾸지 않고 스테레오를 넓히려면 **Stereo Enhance**로 시작하십시오. Residual에 더 많은 소리를 남겨야 할 때만 **Directness** 또는 **Diffuse Extraction**을 낮추십시오. **Transparent**와 비교하고 센터 이미지가 약해지거나 모노 재생에서 너무 많은 소리가 사라지면 변화를 줄이십시오.
+2. 스테레오에서 센터 채널을 만들려면 3채널 이상의 버스에서 **Center Extract**를 선택하십시오. **Directness**와 **Separation**을 높이면 상관성이 높은 소리가 Direct에 더 집중됩니다.
+3. 서라운드 또는 높이 채널로 확장하려면 버스를 위의 순서로 설정하고 **5.1 Upmix** 또는 **7.1.4 Upmix**를 선택하십시오. **Diffuse Extraction**으로 해당 채널에 보내는 확산음의 양을 조절하십시오. 이 프리셋은 LFE 신호를 생성하지 않으므로 필요하면 베이스 관리를 별도로 추가하십시오.
+4. 앰비언스를 분리하려면 **Ambience Extract**로 시작하십시오. **Diffuse Extraction**을 높이고 **Phase Sensitivity**로 반대 위상이 Direct 판정을 얼마나 약하게 할지 조절하십시오.
+
+### 파라미터
+
+- **Input Channels**(1~16): 버스 앞쪽부터 분석할 채널 수를 설정합니다. 버스 채널 수가 더 적으면 존재하는 채널만 사용합니다.
+- **Analysis Bands**(8, 16, 24, 32 또는 48): 공간 분석의 주파수 해상도를 설정합니다. 밴드가 많을수록 주파수에 따른 위치 차이를 더 세밀하게 따르지만 처리량도 늘어납니다. 기본값은 24입니다.
+- **Directness**(0%~100%): 지배적이고 상관성이 높은 소리를 Direct에 배정하는 정도를 조절합니다. 값이 높을수록 Direct 추출이 강해집니다.
+- **Separation**(0%~100%): 소리를 Direct와 Diffuse에 배정하는 선택성을 조절합니다. 값이 높을수록 모호한 소리가 Residual에 더 남아 라우트 사이의 대비가 강해집니다.
+- **Diffuse Extraction**(0%~100%): 상관성이 낮은 소리를 Diffuse에 배정하는 정도를 조절합니다. 값이 높을수록 넓게 분포한 앰비언스가 Diffuse 라우트로 더 많이 전달됩니다.
+- **Phase Sensitivity**(0%~100%): 채널 간 반대 위상이 Direct 판정을 얼마나 약하게 할지 조절합니다. 낮은 값은 극성이 반대인 상관음도 일반 상관음과 비슷하게 다루며, 높은 값은 더 많은 소리를 Direct 밖에 남깁니다. 반대 위상 소리를 자동으로 후방 채널에 지정하는 설정은 아닙니다.
+- **Temporal Smoothing**(0%~100%, Fast~Stable): 분석과 라우팅이 변화에 따라가는 속도를 조절합니다. 낮은 값은 빠르게 반응하고, 높은 값은 이미지 움직임과 펌핑을 줄이는 대신 느리게 반응합니다.
+- **Energy Preservation**(Off/On): Direct, Diffuse, Residual 라우트를 각각 정규화해 라우팅 매트릭스로 인한 의도하지 않은 레벨 변화를 줄입니다. 매트릭스 게인 자체로 성분 레벨을 바꾸려면 Off로 설정하십시오.
+- **Component Routing / Direct**: Direct 그리드를 선택하고 출력 게인을 설정합니다.
+- **Component Routing / Diffuse**: Diffuse 그리드를 선택하고 출력 게인을 설정합니다.
+- **Component Routing / Residual**: Residual 그리드를 선택하고 출력 게인을 설정합니다.
 
 ## Stereo Blend
 

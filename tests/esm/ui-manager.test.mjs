@@ -1642,6 +1642,7 @@ test('keeps a parameter slider fill synced during consecutive direct number inpu
 
     manager.initRangeFillStyling();
     assert.equal(slider.style['--et-range-fill'], '25%');
+    assert.equal(slider.style['--et-range-origin'], '25%');
 
     valueInput.focus();
     for (const [value, expectedFill] of [['-5', '12.5%'], ['20', '75%'], ['30', '100%']]) {
@@ -1651,6 +1652,7 @@ test('keeps a parameter slider fill synced during consecutive direct number inpu
 
       assert.equal(document.activeElement, valueInput);
       assert.equal(slider.style['--et-range-fill'], expectedFill);
+      assert.equal(slider.style['--et-range-origin'], '25%');
     }
   });
 });
@@ -1696,11 +1698,13 @@ test('keeps a vertical slider fill synced when a double-click resets the band', 
 
     manager.initRangeFillStyling();
     assert.equal(slider.style['--et-range-fill'], '75%');
+    assert.equal(slider.style['--et-range-origin'], '50%');
 
     await slider.dispatch('dblclick');
     document.dispatch('dblclick', { target: slider });
 
     assert.equal(slider.style['--et-range-fill'], '50%');
+    assert.equal(slider.style['--et-range-origin'], '50%');
   });
 });
 
@@ -1725,6 +1729,7 @@ test('keeps sliders synced when a reset button rewrites values', async () => {
     document.dispatch('click', { target: resetButton });
 
     assert.equal(slider.style['--et-range-fill'], '50%');
+    assert.equal(slider.style['--et-range-origin'], '50%');
   });
 });
 

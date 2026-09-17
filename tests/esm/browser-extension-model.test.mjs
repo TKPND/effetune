@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { getPresetPluginStates, validatePreset } from '../../extension/model.js';
+import { activatePipelineModels, getPresetPluginStates, validatePreset } from '../../extension/model.js';
 import { decidePowerTarget } from '../../js/audio/power-policy.js';
 import { ExtensionIrLibraryClient, ExtensionIrLibraryHost } from '../../extension/ir-library.js';
 import { IrLibraryService } from '../../js/ir-library/service.js';
@@ -20,6 +20,67 @@ import {
     matchesExactEvaluationError,
     waitAndConsumeExpectedRuntimeConsoleError
 } from '../../tools/run-extension-browser-smoke.mjs';
+
+test('extension activation replays disabled assets but waits only for reachable enabled effects', async () => {
+    class Effect {
+        constructor(id, enabled = true) { this.id = id; this.enabled = enabled; }
+        getWorkletPluginData() { return { id: this.id, enabled: this.enabled }; }
+    }
+    class SectionPlugin extends Effect {}
+    const active = new Effect(1);
+    const disabledIr = new Effect(2, false);
+    const disabledSection = new SectionPlugin(3, false);
+    const sectionFilter = new Effect(4);
+    const plugins = [active, disabledIr, disabledSection, sectionFilter];
+    const payloads = [];
+    const waits = [];
+    const audio = {
+        masterBypass: false,
+        workletNode: {},
+        commitPowerTopologyMutation(message) { payloads.push(message); },
+        syncPrimaryWasmAssetMembership(members) { assert.equal(members, plugins); },
+        _replayPipelineWasmAssets(node, members, options) {
+            assert.equal(node, this.workletNode);
+            assert.equal(members, plugins);
+            assert.equal(options.trackState, true);
+            return new Set(options.assetReadinessPlugins.map(plugin => plugin.id));
+        },
+        async _waitForWasmAssetsActive(node, expected) {
+            waits.push([...expected]);
+            // Disabled filters remain PREPARING because they do not process blocks.
+            return [...expected].every(id => id === active.id);
+        },
+        async _requestWorkletLatency() { return { latencySamples: 128 }; },
+        getDspExecutionStateSnapshot() {
+            return { states: [{ pluginId: active.id, state: 'active' }] };
+        }
+    };
+    await activatePipelineModels(audio, plugins);
+    assert.deepEqual(waits, [[active.id]]);
+    assert.deepEqual(payloads[0].plugins.map(plugin => plugin.id), [1, 2, 3, 4]);
+    let topologyRevision = 1;
+    let confirmations = 0;
+    audio.getDspExecutionStateSnapshot = () => ({
+        topologyRevision,
+        states: confirmations === 1 ? [] : [{ pluginId: active.id, state: 'active' }]
+    });
+    audio._requestWorkletLatency = async () => {
+        confirmations++;
+        if (confirmations === 1) topologyRevision++;
+        return { latencySamples: 128 };
+    };
+    await activatePipelineModels(audio, plugins);
+    assert.equal(confirmations, 2, 'completion-side parameter changes require another ordered confirmation');
+    audio.masterBypass = true;
+    await activatePipelineModels(audio, plugins);
+    assert.deepEqual(waits.at(-1), []);
+    assert.equal(payloads.at(-1).masterBypass, true);
+
+    audio.masterBypass = false;
+    disabledIr.enabled = true;
+    await assert.rejects(activatePipelineModels(audio, plugins), /effect filters could not be activated/);
+    assert.deepEqual(waits.at(-1), [1, 2]);
+});
 
 test('smoke fault consumer waits for its exact delayed error and preserves unrelated errors', async () => {
     const expected = 'Editor update failed: Error: Expected failure.';

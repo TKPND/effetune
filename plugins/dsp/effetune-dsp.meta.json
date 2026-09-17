@@ -1,6 +1,6 @@
 {
   "abiVersion": 1,
-  "sourceDigest": "sha256:f2fe6933447e4b59368f6eb7d2abbec5bc4d42fd6645473868f095fd39986681",
+  "sourceDigest": "sha256:5fa7ec81d2f742afd1b9c0c5311f38d722514b594367ee4e7a08f0b52944613f",
   "emsdkVersion": "6.0.2",
   "g726PerformanceInput": {
     "contract": "g726-production-performance-input-sha256-v2",
@@ -1047,6 +1047,12 @@
       "assets": []
     },
     {
+      "name": "SpatialMapperPlugin",
+      "hash": 3460871461,
+      "byteCapacity": 0,
+      "assets": []
+    },
+    {
       "name": "StereoBlendPlugin",
       "hash": 648556109,
       "byteCapacity": 0,
@@ -1054,7 +1060,7 @@
     }
   ],
   "sizes": {
-    "baseline": 7056250,
-    "simd": 7185846
+    "baseline": 7077241,
+    "simd": 7210666
   }
 }

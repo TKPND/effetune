@@ -298,7 +298,7 @@ class ChorusPlugin extends PluginBase {
         this._uiControls.rt = this.createLogarithmicParameterControl('Rate', 0.05, 10, 0.01, this.rt,
             value => this.setParameters({ rt: value }), 'Hz', 'rt');
         this._uiControls.dl = this.createParameterControl('Delay', 0.5, 30, 0.1, this.dl,
-            value => this.setParameters({ dl: value }), 'ms', 'dl');
+            value => this.setParameters({ dl: value }), 'ms', 'dl', null, true);
         this._uiControls.dp = this.createParameterControl('Depth', 0, 20, 0.1, this.dp,
             value => this.setParameters({ dp: value }), 'ms', 'dp');
         this._uiControls.vc = this.createParameterControl('Voices', 1, 6, 1, this.vc,

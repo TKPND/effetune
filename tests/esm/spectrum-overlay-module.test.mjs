@@ -331,7 +331,8 @@ test('below-range spectrum values leave the graph through Canvas clipping instea
 test('visual sync overlay waits for audible deadlines and clears frames with the hub epoch', () => {
   const h = createOverlayHarness();
   installThemePaletteStub(h.window);
-  h.window.dspTelemetryHub = { visualSyncEpoch: 0, resolveDue: () => 600 };
+  let audibleNow = 6000;
+  h.window.dspTelemetryHub = { visualSyncEpoch: 0, now: () => audibleNow, resolveDue: () => 6600 };
   const { instance } = h.attach();
   instance.enable();
   const message = { type: 'spectrumOverlay', spectrumPluginId: 7, endFrame: 128,
@@ -339,14 +340,34 @@ test('visual sync overlay waits for audible deadlines and clears frames with the
   instance.onSpectrumMessage(message);
   h.frame();
   assert.equal(instance.levels, null);
-  h.advance(584); h.frame();
+  h.advance(584); audibleNow = 6600; h.frame();
   assert.ok(instance.levels[0] > -6.03);
-  assert.equal(instance.lastReceived, 600);
-  h.window.dspTelemetryHub.resolveDue = () => 1000;
+  assert.equal(instance.lastReceived, 616);
+  h.window.dspTelemetryHub.resolveDue = () => 7000;
   instance.onSpectrumMessage(message);
   assert.equal(instance.pendingFrames.length, 1);
   h.window.dspTelemetryHub.visualSyncEpoch++;
   h.frame();
   assert.equal(instance.pendingFrames.length, 0);
+  instance.dispose();
+});
+
+
+test('visual sync overlay retains the newest overdue snapshot before its next draw', () => {
+  const h = createOverlayHarness();
+  installThemePaletteStub(h.window);
+  let audibleNow = 0;
+  h.window.dspTelemetryHub = { visualSyncEpoch: 0, now: () => audibleNow,
+    resolveDue: (_id, endFrame) => endFrame };
+  const { instance } = h.attach();
+  instance.enable();
+  const message = { type: 'spectrumOverlay', spectrumPluginId: 7, endFrame: 600,
+    outputBuffer: new Float32Array(4096).fill(0.5), bufferPosition: 0, sampleRate: 48000 };
+  instance.onSpectrumMessage(message);
+  audibleNow = 800;
+  instance.onSpectrumMessage({ ...message, endFrame: 700, outputBuffer: new Float32Array(4096).fill(0.25) });
+  assert.equal(instance.pendingFrames.length, 0);
+  h.frame();
+  assert.ok(Math.abs(instance.levels[0] + 12.0412) < 0.01);
   instance.dispose();
 });

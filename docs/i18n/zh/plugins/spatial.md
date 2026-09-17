@@ -1,6 +1,6 @@
 ---
 title: "空间音频插件 - EffeTune"
-description: "用于耳机和扬声器聆听的空间处理插件，包括 Crossfeed Filter、Crosstalk Cancellation、MS Matrix、Multiband Balance、Phase Select EQ 和 Stereo Blend。"
+description: "用于耳机和扬声器聆听的空间处理插件，包括 Crossfeed Filter、Crosstalk Cancellation、MS Matrix、Multiband Balance、Phase Select EQ、Spatial Mapper 和 Stereo Blend。"
 lang: zh
 ---
 
@@ -15,6 +15,7 @@ lang: zh
 - [MS Matrix](#ms-matrix) - 在立体声与 Mid/Side 之间转换，用于高级立体声调整链
 - [Multiband Balance](#multiband-balance) - 5 频段频率相关立体声平衡控制
 - [Phase Select EQ](#phase-select-eq) - 按 L/R 相位差和 Balance 选择并提升或衰减频率成分
+- [Spatial Mapper](#spatial-mapper) - 将声音分为 Direct、Diffuse 和 Residual，并分别路由到各通道
 - [Stereo Blend](#stereo-blend) - 从极性互换立体声、单声道到增强立体声的宽度控制
 
 ## Crossfeed Filter
@@ -284,6 +285,52 @@ Balance 网格显示左:右比例。Balance 0%、±17%、±33%、±60%、±82% �
 - **Low Phase Transition / High Phase Transition**：设置朝向 0° 和 180° 的效果渐变范围。
 
 相位图手柄、滑块和数值输入框编辑相同的值。使用鼠标或触摸时，在所选 Band 的外框内拖动可移动整个 Band；拖动 Core 的边或角可调整大小；拖动外框手柄可分别调整各个 Transition。低 Phase 一侧的手柄不会越过中央：Core Low Phase 在 0° 处停止，Low Phase Transition 在最大宽度处停止。当 Core Low Phase 恰好为 0° 时，中央手柄起初可向任一侧移动；一旦移向某一侧，在本次拖动结束前都会锁定在该侧。
+
+## Spatial Mapper
+
+Spatial Mapper 按频段分析输入通道之间的关系，将声音连续分为 Direct、Diffuse 和 Residual 三种成分，再把各成分路由到当前通道总线。它可用于把清晰集中的声音保持在前方、把环境声送往环绕或高度通道、提取中央声或环境声，以及调整立体声宽度。默认的 **Transparent** 预设会保留原始通道位置。
+
+**Direct** 包含各频段中占主导且相关性强的声音；**Diffuse** 包含相关性较低、分布较广的声音；**Residual** 保留未完全归入前两者的内容。分离过程是连续的，因此调整参数时，声音不会在路由之间突然切换。
+
+Spatial Mapper 的频率分析会增加延迟。EffeTune 会将其计入 **Total Delay**。实时监听或进行音画同步时请留意该数值。
+
+### 系统预设
+
+点击效果标题中的 **Effect Presets** 可选择完整的起始配置。
+
+- **Transparent** - 保留原始通道位置，也是默认预设。
+- **Stereo Enhance** - 通过 Residual 路由拓宽立体声，同时保留集中声和扩散声的位置。
+- **Center Extract** - 将 Direct 送到第 3 通道。需要至少 3 通道的总线。
+- **5.1 Upmix** - 按 L、R、C、LFE、Ls、Rs 的顺序分配立体声。LFE 保持空白，至少需要 6 个总线通道。
+- **7.1.4 Upmix** - 按 L、R、C、LFE、Ls、Rs、Lb、Rb、Ltf、Rtf、Ltb、Rtb 的顺序分配立体声。LFE 保持空白，至少需要 12 个总线通道。
+- **Ambience Extract** - 保留 Diffuse，并抑制 Direct 和 Residual。
+
+### 路由网格的查看与编辑
+
+在 **Component Routing** 中选择 **Direct**、**Diffuse** 或 **Residual** 标签页。列表示参与分析的输入通道，行表示输出总线通道。使用每个单元格中的小滑块或数值输入框，以 0.01 为步长调节 -1.00 至 +1.00 的线性增益：0 表示断开，+1.00 表示以完整正极性送出，负值表示反转极性后送出，并以红色显示。
+
+只要某个输出行设置了路由，该总线通道就会被映射结果替换。位于 **Input Channels** 范围内的输出通道，如果没有任何成分路由到该行，就会静音。范围之外的通道在没有任何成分写入时，会以相同延迟直通。
+
+### 听感调整指南
+
+1. 若想拓宽立体声，同时尽量少移动清晰集中的声音，请从 **Stereo Enhance** 开始。只有需要让更多内容留在 Residual 时，才降低 **Directness** 或 **Diffuse Extraction**。与 **Transparent** 对比；如果中央声像变弱或折叠为单声道后损失过多，请减小变化。
+2. 若要从立体声创建中央通道，请使用至少 3 通道的总线并选择 **Center Extract**。提高 **Directness** 和 **Separation**，可让更多相关性强的内容集中到 Direct。
+3. 若要扩展到环绕或高度通道，请按上述顺序设置总线，再选择 **5.1 Upmix** 或 **7.1.4 Upmix**。用 **Diffuse Extraction** 调节送往这些通道的扩散声量。预设不会生成 LFE 信号；如有需要，请另行添加低频管理。
+4. 若要提取环境声，请从 **Ambience Extract** 开始。提高 **Diffuse Extraction**，并用 **Phase Sensitivity** 调节反相对 Direct 判定的影响程度。
+
+### 参数
+
+- **Input Channels**（1 至 16）：设置从总线起始位置算起的分析通道数。若总线通道较少，则只使用现有通道。
+- **Analysis Bands**（8、16、24、32 或 48）：设置空间分析的频率分辨率。频段越多，越能细致跟随不同频率的空间位置变化，但处理负载也越高。默认值为 24。
+- **Directness**（0% 至 100%）：控制有多少占主导且相关性强的内容分配到 Direct。数值越高，Direct 提取越强。
+- **Separation**（0% 至 100%）：控制内容分配到 Direct 和 Diffuse 时的选择性。数值越高，越多不明确的内容会留在 Residual，各路由之间的差异也越明显。
+- **Diffuse Extraction**（0% 至 100%）：控制有多少低相关性内容分配到 Diffuse。数值越高，越多分布较广的环境声进入 Diffuse 路由。
+- **Phase Sensitivity**（0% 至 100%）：控制通道间反相对 Direct 判定的削弱程度。较低数值会把极性相反但相关性强的内容更接近普通相关声处理；较高数值会让更多此类内容留在 Direct 之外。该参数不会自动把反相声音指定到后方通道。
+- **Temporal Smoothing**（0% 至 100%，Fast 至 Stable）：控制分析和路由跟随变化的速度。较低数值反应更快；较高数值可减少声像晃动和抽吸感，但反应更慢。
+- **Energy Preservation**（Off/On）：分别归一化 Direct、Diffuse 和 Residual 路由，避免路由矩阵造成非预期电平变化。若希望矩阵增益本身改变成分电平，请将其关闭。
+- **Component Routing / Direct**：选择 Direct 网格并设置其输出增益。
+- **Component Routing / Diffuse**：选择 Diffuse 网格并设置其输出增益。
+- **Component Routing / Residual**：选择 Residual 网格并设置其输出增益。
 
 ## Stereo Blend
 

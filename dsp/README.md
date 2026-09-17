@@ -357,6 +357,19 @@ Noise Reduction reserves approximately 6 MiB of working storage at 192 kHz and
 sixteen channels. This allocation is made during `prepare`; processing does not
 allocate memory.
 
+#### Spatial Mapper
+
+Spatial Mapper reserves approximately 5.1 MiB at 192 kHz, sixteen channels and
+48 analysis bands. The four channel timelines use 2.5 MiB, input and routed
+spectra use 2 MiB, and FFT scratch, band tables, covariance state and the stage
+schedule account for the remainder. Allocation occurs during `prepare`;
+processing and parameter changes do not allocate. The 8192-sample transform
+uses a 2048-sample hop and reports 10240 samples of latency at this rate.
+
+The incremental PFFFT transforms and spatial operations share a 16-sample
+stage schedule. Scalar FFT steps receive a higher cost weight than SIMD steps
+based on their measured execution time; routing skips exact zero coefficients.
+
 #### RS Reverb
 
 **Allocation model**

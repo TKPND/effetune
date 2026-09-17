@@ -200,6 +200,7 @@ export const PUBLIC_EFFECT_TYPES = Object.freeze([
   'MSMatrix',
   'MultibandBalance',
   'PhaseSelectEQ',
+  'SpatialMapper',
   'StereoBlend'
 ]);
 export const FROZEN_PARAM_DIRECTORIES = Object.freeze({
@@ -304,6 +305,7 @@ export const FROZEN_PARAM_DIRECTORIES = Object.freeze({
   MSMatrixPlugin: 'dsp/plugins/spatial/ms_matrix',
   MultibandBalancePlugin: 'dsp/plugins/spatial/multiband_balance',
   PhaseSelectEqPlugin: 'dsp/plugins/spatial/phase_select_eq',
+  SpatialMapperPlugin: 'dsp/plugins/spatial/spatial_mapper',
   StereoBlendPlugin: 'dsp/plugins/spatial/stereo_blend'
 });
 

@@ -92,6 +92,10 @@ const expectedTargetPresetIds = new Map([
     ]],
     ['RotarySpeakerPlugin', [
         'rotary-slow', 'rotary-fast', 'gentle-rotary', 'vintage-rotor-slow', 'vintage-rotor-fast'
+    ]],
+    ['SpatialMapperPlugin', [
+        'transparent', 'stereo-enhance', 'center-extract',
+        'upmix-5-1', 'upmix-7-1-4', 'ambience-extract'
     ]]
 ]);
 
@@ -101,7 +105,8 @@ const defaultMatchingPresetIds = new Map([
     ['AutoFilterPlugin', new Set(['auto-filter-sweep'])],
     ['AutoPanPlugin', new Set(['gentle-auto-pan'])],
     ['FrequencyShifterPlugin', new Set(['shift-up'])],
-    ['RotarySpeakerPlugin', new Set(['rotary-slow'])]
+    ['RotarySpeakerPlugin', new Set(['rotary-slow'])],
+    ['SpatialMapperPlugin', new Set(['transparent'])]
 ]);
 
 class FakeObserver {
@@ -172,10 +177,10 @@ const publicParameterKeys = plugin => Object.keys(plugin.getSerializableParamete
     .sort();
 
 test('plugin system presets have complete, valid, round-trippable parameter records', () => {
-    assert.equal(presetProviders.length, 27, 'system preset provider count');
+    assert.equal(presetProviders.length, 28, 'system preset provider count');
     const targetPresetCount = [...expectedTargetPresetIds.values()]
         .reduce((count, ids) => count + ids.length, 0);
-    assert.equal(targetPresetCount, 105);
+    assert.equal(targetPresetCount, 111);
 
     const providersByClass = new Map(presetProviders.map(provider => [provider.className, provider]));
     for (const [className, expectedIds] of expectedTargetPresetIds) {

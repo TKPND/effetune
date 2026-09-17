@@ -6,6 +6,8 @@
   <a class="button button-secondary" href="/dsp/">DSP Library</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune/releases/">데스크톱 앱 다운로드</a>
   <a class="button button-secondary" href="https://github.com/Frieve-A/effetune-mixwright/releases">VST 버전 다운로드</a>
+  <a class="button button-secondary" href="https://chromewebstore.google.com/detail/effetune/fhjhnpepnhkcdggogicifibfegpbhibp">Chrome 확장 프로그램 설치</a>
+  <a class="button button-secondary" href="https://microsoftedge.microsoft.com/addons/detail/effetune/kjpcfdidpphaclfkfdahchhibgjcngdk">Edge 확장 프로그램 설치</a>
 </div>
 
 음악 애호가들을 위해 설계된 실시간 오디오 이펙트 프로세서입니다.
@@ -137,6 +139,7 @@ PC용 Chromium 브라우저에서는 선택한 음악 폴더에 대한 접근 �
    - [MIDI, 게임패드 또는 키보드로 이펙트 조작하기](controller-mapping.md)
 10. 각 이펙트의 효과 프리셋 버튼을 클릭하면 해당 이펙트만의 설정을 저장하거나 적용할 수 있습니다
 11. 슬라이더를 세밀하게 조정하려면 Shift 키를 누른 채 드래그합니다. 값은 최소 단위씩 변경됩니다
+   - 음수와 양수를 모두 설정할 수 있는 슬라이더는 0부터 현재 값까지 색으로 채워집니다. Ratio 슬라이더는 1.0을 기준으로 채워집니다.
 12. 주파수 또는 음정 축이 있는 지원 그래프에서는 축을 따라 드래그하여 해당 주파수의 -12 dB 사인파를 이펙트 체인을 통해 미리 들을 수 있습니다. 건반이 표시되면 가장 가까운 반음에 맞춰지며, 건반 위로 드래그하면 해당 건반의 음정을 들려줍니다
 
 ### 프리셋 사용하기
@@ -418,6 +421,7 @@ Effect Pipeline 헤더의 **효과 체인 프리셋** 버튼을 클릭하면 프
 | Spatial | MS Matrix | 중앙과 주변감을 조정하기 위해 스테레오와 Mid/Side를 상호 변환 | [세부 정보](plugins/spatial.md#ms-matrix) |
 | Spatial | Multiband Balance | 5밴드 주파수 의존 스테레오 밸런스 제어 | [세부 정보](plugins/spatial.md#multiband-balance) |
 | Spatial | Phase Select EQ | L/R 위상차와 Balance로 선택한 주파수 성분을 부스트 또는 컷 | [세부 정보](plugins/spatial.md#phase-select-eq) |
+| Spatial | Spatial Mapper | Direct, Diffuse, Residual 소리를 분리해 유연하게 멀티채널로 라우팅 | [세부 정보](plugins/spatial.md#spatial-mapper) |
 | Spatial | Stereo Blend | 모노부터 확장 스테레오까지 스테레오 폭 제어 | [세부 정보](plugins/spatial.md#stereo-blend) |
 | Others | Oscillator | 스피커나 헤드폰 확인용 테스트 톤/노이즈 제너레이터 | [세부 정보](plugins/others.md#oscillator) |
 | Control | Section | 여러 이펙트를 그룹화해 섹션 전체를 바이패스하거나 복원 | [세부 정보](plugins/control.md) |

@@ -1301,3 +1301,45 @@ node tools/dsp-parity/bench.mjs --preset <path-to-tv-audio-preset> --modes wasm,
 All five representative paths remain above 9.8x realtime. SIMD differences are
 within the variation expected for these short, scalar-heavy paths, so no additional
 scheme-specific SIMD implementation is warranted.
+
+### Spatial Mapper
+
+Measured on 2026-09-15 with Node v24.13.0, Windows 10.0.26200 and an Intel
+Core i9-13900KF. Production Emscripten baseline/SIMD artifacts used 128-frame
+blocks, one-second inputs, two warmups and three measured repetitions. The
+maximum analysis settings were selected explicitly: `ic: 16`, `bd: "48"`.
+
+```text
+node tools/dsp-parity/bench.mjs --type SpatialMapperPlugin --modes wasm,simd --sample-rates 96000,192000 --channels 2,16 --block-size 128 --duration 1 --warmup 2 --repetitions 3 --params '{"ic":16,"bd":"48"}' --quantum-stats
+```
+
+| Rate / channels | Variant | Average CPU | p99 | Maximum | Deadline misses |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 96 kHz / 2 ch | WASM | 1.33% | 4.50% | 19.79% | 0 |
+| 96 kHz / 2 ch | SIMD | 1.07% | 3.75% | 5.96% | 0 |
+| 96 kHz / 16 ch | WASM | 16.77% | 21.25% | 24.33% | 0 |
+| 96 kHz / 16 ch | SIMD | 15.31% | 26.50% | 51.20% | 0 |
+| 192 kHz / 2 ch | WASM | 2.75% | 9.00% | 21.75% | 0 |
+| 192 kHz / 2 ch | SIMD | 2.92% | 12.75% | 17.13% | 0 |
+| 192 kHz / 16 ch | WASM | 42.45% | 283.49% | 283.49% | 72 |
+| 192 kHz / 16 ch | SIMD | 34.88% | 63.00% | 159.36% | 5 |
+
+Stage profiling identified insufficient weights for windowing, transforms and
+spectral summation. At 192 kHz / 16 channels, a scalar forward FFT step averaged
+1.88 microseconds versus 0.84 microseconds for SIMD. Weights now reflect those
+costs, and matrix application skips exact zero coefficients. The initial SIMD
+192 kHz / 16-channel p99 was 162.60%; the adjusted schedule reduced it to 63.00%
+in the final matrix above. The continuous matrix still records wall-clock
+spikes and is not an all-green deadline result. Their cause is not established;
+SIMD also had no measured advantage in the short 192 kHz / 2-channel cell.
+
+A separate bounded check used the production artifacts and the same
+`runWasmCase` process timer, one second of warmup and one second of 16-channel
+noise at 192 kHz. It recorded the phase of each 128-frame call within the hop.
+With identity matrices, maximum times were 0.3247 ms baseline and 0.3181 ms SIMD.
+With all 256 entries nonzero in each of the three matrices
+(`gain[i] = 0.15 * sin(7.13 * i)`), maxima were 0.3873 ms baseline and 0.3291 ms
+SIMD. All four checks had zero misses against the 0.6667 ms deadline. These
+short checks establish processing headroom for both sparse and dense routing;
+they do not erase the remaining spikes in the continuous matrix or establish a
+hard real-time guarantee for every host.

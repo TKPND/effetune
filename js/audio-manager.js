@@ -14,7 +14,7 @@ import {
 } from './audio/plugin-execution-capabilities.js';
 import { TelemetryHub } from './audio/telemetry-hub.js';
 import { VISUAL_SYNC_RULES, VISUAL_SYNC_MAX_OUTPUT_DELAY_SECONDS, VISUAL_SYNC_QUEUE_LIMIT,
-    isVisualSyncEnabled, requiredOutputDelayFrames, audiblePerformanceTime } from './audio/visual-sync.js';
+    isVisualSyncEnabled, requiredOutputDelayFrames, audibleFrameTime, audibleContextTime, telemetryCaptureTiming } from './audio/visual-sync.js';
 import { PowerPolicyController } from './audio/power-policy-controller.js';
 import { PowerDiagnostics } from './audio/power-diagnostics.js';
 import { AudioPowerState, mergePowerSavingSettings } from './audio/power-policy.js';
@@ -120,7 +120,7 @@ export class AudioManager {
         this.offlineProcessor = null;
         this.offlineProcessorPromise = null;
         this.eventManager = new EventManager(this);
-        this.telemetryHub = new TelemetryHub();
+        this.telemetryHub = new TelemetryHub({ now: () => this._visualSyncNow() });
         this.telemetryHub.onVisualSyncReset = () => this._clearSyncedMeasurements();
         this.visualSyncEnabled = runtimeOptions.wasmOnly !== true && isVisualSyncEnabled(window.appConfig);
         this.visualSyncDelayFrames = 0;
@@ -2051,7 +2051,16 @@ export class AudioManager {
             this.contextManager?.audioContext?.sampleRate || this.audioContext?.sampleRate || 48000, execution);
     }
 
-    _resolveVisualSyncDue(tapId, endFrame, ruleKey) {
+    _visualSyncNow() {
+        const context = this.contextManager?.audioContext;
+        const now = performance.now();
+        if (!context) return now;
+        return audibleContextTime({ outputTimestamp: context.getOutputTimestamp?.(),
+            currentTime: context.currentTime, outputLatency: context.outputLatency,
+            baseLatency: context.baseLatency, performanceTime: now });
+    }
+
+    _resolveVisualSyncDue(tapId, endFrame, ruleKey, frame, contextFrameOffset) {
         if (!this.visualSyncEnabled || !Number.isFinite(endFrame)) return null;
         const context = this.contextManager?.audioContext;
         const plugin = this._visualSyncPlugin(tapId);
@@ -2065,12 +2074,12 @@ export class AudioManager {
         const requestedFrames = (this._dbtOutputDelayFrames?.get(primaryWorklet) || 0) +
             (this.visualSyncDelayFrames || 0);
         if (this._pendingOutputDelayRequests?.has(primaryWorklet) || appliedFrames !== requestedFrames) return null;
-        return audiblePerformanceTime({ endFrame, generationFrames: this._visualSyncGeneration(plugin, key),
+        const capture = telemetryCaptureTiming(frame, contextFrameOffset);
+        return audibleFrameTime({ endFrame: capture?.endFrame ?? endFrame,
+            generationFrames: capture?.generationFrames ?? this._visualSyncGeneration(plugin, key),
             tapFrames: tap[rule.tap],
             outputDelayFrames: appliedFrames,
-            sampleRate: context.sampleRate, outputTimestamp: context.getOutputTimestamp?.(),
-            fallback: { currentTime: context.currentTime, outputLatency: context.outputLatency,
-                baseLatency: context.baseLatency, performanceTime: performance.now() } });
+            sampleRate: context.sampleRate });
     }
 
     _clearSyncedMeasurements() {
@@ -2084,7 +2093,7 @@ export class AudioManager {
         const plugin = this._visualSyncPlugin(data.pluginId);
         if (!plugin) return;
         const due = this._resolveVisualSyncDue(data.pluginId, data.endFrame);
-        const now = performance.now();
+        const now = this._visualSyncNow();
         this._syncedMeasurements ??= [];
         if (this._syncedMeasurements.length >= VISUAL_SYNC_QUEUE_LIMIT) {
             this._syncedMeasurements.shift();
@@ -2115,16 +2124,17 @@ export class AudioManager {
         this._syncedMeasurements.sort((a, b) => a.due - b.due);
         this._syncedMeasurementsTimer = setTimeout(() => {
             this._syncedMeasurementsTimer = null;
-            this._dispatchDueSyncedMeasurements(performance.now());
+            this._dispatchDueSyncedMeasurements(this._visualSyncNow());
             this._scheduleSyncedMeasurements();
-        }, Math.max(0, this._syncedMeasurements[0].due - performance.now()));
+        }, Math.max(0, this._syncedMeasurements[0].due - this._visualSyncNow()));
     }
 
     setVisualSyncEnabled(enabled) {
         this.visualSyncEnabled = this.runtimeOptions?.wasmOnly !== true && enabled === true;
         this._clearSyncedMeasurements();
         this.telemetryHub?.setVisualSyncResolver?.(this.visualSyncEnabled
-            ? (tapId, endFrame, ruleKey) => this._resolveVisualSyncDue(tapId, endFrame, ruleKey) : null);
+            ? (tapId, endFrame, ruleKey, frame, contextFrameOffset) =>
+                this._resolveVisualSyncDue(tapId, endFrame, ruleKey, frame, contextFrameOffset) : null);
         for (const node of this._getActiveDspWorklets()) {
             node.port.postMessage({ type: 'setVisualSync', enabled: this.visualSyncEnabled });
         }
@@ -2135,7 +2145,7 @@ export class AudioManager {
 
     _recomputeVisualSyncDelay() {
         const context = this.contextManager?.audioContext;
-        // Reserve audio delay from a stable device estimate; live clock changes only move visuals.
+        // Reserve audio delay from a stable device estimate; the playback clock only controls delivery.
         if (context !== this._visualSyncLatencyContext) {
             this._visualSyncLatencyContext = context;
             this._visualSyncDeviceLatencyFrames = context
@@ -2148,8 +2158,18 @@ export class AudioManager {
                 const key = plugin.constructor.name;
                 if (key === 'SectionPlugin') { sectionEnabled = plugin.enabled !== false; continue; }
                 if (plugin.enabled === false || !sectionEnabled) continue;
-                if (VISUAL_SYNC_RULES[key]) targets.push({ id: plugin.id, ruleKey: key,
-                    generationFrames: this._visualSyncGeneration(plugin, key) });
+                if (VISUAL_SYNC_RULES[key]) {
+                    // Reserve the visible telemetry interval plus one render block so
+                    // captured columns arrive before their fixed audible deadlines.
+                    const capturedColumns = this.dspLatencyTaps?.[plugin.id]?.execution === 'wasm' &&
+                        (key === 'NoteSpectrogramPlugin' ||
+                            (key === 'SpectrogramPlugin' && (plugin.getParameters?.() || plugin).sc !== 'log-hq'));
+                    const telemetryRate = this.getDspTelemetryRate({ hidden: false, displayDspBypassed: false });
+                    const transportFrames = capturedColumns ? Math.ceil(context.sampleRate / telemetryRate) +
+                        (this.contextManager.getRenderQuantumSize?.(context) ?? 128) : 0;
+                    targets.push({ id: plugin.id, ruleKey: key,
+                        generationFrames: this._visualSyncGeneration(plugin, key) + transportFrames });
+                }
                 if (window.SpectrumOverlay?.TARGETS?.has(key)) targets.push({ id: plugin.id,
                     ruleKey: 'spectrumOverlay', generationFrames: VISUAL_SYNC_RULES.spectrumOverlay.generationFrames() });
             }
@@ -2577,6 +2597,7 @@ export class AudioManager {
             this.dspPipelineLatencySamples = samples;
             this.dspPipelineLatencyCompensated = compensated;
             this.dspLatencyTaps = data.taps || {};
+            this.telemetryHub?.setSources?.(this.dspLatencyTaps);
             this._dspLatencyTapsWorklet = workletNode;
             this._scheduleVisualSyncUpdate();
             this._publishDspLatency(sampleRate, data);

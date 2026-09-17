@@ -353,7 +353,7 @@ class AutoFilterPlugin extends PluginBase {
         this._uiControls.ft = this.createSelectControl('Filter Type', ['Low-pass', 'Band-pass', 'High-pass'], this.ft, value => this.setParameters({ ft: value }), 'ft');
         this._uiControls.lf = this.createLogarithmicParameterControl('Minimum Frequency', 20, 20000, 1, this.lf, value => this.setParameters({ lf: value }), 'Hz', 'lf');
         this._uiControls.hf = this.createLogarithmicParameterControl('Maximum Frequency', 20, 20000, 1, this.hf, value => this.setParameters({ hf: value }), 'Hz', 'hf');
-        this._uiControls.rs = this.createParameterControl('Resonance', 0.5, 20, 0.1, this.rs, value => this.setParameters({ rs: value }), 'Q', 'rs');
+        this._uiControls.rs = this.createParameterControl('Resonance', 0.5, 20, 0.1, this.rs, value => this.setParameters({ rs: value }), 'Q', 'rs', null, true);
         this._uiControls.mx = this.createParameterControl('Mix', 0, 100, 1, this.mx, value => this.setParameters({ mx: value }), '%', 'mx');
         this._uiControls.rt = this.createLogarithmicParameterControl('Rate', 0.05, 20, 0.01, this.rt, value => this.setParameters({ rt: value }), 'Hz', 'rt');
         this._uiControls.wf = this.createSelectControl('Waveform', ['Sine', 'Triangle'], this.wf, value => this.setParameters({ wf: value }), 'wf');

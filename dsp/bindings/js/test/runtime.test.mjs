@@ -154,8 +154,8 @@ test('generated effects import and the public catalog stays semantic', async () 
   const compressor = new generated.Compressor({ threshold: -18 });
   assert.equal(compressor.type, 'Compressor');
   assert.equal(compressor.parameters.threshold, -18);
-  assert.equal(EFFECT_TYPES.length, 102);
-  assert.equal(EFFECT_CATALOG.effects.length, 102);
+  assert.equal(EFFECT_TYPES.length, 103);
+  assert.equal(EFFECT_CATALOG.effects.length, 103);
   assert.deepEqual(EFFECT_CATALOG.channels, [
     'all', 'stereo', 'left', 'right',
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16',
@@ -1412,8 +1412,8 @@ test('disabled IR Reverb remains schema-valid without resolving or processing it
 });
 
 
-test('newly cataloged pitch and restoration effects process with declared latency', async () => {
-  for (const type of ['PitchShifterHQ', 'BandwidthExtender', 'ClickRemover', 'ClipRestorer', 'HumRemover', 'NoiseReduction']) {
+test('newly cataloged pitch, restoration, and spatial effects process with declared latency', async () => {
+  for (const type of ['PitchShifterHQ', 'BandwidthExtender', 'ClickRemover', 'ClipRestorer', 'HumRemover', 'NoiseReduction', 'SpatialMapper']) {
     const chain = await createChain([createEffect(type)], { variant: 'baseline' });
     try {
       const stream = await chain.stream({ sampleRate: 48000, channels: 2, seed: 42 });
