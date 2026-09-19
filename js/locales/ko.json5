@@ -541,7 +541,7 @@
   "dialog.config.powerSaving.silenceThreshold": "무음 임계값",
   "dialog.config.powerSaving.fullSuspendDelay": "다음 시간 후 오디오 입력 중지",
   "dialog.config.powerSaving.skipDisplayDspWhenHidden": "숨겨진 동안 표시용 DSP 건너뛰기",
-  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "EffeTune이 최소화되었거나 미니 플레이어 또는 백그라운드에 있어 그래프를 표시할 수 없을 때 Analyzer 처리를 바이패스합니다.",
+  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "음악 라이브러리나 이중 맹검 테스트 화면처럼 Effect Pipeline이 표시되지 않을 때, 또는 EffeTune이 최소화되었거나 미니 플레이어 또는 백그라운드에 있어 그래프를 표시할 수 없을 때 Analyzer 처리를 바이패스합니다.",
   "dialog.config.powerSaving.delay.1m": "1분",
   "dialog.config.powerSaving.delay.5m": "5분",
   "dialog.config.powerSaving.delay.15m": "15분",

@@ -6,6 +6,10 @@ lang: en
 
 # Version History
 
+### Version 2.11.0 (TBD, 2026)
+- Enhanced the browser extension with multi-tab processing (up to 4), URL preset rules, sample rate selection, slide/sheet transitions, and improved mobile-width layout/controls
+- Various minor improvements
+
 ### Version 2.10.0 (Sep 18, 2026)
 - Added Pitch Meter, Spatial Mapper and TV Audio Simulator effects
 - Added drag-to-preview sine tones to supported frequency and note graphs

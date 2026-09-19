@@ -546,7 +546,7 @@
   "dialog.config.powerSaving.silenceThreshold": "無音判定レベル",
   "dialog.config.powerSaving.fullSuspendDelay": "音声入力を停止するまで",
   "dialog.config.powerSaving.skipDisplayDspWhenHidden": "非表示時は表示専用DSPをスキップ",
-  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "最小化中、ミニプレーヤー表示中、またはバックグラウンドでグラフを表示できないとき、Analyzerの処理をバイパスします。",
+  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "グラフを表示できないとき、Analyzerの処理をバイパスします。Music Libraryやブラインドテストの表示中などEffect Pipelineが表示されていないときのほか、最小化中、ミニプレーヤー表示中、バックグラウンド時が対象です。",
   "dialog.config.powerSaving.delay.1m": "1分",
   "dialog.config.powerSaving.delay.5m": "5分",
   "dialog.config.powerSaving.delay.15m": "15分",

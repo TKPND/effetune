@@ -37,6 +37,7 @@ class FakeFile {
 function createUiManager(calls, options = {}) {
   const uiManager = {
     audioPlayer: options.audioPlayer,
+    audioManager: options.audioManager,
     pipelineManager: options.pipelineManager,
     getCurrentPresetData() {
       calls.push(['getCurrentPresetData']);
@@ -57,6 +58,10 @@ function createUiManager(calls, options = {}) {
     },
     createAudioPlayer(paths, replaceExisting) {
       calls.push(['createAudioPlayer', paths, replaceExisting]);
+    },
+    t(key, params = {}) {
+      if (key === 'success.presetSaved') return `Preset "${params.name}" saved!`;
+      return key;
     }
   };
   return uiManager;
@@ -395,6 +400,23 @@ test('exportPreset handles guards, dialogs, saves, and errors', async () => {
     assert.equal(JSON.parse(saveCall[2]).name, undefined);
     assert.equal(calls.find(call => call[0] === 'showSaveDialog')[1].defaultPath, 'preset.effetune_preset');
     assert.ok(calls.some(call => call[0] === 'consoleError' && String(call[1]).includes('Failed to save preset')));
+  });
+
+  await withPresetGlobals({
+    uiOptions: {
+      currentPresetData: { name: 'Portable', pipeline: [{ name: 'IR Reverb' }] },
+      audioManager: {
+        pipeline: [{ externalAssetInfo: {
+          kind: 'IR', ids: ['aaaaaaaaaaaaaaaaaaaaaaaa'], names: ['Hall.wav']
+        } }]
+      }
+    }
+  }, async ({ calls }) => {
+    await exportPreset(true);
+    const message = calls.find(call => call[0] === 'showTransientMessage')?.[1];
+    assert.match(message, /Preset "Portable" saved!/);
+    assert.match(message, /external IR data \(Hall\.wav\)/);
+    assert.match(message, /not included/);
   });
 
   await withPresetGlobals({

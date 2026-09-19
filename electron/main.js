@@ -7,13 +7,13 @@ const {
   ipcMain,
   nativeImage,
   nativeTheme,
+  net,
   powerMonitor,
   shell,
   utilityProcess
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
 const { pathToFileURL } = require('url');
 
 // Import modules
@@ -890,71 +890,90 @@ function getPendingUpdateInfo() {
   return pendingUpdateInfo;
 }
 
+// GitHub releases feed for the desktop application. A page of releases is
+// requested instead of the single newest release of the repository, because the
+// repository also publishes DSP library releases (dsp-v*) that are frequently
+// newer than the newest desktop release.
+const UPDATE_RELEASES_URL = 'https://api.github.com/repos/frieve-a/effetune/releases?per_page=30';
+const UPDATE_CHECK_TIMEOUT_MS = 15000;
+
+// Chromium's network stack is used instead of Node's https module: it resolves
+// host names without the libuv thread pool that the library workers keep busy
+// during a startup scan, and it follows the system proxy configuration.
+function fetchReleases() {
+  return new Promise((resolve, reject) => {
+    const request = net.request({ method: 'GET', url: UPDATE_RELEASES_URL });
+    let settled = false;
+    const settle = (error, releases) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error instanceof Error ? error : new Error(String(error)));
+      else resolve(releases);
+    };
+    const timeout = setTimeout(() => {
+      settle(new Error(`no response within ${UPDATE_CHECK_TIMEOUT_MS} ms`));
+      request.abort();
+    }, UPDATE_CHECK_TIMEOUT_MS);
+
+    request.setHeader('User-Agent', 'EffeTune-Update-Checker/1.0');
+    request.setHeader('Accept', 'application/vnd.github+json');
+
+    request.on('response', response => {
+      if (response.statusCode !== 200) {
+        settle(new Error(`HTTP ${response.statusCode}`));
+        request.abort();
+        return;
+      }
+      const chunks = [];
+      response.on('data', chunk => chunks.push(chunk));
+      response.on('error', settle);
+      response.on('end', () => {
+        try {
+          settle(null, JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        } catch (error) {
+          settle(new Error(`malformed release feed: ${error.message}`));
+        }
+      });
+    });
+    request.on('error', settle);
+    request.on('abort', () => settle(new Error('request aborted')));
+    request.end();
+  });
+}
+
 // Check for updates from GitHub
 async function checkForUpdates() {
   try {
-    const response = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.github.com',
-        path: '/repos/frieve-a/effetune/releases/latest',
-        method: 'GET',
-        headers: {
-          'User-Agent': 'EffeTune-Update-Checker/1.0',
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      };
-      
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          if (res.statusCode === 200) {
-            resolve(JSON.parse(data));
-          } else {
-            reject(new Error(`HTTP ${res.statusCode}`));
-          }
-        });
-      });
-      
-      req.on('error', (err) => {
-        reject(err);
-      });
-      
-      req.setTimeout(10000, () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-      
-      req.end();
-    });
-    
+    const releases = await fetchReleases();
+
     const {
       isNewerVersion,
-      normalizeReleaseVersion,
-      normalizeSemVer
+      normalizeSemVer,
+      selectLatestAppRelease
     } = await releaseVersionModulePromise;
 
-    // A non-empty release name is required by the published-release contract.
-    const latestVersionName = response.name;
-    const targetVersion = normalizeReleaseVersion(response);
+    const latest = selectLatestAppRelease(releases);
     const currentVersion = normalizeSemVer(constants.getAppVersion());
 
     // A successful check replaces any update information from an earlier check.
     pendingUpdateInfo = null;
-    
+    appUpdater.setTargetRelease(null);
+
     // Compare versions
-    if (latestVersionName && targetVersion && currentVersion && isNewerVersion(targetVersion, currentVersion)) {
+    if (latest && currentVersion && isNewerVersion(latest.version, currentVersion)) {
+      // In-app installation must read the update metadata of this exact release.
+      appUpdater.setTargetRelease(latest.tag);
+
       // Store update info for later sending
       pendingUpdateInfo = {
-        version: latestVersionName,
-        targetVersion,
+        version: latest.name,
+        targetVersion: latest.version,
         currentVersion,
         autoUpdateSupported: appUpdater.isSupported(),
         url: 'https://github.com/Frieve-A/effetune/releases/'
       };
-      
+
       // Try to send immediately if window is ready
       const mainWindow = constants.getMainWindow();
       if (mainWindow && mainWindow.webContents) {
@@ -962,7 +981,7 @@ async function checkForUpdates() {
       }
     }
   } catch (error) {
-    console.error('Failed to check for updates:', error);
+    console.warn(`Failed to check for updates: ${error.message}`);
   }
 }
 

@@ -494,7 +494,9 @@ release workflow and cannot start the desktop release workflow.
 For a Windows release, attach `latest.yml` and
 `EffeTune-<version>-Setup.exe.blockmap` beside the NSIS installer. The in-app
 updater requires these files. They are generated for that exact installer, so
-do not combine a regenerated installer with metadata from another build.
+do not combine a regenerated installer with metadata from another build. The
+updater reads them from the `v<version>` release it selected, never from the
+newest release of the repository, which is often a DSP library release.
 
 ## Build Output
 

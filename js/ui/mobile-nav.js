@@ -1,3 +1,5 @@
+import { cancelExitMotion, runExitMotion } from './motion.js';
+
 const MOBILE_ICONS = {
     play: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" draggable="false"><path d="M8 5.14a1 1 0 0 1 1.52-.85l10.5 6.86a1 1 0 0 1 0 1.7L9.52 19.71A1 1 0 0 1 8 18.86z"/></svg>',
     pause: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" draggable="false"><rect x="7" y="5" width="3.6" height="14" rx="1.4"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.4"/></svg>',
@@ -53,7 +55,7 @@ export class MobileNav {
         }
 
         this.mountAudioPlayer('desktop');
-        this.closePluginList();
+        this.closePluginList({ immediate: true });
         document.body.classList.remove('view-player', 'view-effects');
         this.removeMobileElements();
     }
@@ -163,13 +165,15 @@ export class MobileNav {
             document.body.appendChild(this.fab);
         }
 
+        const pluginListElement = document.getElementById('pluginList');
+        if (!pluginListElement?.classList.contains('mobile-open')) pluginListElement.inert = true;
+
         if (!this.pluginListCloseButton) {
             this.pluginListCloseButton = document.createElement('button');
             this.pluginListCloseButton.type = 'button';
             this.pluginListCloseButton.className = 'mobile-plugin-list-close';
             this.pluginListCloseButton.innerHTML = MOBILE_ICONS.close;
             this.pluginListCloseButton.addEventListener('click', () => this.closePluginList());
-            const pluginListElement = document.getElementById('pluginList');
             if (typeof pluginListElement?.prepend === 'function') {
                 pluginListElement.prepend(this.pluginListCloseButton);
             }
@@ -372,11 +376,27 @@ export class MobileNav {
     }
 
     openPluginList() {
-        document.getElementById('pluginList')?.classList.add('mobile-open');
+        const list = document.getElementById('pluginList');
+        if (!list) return;
+        cancelExitMotion(list);
+        list.scrollTop = 0;
+        list.inert = false;
+        list.classList.remove('mobile-closing');
+        list.classList.add('mobile-open');
     }
 
-    closePluginList() {
-        document.getElementById('pluginList')?.classList.remove('mobile-open');
+    closePluginList({ immediate = false } = {}) {
+        const list = document.getElementById('pluginList');
+        if (!list) return;
+        if (immediate) {
+            cancelExitMotion(list);
+            list.classList.remove('mobile-open', 'mobile-closing');
+            list.inert = false;
+            return;
+        }
+        if (!list.classList.contains('mobile-open')) return;
+        runExitMotion(list);
+        list.classList.remove('mobile-open');
     }
 
     mountAudioPlayer(mode) {

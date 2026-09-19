@@ -28,7 +28,7 @@ No audiophile myths, Just pure science.
 
 ### Browser Extension
 
-Process one Chrome or Edge tab without a virtual audio device. See the [Browser Extension guide](docs/browser-extension.md).
+Process up to four Chrome or Edge tabs with separate effect pipelines, URL-based preset selection, and a selectable sample rate, without a virtual audio device. See the [Browser Extension guide](docs/browser-extension.md).
 
 ## Features
 
@@ -61,10 +61,6 @@ Before using EffeTune, you'll need to set up your audio routing. Here's how to c
    - Or drag the music file into the window
 - For player-only use, set Input Device to None (music file player only) in Audio Configuration to avoid using a live audio input
 - In the desktop app, choose **View > Mini Player** (Ctrl/Cmd+Shift+M) or use the player’s mini-player button to keep playback controls in a compact window. The pin button keeps it above other windows.
-
-### Gapless Playback
-
-**Gapless Playback** is on by default and can be changed in **Audio Configuration**. When it is on, compatible local tracks play without a gap; support is limited by the file format and the current browser or app environment. Unsupported formats and some mobile environments automatically use a memory-safe fallback, so a short gap may still occur. Turning it off prioritizes lower memory use and stability, and may add a short gap between tracks. Changing the setting does not interrupt the current track.
 
 ### Streaming Service Setup
 
@@ -282,6 +278,10 @@ To remove the audio interface's own response, connect its output directly to its
 Saved measurements with impulse-response data show a normalized **Impulse Response** plot in the results. It opens at 0–10 ms from the detected onset. Use the mouse wheel or buttons to zoom the time axis, and drag the plot or use the slider to scroll. Selecting a measurement point updates the plot; **All (Average)** displays the first point that has saved impulse-response data and identifies it above the graph. Use **Export Impulse Response (WAV)** below the plot to save the displayed point's complete, unnormalized response as a mono 32-bit floating-point WAV at the measurement sample rate.
 
 To inspect the active pipeline's Frequency, Phase, Min Group Delay, Excess Group Delay, and Impulse responses—including up to four selected outputs and optional saved speaker responses—see the [Pipeline Analyzer guide](docs/pipeline-analyzer.md).
+
+### Gapless Playback
+
+**Gapless Playback** is on by default and can be changed in **Audio Configuration**. When it is on, compatible local tracks play without a gap; support is limited by the file format and the current browser or app environment. Unsupported formats and some mobile environments automatically use a memory-safe fallback, so a short gap may still occur. Turning it off prioritizes lower memory use and stability, and may add a short gap between tracks. Changing the setting does not interrupt the current track.
 
 ## Common Effect Combinations
 

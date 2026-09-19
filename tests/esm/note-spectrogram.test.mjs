@@ -545,59 +545,64 @@ test('incremental Volume redraw preserves High bars that cross a neighboring row
     assert.match(fullRedraw[8], /rgba\(0, 255, 0, 1\)/);
 });
 
-test('Volume bars use lighter without confidence sorting in every redraw path', async () => {
-    const plugin = await loadPlugin();
-    const fills = [];
-    const context = {
-        globalCompositeOperation: 'source-over',
-        createLinearGradient(...coordinates) { return createGradient('linear', coordinates); },
-        fillRect(x, y, width, height) {
-            fills.push({ x, y, width, height, color: styleSignature(this.fillStyle),
-                composite: this.globalCompositeOperation });
-        }
-    };
-    plugin.vl = true;
-    plugin.cl = 'Rainbow';
-    plugin.mn = 24;
-    plugin.mx = 25;
-    plugin.graphDpr = 2;
-    plugin.volumeHistoryCanvas = { width: historyWidth, height: 20, getContext: () => context };
-    const cPitch = (24 - 21) * fineDivisions;
-    const sharpPitch = (25 - 21) * fineDivisions;
-    plugin.history[cPitch] = 0.8;
-    plugin.history[sharpPitch] = 0.3;
-    plugin.levelHistory[cPitch] = 1;
-    plugin.levelHistory[sharpPitch] = 1;
+test('Volume bars use theme-appropriate compositing without confidence sorting', async () => {
+    for (const { background, composite } of [
+        { background: [0, 0, 0], composite: 'lighter' },
+        { background: [255, 255, 255], composite: 'darken' }
+    ]) {
+        const plugin = await loadPlugin({ background });
+        const fills = [];
+        const context = {
+            globalCompositeOperation: 'source-over',
+            createLinearGradient(...coordinates) { return createGradient('linear', coordinates); },
+            fillRect(x, y, width, height) {
+                fills.push({ x, y, width, height, color: styleSignature(this.fillStyle),
+                    composite: this.globalCompositeOperation });
+            }
+        };
+        plugin.vl = true;
+        plugin.cl = 'Rainbow';
+        plugin.mn = 24;
+        plugin.mx = 25;
+        plugin.graphDpr = 2;
+        plugin.volumeHistoryCanvas = { width: historyWidth, height: 20, getContext: () => context };
+        const cPitch = (24 - 21) * fineDivisions;
+        const sharpPitch = (25 - 21) * fineDivisions;
+        plugin.history[cPitch] = 0.8;
+        plugin.history[sharpPitch] = 0.3;
+        plugin.levelHistory[cPitch] = 1;
+        plugin.levelHistory[sharpPitch] = 1;
 
-    const verifyOrder = () => {
-        const guide = fills.findIndex(fill => fill.color === 'stub:graph-grid-strong');
-        const bars = fills.map((fill, index) => ({ ...fill, index }))
-            .filter(fill => fill.color.startsWith('{'));
-        assert.equal(bars.length, 2);
-        assert.ok(guide >= 0 && guide < bars[0].index);
-        for (const fill of fills) {
-            assert.equal(fill.composite, fill.color.startsWith('{') ? 'lighter' : 'source-over');
-        }
-        assert.equal(context.globalCompositeOperation, 'source-over');
-    };
-    const layerColors = () => fills.map(fill => fill.color).filter(color =>
-        color === 'stub:graph-grid-strong' || color.startsWith('{'));
+        const verifyOrder = () => {
+            const guide = fills.findIndex(fill => fill.color === 'stub:graph-grid-strong');
+            const bars = fills.map((fill, index) => ({ ...fill, index }))
+                .filter(fill => fill.color.startsWith('{'));
+            assert.equal(bars.length, 2);
+            assert.ok(guide >= 0 && guide < bars[0].index);
+            for (const fill of fills) {
+                assert.equal(fill.composite, fill.color.startsWith('{') ? composite : 'source-over');
+            }
+            assert.equal(context.globalCompositeOperation, 'source-over');
+        };
+        const layerColors = () => fills.map(fill => fill.color).filter(color =>
+            color === 'stub:graph-grid-strong' || color.startsWith('{'));
 
-    plugin.volumeHistoryDirty = true;
-    plugin._paintVolumeHistory(20, plugin._displayPalette());
-    verifyOrder();
-    const bars = plugin._volumeBarsForColumn(0);
-    assert.deepEqual(Array.from(bars, bar => bar.midi), [24, 25]);
-    assert.ok(bars[0].confidence > bars[1].confidence);
-    const fullRedraw = layerColors();
+        plugin.volumeHistoryDirty = true;
+        plugin._paintVolumeHistory(20, plugin._displayPalette());
+        verifyOrder();
+        const bars = plugin._volumeBarsForColumn(0);
+        assert.deepEqual(Array.from(bars, bar => bar.midi), [24, 25]);
+        assert.ok(bars[0].confidence > bars[1].confidence);
+        const fullRedraw = layerColors();
 
-    fills.length = 0;
-    plugin._paintVolumeColumns(0, 1);
-    verifyOrder();
-    assert.deepEqual(layerColors(), fullRedraw);
+        fills.length = 0;
+        plugin._paintVolumeColumns(0, 1);
+        verifyOrder();
+        assert.deepEqual(layerColors(), fullRedraw);
 
-    plugin.history[sharpPitch] = plugin.history[cPitch];
-    assert.deepEqual(Array.from(plugin._volumeBarsForColumn(0), bar => bar.midi), [24, 25]);
+        plugin.history[sharpPitch] = plugin.history[cPitch];
+        assert.deepEqual(Array.from(plugin._volumeBarsForColumn(0), bar => bar.midi), [24, 25]);
+    }
 });
 
 test('Volume meter draws one blurred current semicircle into the graph area', async () => {

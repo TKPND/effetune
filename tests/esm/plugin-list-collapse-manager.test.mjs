@@ -428,66 +428,67 @@ test('pull tab, resize, touch swipe, sidebar, and load handlers trigger collapse
   });
 });
 
-test('checkWindowWidthAndAdjust and initialization polling wait for app readiness', async () => {
+test('layout checks wait for readiness and react to desktop width changes after markReady', async () => {
   await withCollapseGlobals({
-    windowOptions: { appInitializedListener: true }
+    domOptions: { pipelineRight: 1190 },
+    windowOptions: { innerWidth: 1200, appInitializedListener: true }
   }, async ({ dom, windowRef }) => {
     const manager = new CollapseManager({ pluginList: dom.pluginList });
     let toggles = 0;
+    const toggle = manager.togglePluginListCollapse.bind(manager);
     manager.togglePluginListCollapse = () => {
       toggles++;
-      manager.isCollapsed = !manager.isCollapsed;
+      toggle();
     };
 
-    windowRef.app = null;
     manager.checkWindowWidthAndAdjust();
+    assert.equal(manager.readyForLayout, false);
+    assert.equal(manager.isCollapsed, false);
     assert.equal(toggles, 0);
 
-    windowRef.app = { initialized: true };
-    dom.pipeline.rect = { left: 0, right: 790, width: 790 };
-    manager.isCollapsed = false;
-    manager.checkWindowWidthAndAdjust();
+    manager.markReady();
+    assert.equal(manager.readyForLayout, true);
+    assert.equal(manager.isCollapsed, true);
+    assert.equal(toggles, 1);
+    manager.markReady();
     assert.equal(toggles, 1);
 
-    dom.pipeline.rect = { left: 0, right: 600, width: 600 };
-    manager.isCollapsed = false;
-    manager.checkWindowWidthAndAdjust();
-    assert.equal(toggles, 1);
-
-    manager.isCollapsed = true;
-    dom.pipeline.rect = { left: 0, right: 500, width: 500 };
-    manager.checkWindowWidthAndAdjust();
+    windowRef.innerWidth = 1600;
+    dom.pipeline.rect = { left: 0, right: 1200, width: 1200 };
+    windowRef.dispatchEvent('resize');
+    assert.equal(manager.isCollapsed, false);
     assert.equal(toggles, 2);
 
-    manager.isCollapsed = true;
-    dom.pipeline.rect = { left: 0, right: 700, width: 700 };
-    manager.checkWindowWidthAndAdjust();
-    assert.equal(toggles, 2);
+    windowRef.innerWidth = 1200;
+    dom.pipeline.rect = { left: 0, right: 1190, width: 1190 };
+    windowRef.dispatchEvent('resize');
+    assert.equal(manager.isCollapsed, true);
+    assert.equal(toggles, 3);
   });
+});
 
+test('mobile layout ignores automatic collapse checks after markReady', async () => {
   await withCollapseGlobals({
-    domOptions: { pipeline: null },
-    windowOptions: { appInitializedListener: true, app: { initialized: true } }
-  }, async ({ dom }) => {
+    domOptions: { pipelineRight: 1190 },
+    windowOptions: { innerWidth: 1200, appInitializedListener: true }
+  }, async ({ dom, windowRef }) => {
+    windowRef.uiManager = { layoutMode: { isMobile: true } };
     const manager = new CollapseManager({ pluginList: dom.pluginList });
-    manager.checkWindowWidthAndAdjust();
+    manager.markReady();
+    windowRef.dispatchEvent('resize');
+    assert.equal(manager.readyForLayout, true);
+    assert.equal(manager.isCollapsed, false);
   });
+});
 
+test('web initialization polling marks layout ready only after app initialization', async () => {
   await withCollapseGlobals({
-    windowOptions: { app: { initialized: true } }
-  }, async ({ calls, dom }) => {
-    const manager = new CollapseManager({ pluginList: dom.pluginList });
-    manager.checkWindowWidthAndAdjust = () => calls.push(['checkedReady']);
-    manager.initializeAfterAppLoaded();
-    assert.ok(calls.some(call => call[0] === 'checkedReady'));
-  });
-
-  await withCollapseGlobals({
-    windowOptions: {}
+    domOptions: { pipelineRight: 1190 },
+    windowOptions: { innerWidth: 1200 }
   }, async ({ calls, dom, windowRef, intervalCallbacks, timeoutCallbacks }) => {
     const manager = new CollapseManager({ pluginList: dom.pluginList });
-    manager.checkWindowWidthAndAdjust = () => calls.push(['checkedLater']);
-    manager.initializeAfterAppLoaded();
+    assert.equal(manager.readyForLayout, false);
+    assert.equal(manager.isCollapsed, false);
     assert.equal(windowRef.appInitializedListener, true);
     assert.ok(calls.some(call => call[0] === 'setInterval' && call[1] === 200));
     assert.ok(calls.some(call => call[0] === 'setTimeout' && call[1] === 10000));
@@ -496,30 +497,44 @@ test('checkWindowWidthAndAdjust and initialization polling wait for app readines
     for (const callback of intervalCallbacks.values()) {
       callback();
     }
-    assert.ok(calls.some(call => call[0] === 'checkedLater'));
+    assert.equal(manager.readyForLayout, true);
+    assert.equal(manager.isCollapsed, true);
 
     for (const callback of timeoutCallbacks.values()) {
       callback();
     }
     assert.ok(calls.some(call => call[0] === 'clearInterval'));
   });
+});
 
+test('web layout checks recover when app initialization outlives the polling timeout', async () => {
   await withCollapseGlobals({
-    windowOptions: { appInitializedListener: undefined }
-  }, async ({ calls, dom, windowRef }) => {
-    let appReads = 0;
-    Object.defineProperty(windowRef, 'app', {
-      configurable: true,
-      get() {
-        appReads++;
-        return appReads === 1 ? null : { initialized: true };
-      }
-    });
+    domOptions: { pipelineRight: 1190 },
+    windowOptions: { innerWidth: 1200 }
+  }, async ({ dom, windowRef, intervalCallbacks, timeoutCallbacks }) => {
     const manager = new CollapseManager({ pluginList: dom.pluginList });
-    manager.checkWindowWidthAndAdjust = () => calls.push(['checkedImmediately']);
-    appReads = 0;
-    windowRef.appInitializedListener = false;
-    manager.initializeAfterAppLoaded();
-    assert.ok(calls.some(call => call[0] === 'checkedImmediately'));
+    for (const callback of timeoutCallbacks.values()) callback();
+    assert.equal(intervalCallbacks.size, 0);
+
+    windowRef.dispatchEvent('resize');
+    assert.equal(manager.readyForLayout, false);
+    assert.equal(manager.isCollapsed, false);
+
+    windowRef.app = { initialized: true };
+    windowRef.dispatchEvent('resize');
+    assert.equal(manager.readyForLayout, true);
+    assert.equal(manager.isCollapsed, true);
+  });
+});
+
+test('ready layout checks tolerate a missing pipeline', async () => {
+  await withCollapseGlobals({
+    domOptions: { pipeline: null },
+    windowOptions: { appInitializedListener: true }
+  }, async ({ dom }) => {
+    const manager = new CollapseManager({ pluginList: dom.pluginList });
+    manager.markReady();
+    assert.equal(manager.readyForLayout, true);
+    assert.equal(manager.isCollapsed, false);
   });
 });

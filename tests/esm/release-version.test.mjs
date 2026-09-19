@@ -6,7 +6,8 @@ import {
   compareSemVer,
   isNewerVersion,
   normalizeReleaseVersion,
-  normalizeSemVer
+  normalizeSemVer,
+  selectLatestAppRelease
 } from '../../js/release-version.mjs';
 
 test('release versions normalize labels and compare semantic versions', () => {
@@ -26,6 +27,32 @@ test('release versions normalize labels and compare semantic versions', () => {
 test('release versions support the established two-component tag convention', () => {
   assert.equal(normalizeSemVer('v1.64'), '1.64.0');
   assert.equal(normalizeReleaseVersion({ tag_name: 'v1.64' }), '1.64.0');
+});
+
+test('the newest desktop release is selected from a feed shared with the DSP library', () => {
+  const feed = [
+    { tag_name: 'dsp-v0.10.0', name: 'EffeTune DSP 0.10.0' },
+    { tag_name: 'v2.11.0', name: 'Version 2.11.0', draft: true },
+    { tag_name: 'v2.10.1-rc.1', name: 'Version 2.10.1-rc.1', prerelease: true },
+    { tag_name: 'v2.9.0', name: 'Version 2.9.0' },
+    { tag_name: 'v2.10.0', name: 'Version 2.10.0' },
+    { tag_name: 'v2.8.0' },
+    { tag_name: 'dsp-v0.9.0', name: 'EffeTune DSP 0.9.0' }
+  ];
+  assert.deepEqual(selectLatestAppRelease(feed), {
+    tag: 'v2.10.0',
+    version: '2.10.0',
+    name: 'Version 2.10.0'
+  });
+  assert.deepEqual(selectLatestAppRelease([{ tag_name: 'v1.64', name: 'Version 1.64.0' }]), {
+    tag: 'v1.64',
+    version: '1.64.0',
+    name: 'Version 1.64.0'
+  });
+  // A feed carrying no desktop release must never offer an update.
+  assert.equal(selectLatestAppRelease([{ tag_name: 'dsp-v0.10.0', name: 'EffeTune DSP 0.10.0' }]), null);
+  assert.equal(selectLatestAppRelease([]), null);
+  assert.equal(selectLatestAppRelease(null), null);
 });
 
 test('release metadata uses the package version consistently', () => {

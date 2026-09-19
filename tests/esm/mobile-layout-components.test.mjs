@@ -107,6 +107,11 @@ class FakeElement {
     if (this.parentNode) this.parentNode.removeChild(this);
   }
 
+  contains(element) {
+    if (element === this) return true;
+    return this.children.some(child => child.contains(element));
+  }
+
   addEventListener(type, listener) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type).push(listener);
@@ -356,6 +361,49 @@ test('MobileNav shows Open Music on the mini player when no track is loaded', as
   });
 });
 
+test('MobileNav restores plugin-list input when an exit is cancelled or mobile mode ends', async () => {
+  const documentRef = createDocument();
+  const layoutMode = createLayoutMode('mobile');
+  const timers = [];
+  const uiManager = {
+    layoutMode,
+    audioPlayer: {
+      ui: { mountContainerForLayout() {} },
+      stateManager: createStateManager()
+    }
+  };
+
+  await withGlobals({
+    document: documentRef,
+    window: { location: { search: '' } },
+    getComputedStyle: () => ({ getPropertyValue: () => '160ms' }),
+    setTimeout(callback) {
+      timers.push(callback);
+      return timers.length;
+    },
+    clearTimeout() {}
+  }, async () => {
+    const mobileNav = new MobileNav(uiManager);
+    const list = documentRef.pluginList;
+
+    assert.equal(list.inert, true);
+    mobileNav.openPluginList();
+    assert.equal(list.inert, false);
+    mobileNav.closePluginList();
+    assert.equal(list.inert, true);
+
+    mobileNav.openPluginList();
+    timers[0]();
+    assert.equal(list.inert, false);
+    assert.equal(list.classList.contains('mobile-open'), true);
+
+    mobileNav.closePluginList();
+    layoutMode.setMode('desktop');
+    assert.equal(list.inert, false);
+    assert.equal(list.classList.contains('mobile-closing'), false);
+  });
+});
+
 test('MobileMenu removes overflow controls when leaving mobile mode', async () => {
   const documentRef = createDocument();
   const layoutMode = createLayoutMode('mobile');
@@ -391,8 +439,10 @@ test('MobileMenu removes overflow controls when leaving mobile mode', async () =
     assert.equal(panel.children.includes(documentRef.getElementById('installAppButton')), true);
     assert.equal(button.innerHTML.includes('<svg'), true);
     assert.equal(panel.children.some(item => item.textContent === 'Process Audio Files with Effects...'), true);
+    assert.equal(panel.inert, true);
 
     menu.open();
+    assert.equal(panel.inert, false);
     installAppElement.click();
     assert.equal(panel.classList.contains('mobile-open'), false);
     menu.open();
@@ -402,9 +452,14 @@ test('MobileMenu removes overflow controls when leaving mobile mode', async () =
 
     menu.open();
     assert.equal(panel.classList.contains('mobile-open'), true);
-    panel.children.find(item => item.textContent === 'Process Audio Files with Effects...').click();
+    const processAudioFiles = panel.children.find(item => item.textContent === 'Process Audio Files with Effects...');
+    documentRef.activeElement = processAudioFiles;
+    button.focus = () => { documentRef.activeElement = button; };
+    processAudioFiles.click();
     assert.deepEqual(calls, ['processAudioFiles']);
     assert.equal(panel.classList.contains('mobile-open'), false);
+    assert.equal(panel.inert, true);
+    assert.equal(documentRef.activeElement, button);
 
     menu.open();
     layoutMode.setMode('desktop');

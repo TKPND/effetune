@@ -1368,7 +1368,7 @@ export class AudioIOManager {
     /**
      * Clean up audio input and output
      */
-    cleanupAudio() {
+    cleanupAudio({ releaseInput = true } = {}) {
         // Stop polling before teardown to prevent race conditions
         this.stopDevicePoll();
 
@@ -1396,7 +1396,7 @@ export class AudioIOManager {
         }
 
         // Stop canonical input without affecting already-cleared output fields.
-        this.releaseAudioInput({ reason: 'full-cleanup', disconnect: true });
+        if (releaseInput) this.releaseAudioInput({ reason: 'full-cleanup', disconnect: true });
 
         if (this.silentInputBufferSource) {
             try { this.silentInputBufferSource.stop(); } catch { /* already stopped */ }

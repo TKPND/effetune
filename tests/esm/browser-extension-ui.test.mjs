@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { POPUP_STATUS, renderPopup } from '../../extension/popup.js';
-import { createUiManager, ExtensionAudioManager, ExtensionEditor } from '../../extension/editor.js';
+import { renderPopup } from '../../extension/popup.js';
+import { createUiManager, ExtensionAudioManager, ExtensionEditor, selectEditorSnapshot } from '../../extension/editor.js';
 import { ExtensionClient } from '../../extension/protocol.js';
 import { TelemetryFrameType, TelemetryHub } from '../../js/audio/telemetry-hub.js';
 import { PresetManager } from '../../js/ui/pipeline/preset-manager.js';
@@ -30,39 +30,154 @@ test('popup renders the authoritative processing snapshot', () => {
     add(option) { this.options.push(option); if (this.options.length === 1) this.value = option.value; }
   };
   const elements = {
-    status: button(), indicator: button(), target: button(), startStop: button(),
-    bypass: button(), preset, applyPreset: button(), edit: button(), message: button()
+    sessionCount: button(), empty: button(), start: button(), startHint: button(),
+    preset, applyPreset: button(), edit: button(), message: button(),
+    getSelectedSessionId: () => null,
+    setSelectedSessionId(sessionId) { this.selectedSessionId = sessionId; },
+    renderSessions(sessions, selectedSessionId) { this.sessions = sessions; this.renderedSelection = selectedSessionId; }
   };
 
   try {
     renderPopup(elements, {
-      status: 'processing', target: { tabId: 7, title: 'Listening tab' },
-      masterBypass: true, presets: { Warm: { plugins: [] } }, error: null
+      revision: 1,
+      sessions: [{ sessionId: 'session-7', status: 'processing', tabId: 7, title: 'Listening tab', masterBypass: true }],
+      presets: { Warm: { plugins: [] } }
     });
   } finally {
     globalThis.Option = OriginalOption;
   }
 
-  assert.equal(elements.status.textContent, POPUP_STATUS.processing);
-  assert.equal(elements.target.textContent, 'Listening tab');
-  assert.equal(elements.startStop.textContent, 'Stop processing');
-  assert.equal(elements.startStop.disabled, false);
-  assert.equal(elements.bypass.checked, true);
-  assert.equal(elements.bypass.disabled, false);
+  assert.equal(elements.sessionCount.textContent, '1 / 4');
+  assert.equal(elements.sessions[0].title, 'Listening tab');
+  assert.equal(elements.renderedSelection, 'session-7');
+  assert.equal(elements.start.disabled, false);
+  assert.equal(elements.applyPreset.disabled, false);
   assert.deepEqual(preset.options.map(option => option.value), ['Warm']);
+});
+
+test('popup counts only live sessions, keeps terminal status visible, and disables Start at the four-tab limit', () => {
+  const OriginalOption = globalThis.Option;
+  globalThis.Option = class Option {
+    constructor(text, value) { this.text = text; this.value = value; }
+  };
+  const preset = {
+    value: '', disabled: false, options: [],
+    replaceChildren() { this.options = []; this.value = ''; },
+    add(option) { this.options.push(option); if (this.options.length === 1) this.value = option.value; }
+  };
+  const elements = {
+    sessionCount: button(), empty: button(), start: button(), startHint: button(), preset,
+    applyPreset: button(), edit: button(), message: button(),
+    getSelectedSessionId: () => 'second', setSelectedSessionId(sessionId) { this.selection = sessionId; },
+    renderSessions(sessions) { this.sessions = sessions; }
+  };
+  try {
+    renderPopup(elements, {
+      sessions: [
+        { sessionId: 'first', status: 'processing' },
+        { sessionId: 'second', status: 'processing' },
+        { sessionId: 'third', status: 'starting' },
+        { sessionId: 'fourth', status: 'processing' },
+        { sessionId: 'old', status: 'stopped' }
+      ],
+      presets: {}
+    });
+  } finally {
+    globalThis.Option = OriginalOption;
+  }
+  assert.equal(elements.sessions.length, 5);
+  assert.equal(elements.selection, 'second');
+  assert.equal(elements.start.disabled, true);
+  assert.equal(elements.startHint.hidden, false);
+});
+
+test('editor projects a selected live session and falls back to the offline pipeline', () => {
+  const root = {
+    revision: 7,
+    sampleRate: 96000,
+    masterBypass: false,
+    plugins: [{ id: 1, nm: 'Volume' }],
+    sessions: [{
+      sessionId: 'live', status: 'processing', title: 'Listening tab', sampleRate: 48000,
+      masterBypass: true, plugins: [{ id: 2, nm: 'Gain' }], preparationStatuses: [{ pluginId: 2 }]
+    }]
+  };
+  const selected = selectEditorSnapshot(root, 'live');
+  assert.equal(selected.title, 'Listening tab');
+  assert.equal(selected.sampleRate, 48000);
+  assert.equal(selected.masterBypass, true);
+  assert.deepEqual(selected.plugins, [{ id: 2, nm: 'Gain' }]);
+
+  const offline = selectEditorSnapshot(root, 'missing');
+  assert.equal(offline.status, 'stopped');
+  assert.equal(offline.sampleRate, 96000);
+  assert.deepEqual(offline.plugins, [{ id: 1, nm: 'Volume' }]);
+});
+
+test('editor does not redirect queued edits when their session stops', () => {
+  const client = { sessionId: 'stopped' };
+  const editor = new ExtensionEditor({ client, documentRef: {} });
+  editor.audioManager = { pendingMutations: 1 };
+  editor.updateTelemetrySubscription = () => Promise.resolve();
+  const snapshot = { sessions: [{ sessionId: 'other', status: 'processing' }] };
+  editor.reconcileSession(snapshot);
+  assert.equal(client.sessionId, 'stopped');
+  editor.audioManager.pendingMutations = 0;
+  editor.reconcileSession(snapshot);
+  assert.equal(client.sessionId, 'other');
+});
+
+test('editor offers the offline pipeline only when no live session exists', () => {
+  const OriginalOption = globalThis.Option;
+  globalThis.Option = class Option {
+    constructor(text, value) { this.text = text; this.value = value; }
+  };
+  const select = {
+    options: [], value: '',
+    replaceChildren() { this.options = []; },
+    add(option) { this.options.push(option); }
+  };
+  const editor = new ExtensionEditor({ client: { sessionId: 'live' }, documentRef: {} });
+  editor.elements.sessionSelect = select;
+  try {
+    editor.renderSessionOptions({ sessions: [{ sessionId: 'live', status: 'processing', title: 'Listening tab' }] });
+    assert.deepEqual(select.options.map(option => option.value), ['live']);
+    editor.client.sessionId = null;
+    editor.renderSessionOptions({ sessions: [{ sessionId: 'old', status: 'stopped' }] });
+    assert.deepEqual(select.options.map(option => option.value), ['']);
+  } finally {
+    globalThis.Option = OriginalOption;
+  }
+});
+
+test('explicit session changes mark the restored pipeline as a history boundary', async () => {
+  const calls = [];
+  const client = { sessionId: 'first', async request(command) {
+    calls.push([command, this.sessionId]);
+    return command === 'getState' ? { revision: 2, sessions: [{ sessionId: 'second', status: 'processing' }] } : {};
+  } };
+  const editor = new ExtensionEditor({ client, documentRef: {} });
+  editor.audioManager = { mutationQueue: Promise.resolve() };
+  editor.updateTelemetrySubscription = async () => {};
+  let restored;
+  editor.restoreSnapshot = (...args) => { restored = args; };
+  await editor.changeSession('second');
+  assert.deepEqual(calls, [['setTelemetry', 'first'], ['getState', 'first']]);
+  assert.equal(restored[1], true);
+  assert.equal(restored[2], true);
 });
 
 test('frequency preview uses the volatile extension channel without queuing state requests', () => {
   const messages = [];
   const client = Object.assign(Object.create(ExtensionClient.prototype), {
-    id: 'editor', channel: { postMessage: message => messages.push(message) }
+    id: 'editor', sessionId: 'selected', channel: { postMessage: message => messages.push(message) }
   });
   const adapter = new ExtensionAudioManager(client, assert.fail);
   adapter.setFrequencyPreview(440);
   adapter.setFrequencyPreview(null);
   assert.deepEqual(messages, [
-    { kind: 'frequencyPreview', clientId: 'editor', frequency: 440 },
-    { kind: 'frequencyPreview', clientId: 'editor', frequency: null }
+    { kind: 'frequencyPreview', clientId: 'editor', sessionId: 'selected', frequency: 440 },
+    { kind: 'frequencyPreview', clientId: 'editor', sessionId: 'selected', frequency: null }
   ]);
   assert.equal(adapter.pendingMutations, 0);
 });
@@ -142,6 +257,7 @@ test('extension pages use external module scripts and the editor reuses pipeline
   ]);
   assert.match(popupHtml, /<base href="\.\.\/">/);
   assert.match(editorHtml, /src="extension\/editor\.js"/);
+  assert.match(editorHtml, /href="effetune-mobile\.css"/);
   assert.match(editorJs, /import \{ PipelineManager \}/);
   assert.match(editorJs, /new PluginListManager/);
   assert.match(editorJs, /new TelemetryHub/);
@@ -151,9 +267,10 @@ test('extension pages use external module scripts and the editor reuses pipeline
   assert.match(editorHtml, /<div class="plugin-list-pull-tab" id="pluginListPullTab">◀<\/div>/);
   assert.doesNotMatch(editorHtml, /editorBypass|editorPresetSelect|editorApplyPreset|editorSavePreset|editorDeletePreset/);
   assert.doesNotMatch(editorHtml, /class="extension-toolbar"/);
-  const settingsMenu = editorHtml.match(/<div class="settings-menu" id="editorSettingsMenu"[\s\S]*?<\/div>/)[0];
-  assert.deepEqual([...settingsMenu.matchAll(/id="([^"]+)"/g)].map(match => match[1]),
-    ['editorSettingsMenu', 'editorImportMeasurement', 'editorImportPreset', 'editorExportPreset']);
+  for (const id of ['editorSettingsMenu', 'editorSampleRateSelect', 'editorUrlRules',
+    'editorImportMeasurement', 'editorImportPreset', 'editorExportPreset']) {
+    assert.match(editorHtml, new RegExp(`id="${id}"`));
+  }
   assert.match(editorHtml, /id="editorSettingsMenuButton"[^>]*aria-expanded="false"/);
   assert.match(editorHtml, /id="editorMeasurementFile"[^>]*hidden/);
   assert.match(editorHtml, /id="editorPresetFile"[^>]*hidden/);
@@ -171,6 +288,8 @@ test('extension pages use external module scripts and the editor reuses pipeline
   assert.doesNotMatch(editorCss, /\.extension-editor \.pipeline\s*\{/);
   assert.match(editorJs, /\.room-eq-measurement-row/);
   assert.match(editorJs, /extension-measurement-delete/);
+  assert.doesNotMatch(editorJs, /collapseEffectListAtNarrowWidth/);
+  assert.match(editorJs, /initPluginList\(\);[\s\S]{0,400}collapseManager\.markReady\(\)/);
 });
 
 test('Room EQ measurement list receives the VST-style selected-item Delete action', async () => {
@@ -471,6 +590,49 @@ test('extension UI infers error severity for shared preset messages with an omit
   ]);
 });
 
+test('extension UI layout mode follows the shared mobile-width breakpoint', async () => {
+  const listeners = new Map();
+  const widthMedia = {
+    matches: true,
+    addEventListener(_type, listener) { listeners.set('width', listener); },
+    removeEventListener() {}
+  };
+  const installedMedia = {
+    matches: false,
+    addEventListener(_type, listener) { listeners.set('installed', listener); },
+    removeEventListener() {}
+  };
+  const bodyClasses = new Set();
+  const rootClasses = new Set();
+  const classList = classes => ({
+    toggle(name, enabled) { enabled ? classes.add(name) : classes.delete(name); }
+  });
+
+  await withGlobals({
+    window: {
+      matchMedia: query => query === '(max-width: 1158px)' ? widthMedia : installedMedia,
+      addEventListener() {},
+      removeEventListener() {}
+    },
+    document: {
+      body: { classList: classList(bodyClasses) },
+      documentElement: { classList: classList(rootClasses) }
+    }
+  }, () => {
+    const uiManager = createUiManager({}, () => {}, () => {});
+    assert.equal(uiManager.layoutMode.isMobile, true);
+    assert.equal(bodyClasses.has('layout-mobile'), true);
+    assert.equal(rootClasses.has('layout-mobile'), true);
+
+    widthMedia.matches = false;
+    listeners.get('width')();
+    assert.equal(uiManager.layoutMode.isMobile, false);
+    assert.equal(bodyClasses.has('layout-desktop'), true);
+    assert.equal(rootClasses.has('layout-desktop'), true);
+    uiManager.layoutMode.dispose();
+  });
+});
+
 test('measurement import rejects unsupported files before reading them', async () => {
   let reads = 0;
   const editor = new ExtensionEditor({ client: {}, documentRef: {}, measurementStorage: {
@@ -560,6 +722,8 @@ test('extension client routes one worklet telemetry frame through the editor to 
     close() {}
   }
   const eventTarget = { addEventListener() {}, click() {} };
+  const documentListeners = new Map();
+  const menuChild = {};
   const packet = new ArrayBuffer(20);
   const view = new DataView(packet);
   view.setUint16(0, TelemetryFrameType.TAP_LEVEL, true);
@@ -574,13 +738,16 @@ test('extension client routes one worklet telemetry frame through the editor to 
     window: { addEventListener() {} }
   }, async () => {
     const client = new ExtensionClient();
-    const editor = new ExtensionEditor({ client, documentRef: { addEventListener() {} } });
+    client.sessionId = 'selected';
+    const editor = new ExtensionEditor({ client, documentRef: {
+      addEventListener(type, listener) { documentListeners.set(type, listener); }
+    } });
     editor.audioManager = new ExtensionAudioManager(client, error => assert.fail(error));
     editor.audioManager.telemetryHub = new TelemetryHub({ port: { postMessage() {} } });
     editor.pipelineManager = { undo() {}, redo() {} };
     editor.elements = {
       settingsMenuButton: eventTarget,
-      settingsMenu: { classList: { toggle() { return true; }, remove() {} } },
+      settingsMenu: { contains: target => target === menuChild, classList: { toggle() { return true; }, remove() {} } },
       importMeasurement: eventTarget,
       measurementFile: eventTarget,
       importPreset: eventTarget,
@@ -597,11 +764,18 @@ test('extension client routes one worklet telemetry frame through the editor to 
 
     channels[0].onmessage({ data: {
       kind: 'workletMessage',
+      sessionId: 'selected',
       message: { type: 'dspTelemetry', packet, bytes: packet.byteLength }
     } });
 
     assert.deepEqual(frames, [{ tapId: 41, frameType: TelemetryFrameType.TAP_LEVEL, value: 0.75 }]);
     assert.equal(editor.audioManager.telemetryHub.getStats().packets, 1);
+    let closes = 0;
+    editor.closeSettingsMenu = () => { closes += 1; };
+    documentListeners.get('click')({ target: menuChild });
+    assert.equal(closes, 0);
+    documentListeners.get('click')({ target: {} });
+    assert.equal(closes, 1);
     client.close();
   });
 });
@@ -624,6 +798,202 @@ function editorForAdapter(adapter) {
   adapter.onMutationsSettled = () => editor.restoreSnapshot(editor.snapshot);
   return editor;
 }
+
+test('queued mutations keep their session through deferred payloads and the real client transport', async () => {
+  const sent = [];
+  const prepared = Promise.withResolvers();
+  const client = Object.assign(Object.create(ExtensionClient.prototype), {
+    id: 'editor', sessionId: 'first', sequence: 0, pending: new Map(),
+    acceptState() {},
+    channel: { postMessage(message) {
+      sent.push(message);
+      const pending = client.pending.get(message.requestId);
+      clearTimeout(pending.timer);
+      client.pending.delete(message.requestId);
+      pending.resolve({});
+    } }
+  });
+  const adapter = new ExtensionAudioManager(client, assert.fail);
+  const importing = adapter.request('importPreset', () => prepared.promise);
+  const saving = adapter.request('savePreset', { name: 'First' });
+  await Promise.resolve();
+  client.sessionId = 'second';
+  prepared.resolve({ preset: { plugins: [] } });
+  await Promise.all([importing, saving]);
+  assert.deepEqual(sent.map(message => [message.command, message.args.sessionId]),
+    [['importPreset', 'first'], ['savePreset', 'first']]);
+  assert.equal(client.pending.size, 0);
+});
+
+async function bindSessionTestEditor(editor) {
+  const capture = new EventTarget();
+  const bubble = new EventTarget();
+  editor.document = {
+    body: { inert: false }, hidden: false,
+    addEventListener(type, listener, capturing) {
+      (capturing ? capture : bubble).addEventListener(type, listener);
+    },
+    removeEventListener(type, listener, capturing) {
+      (capturing ? capture : bubble).removeEventListener(type, listener);
+    },
+    dispatchEvent(event) {
+      if (capture.dispatchEvent(event)) return bubble.dispatchEvent(event);
+      return false;
+    }
+  };
+  for (const name of ['settingsMenuButton', 'importMeasurement', 'measurementFile',
+    'importPreset', 'presetFile', 'exportPreset', 'undo', 'redo']) {
+    editor.elements[name] = new EventTarget();
+  }
+  await withGlobals({ window: { addEventListener() {} } }, () => editor.bindEvents());
+}
+
+test('session switching blocks edits until queued A edits finish and B is restored', async () => {
+  const firstEdit = Promise.withResolvers();
+  const stopping = Promise.withResolvers();
+  const stopped = Promise.withResolvers();
+  const fetching = Promise.withResolvers();
+  const fetched = Promise.withResolvers();
+  const requests = [];
+  const snapshot = { revision: 1, presets: {}, sessions: [
+    { sessionId: 'first', status: 'processing', plugins: [{ nm: 'Volume', en: true, id: 1, vl: 0 }] },
+    { sessionId: 'second', status: 'processing', plugins: [{ nm: 'Volume', en: true, id: 2, vl: -2 }] },
+    { sessionId: 'third', status: 'processing', plugins: [] }
+  ] };
+  let editor;
+  const client = Object.assign(new EventTarget(), { sessionId: 'first', async request(command, args, sessionId = this.sessionId) {
+    requests.push({ command, args, sessionId });
+    if (command === 'workletMessage') {
+      if (requests.length === 1) await firstEdit.promise;
+      snapshot.sessions.find(session => session.sessionId === sessionId).plugins[0].vl = args.message.plugin.parameters.vl;
+      snapshot.revision += 1;
+      editor.restoreSnapshot(structuredClone(snapshot));
+    } else if (command === 'savePreset') {
+      snapshot.presets[args.name] = structuredClone(snapshot.sessions.find(session => session.sessionId === sessionId).plugins);
+    } else if (command === 'setTelemetry' && !args.enabled) {
+      stopping.resolve();
+      await stopped.promise;
+    } else if (command === 'getState') {
+      fetching.resolve();
+      await fetched.promise;
+    }
+    return structuredClone(snapshot);
+  } });
+  const adapter = new ExtensionAudioManager(client, assert.fail);
+  editor = editorForAdapter(adapter);
+  await bindSessionTestEditor(editor);
+  editor.restoreSnapshot(snapshot, true);
+  let undos = 0;
+  editor.pipelineManager.undo = () => { undos += 1; };
+  editor.document.addEventListener('keydown', () => editor.pipelineManager.undo());
+  editor.document.addEventListener('input', event => {
+    adapter.pipeline[0].vl = event.value;
+    adapter.forwardPluginMessage({ type: 'updatePlugin', plugin: {
+      id: adapter.pipeline[0].id, parameters: { vl: event.value }
+    } });
+  });
+  const edit = value => editor.document.dispatchEvent(Object.assign(new Event('input', { cancelable: true }), { value }));
+  edit(-3);
+  edit(-9);
+  const saved = adapter.request('savePreset', { name: 'First' });
+  const switching = editor.changeSession('second');
+  assert.equal(editor.document.body.inert, true);
+  edit(-15);
+  editor.document.dispatchEvent(new Event('keydown', { cancelable: true }));
+  assert.equal(adapter.pendingMutations, 3);
+  assert.equal(undos, 0);
+  firstEdit.resolve();
+  await stopping.promise;
+  await saved;
+  edit(-20);
+  await editor.changeSession('third');
+  editor.document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(client.sessionId, 'first');
+  assert.equal(requests.filter(request => request.command === 'setTelemetry').length, 1);
+  stopped.resolve();
+  await fetching.promise;
+  edit(-25);
+  editor.restoreSnapshot({ ...structuredClone(snapshot), revision: 4, sessions: snapshot.sessions.slice(1) });
+  assert.equal(client.sessionId, 'first');
+  assert.equal(adapter.pipeline[0].id, 1);
+  assert.equal(editor.document.body.inert, true);
+  fetched.resolve();
+  await switching;
+  assert.equal(client.sessionId, 'second');
+  assert.equal(editor.document.body.inert, false);
+  assert.deepEqual(adapter.pipeline.map(plugin => [plugin.id, plugin.vl]), [[2, -2]]);
+  assert.equal(snapshot.sessions[0].plugins[0].vl, -9);
+  assert.equal(snapshot.presets.First[0].vl, -9);
+  assert.deepEqual(requests.filter(request => ['workletMessage', 'savePreset'].includes(request.command))
+    .map(request => request.sessionId), ['first', 'first', 'first']);
+  assert.deepEqual(requests.filter(request => request.command === 'setTelemetry')
+    .map(request => [request.sessionId, request.args.enabled]), [['first', false], ['second', true]]);
+  edit(-11);
+  await adapter.mutationQueue;
+  editor.document.dispatchEvent(new Event('keydown'));
+  assert.equal(undos, 1);
+  assert.equal(snapshot.sessions[1].plugins[0].vl, -11);
+});
+
+test('failed session switches restore editing and telemetry on the original session', async () => {
+  for (const failure of ['setTelemetry', 'getState']) {
+    const requests = [];
+    const client = { sessionId: 'first', async request(command, args) {
+      requests.push([command, this.sessionId, args?.enabled]);
+      if (command === failure && args?.enabled !== true) throw new Error('Expected switch failure');
+    } };
+    const adapter = new ExtensionAudioManager(client, assert.fail);
+    const editor = editorForAdapter(adapter);
+    editor.document = { body: { inert: false }, hidden: false };
+    editor.restoreSnapshot({ revision: 1, sessions: [{ sessionId: 'first', status: 'processing',
+      plugins: [{ id: 1, nm: 'Volume', en: true, vl: -1 }] }] }, true);
+    const errors = [];
+    editor.reportError = error => errors.push(error.message);
+    const history = editor.pipelineManager.historyManager;
+    history.history = ['original undo state'];
+    await editor.changeSession('second');
+    assert.equal(errors.length, 1);
+    assert.equal(client.sessionId, 'first');
+    assert.equal(editor.document.body.inert, false);
+    assert.equal(editor.changingSession, false);
+    assert.deepEqual(adapter.pipeline.map(plugin => [plugin.id, plugin.vl]), [[1, -1]]);
+    assert.deepEqual(history.history, ['original undo state']);
+    assert.deepEqual(requests.at(-1), ['setTelemetry', 'first', true]);
+    await adapter.setMasterBypass(true);
+    assert.deepEqual(requests.at(-1), ['setBypass', 'first', true]);
+  }
+});
+
+test('automatic session fallback clears Undo history and seeds it from the new pipeline', () => {
+  const client = { sessionId: 'first', request() {} };
+  const adapter = new ExtensionAudioManager(client, error => assert.fail(error));
+  const editor = editorForAdapter(adapter);
+  editor.updateTelemetrySubscription = () => Promise.resolve();
+  adapter.pipelineA = [editorPlugin(1, -1)];
+  editor.snapshot = {
+    revision: 1,
+    sessions: [{ sessionId: 'first', status: 'processing', plugins: editor.serializeVisiblePipeline() }]
+  };
+  const history = editor.pipelineManager.historyManager;
+  history.history = ['old session state'];
+  history.historyIndex = 0;
+  history.endOperation = () => {};
+  history.saveState = () => {
+    history.history.push(editor.serializeVisiblePipeline());
+    history.historyIndex = history.history.length - 1;
+  };
+
+  editor.restoreSnapshot({
+    revision: 2,
+    sessions: [{ sessionId: 'second', status: 'processing', sampleRate: 48000, masterBypass: false,
+      plugins: [{ id: 2, nm: 'Volume', en: true, vl: -2 }] }]
+  });
+
+  assert.equal(client.sessionId, 'second');
+  assert.deepEqual(adapter.pipelineA.map(plugin => [plugin.id, plugin.vl]), [[2, -2]]);
+  assert.deepEqual(history.history, [[{ nm: 'Volume', en: true, vl: -2, id: 2 }]]);
+  assert.equal(history.historyIndex, 0);
+});
 
 test('same-topology snapshots still synchronize sample rate and master bypass', () => {
   const adapter = new ExtensionAudioManager({ request() {} }, error => assert.fail(error));

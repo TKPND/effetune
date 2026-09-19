@@ -415,7 +415,8 @@ class NoteSpectrogramPlugin extends PluginBase {
             trace,
             whiteKey: light ? 255 : 221,
             whiteBand: background,
-            blackBand: light ? soft : background.map(channel => channel + MULTI_F0_BLACK_KEY_BACKGROUND)
+            blackBand: light ? soft : background.map(channel => channel + MULTI_F0_BLACK_KEY_BACKGROUND),
+            volumeCompositeOperation: light ? 'darken' : 'lighter'
         };
     }
 
@@ -939,7 +940,7 @@ class NoteSpectrogramPlugin extends PluginBase {
             context.fillRect(0, row * rowHeight, MULTI_F0_HISTORY_WIDTH, rowHeight);
         }
         this._paintVolumeGrid(context, 0, MULTI_F0_HISTORY_WIDTH, rowHeight);
-        context.globalCompositeOperation = 'lighter';
+        context.globalCompositeOperation = palette.volumeCompositeOperation;
         for (let column = 0; column < MULTI_F0_HISTORY_WIDTH; column++) {
             const historyOffset = column * MULTI_F0_PITCH_COUNT;
             for (const bar of this._volumeBarsForColumn(historyOffset)) {
@@ -976,7 +977,7 @@ class NoteSpectrogramPlugin extends PluginBase {
                 context.fillRect(column, rowTop, 1, rowHeight);
             }
             this._paintVolumeGrid(context, column, 1, rowHeight);
-            context.globalCompositeOperation = 'lighter';
+            context.globalCompositeOperation = palette.volumeCompositeOperation;
             for (const bar of this._volumeBarsForColumn(historyOffset)) {
                 this._paintVolumeBar(context, column, historyOffset, bar, rowHeight, palette);
             }

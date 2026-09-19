@@ -1363,6 +1363,7 @@ test('serialized missing IR clears the asset without changing dry controls and s
     assert.equal(plugin.externalAssetInfo.missing, true);
     assert.equal(queueCount, 1);
     assert.equal(plugin._statusMessage, 'IR not found: IR cccccccc');
+    assert.equal(plugin._statusState, 'warning');
 
     const file = { name: 'Relinked.wav', async arrayBuffer() { return new ArrayBuffer(1); } };
     assert.equal(await withTimeout(plugin.importFile(file), 'exact IR relink did not settle'), true);

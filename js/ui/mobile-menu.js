@@ -46,6 +46,7 @@ export class MobileMenu {
             this.panel = document.createElement('div');
             this.panel.className = 'mobile-overflow-menu';
             this.panel.setAttribute('role', 'menu');
+            this.panel.inert = true;
             // PowerStateView owns this label because it changes between the
             // processing and input-only recovery actions.
             const resumeAudio = this.createAction(
@@ -152,13 +153,17 @@ export class MobileMenu {
 
     open() {
         this.ensureElements();
+        this.panel.inert = false;
         this.panel.classList.add('mobile-open');
         this.backdrop.classList.add('mobile-open');
     }
 
     close() {
+        const restoreFocus = this.panel?.contains?.(document.activeElement);
         this.panel?.classList.remove('mobile-open');
+        if (this.panel) this.panel.inert = true;
         this.backdrop?.classList.remove('mobile-open');
+        if (restoreFocus) this.button?.focus?.();
     }
 
     removeElements() {

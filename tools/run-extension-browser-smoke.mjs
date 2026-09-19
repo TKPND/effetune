@@ -66,7 +66,7 @@ async function validateDistribution() {
   const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.minimum_chrome_version, '116');
-  assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'offscreen', 'storage', 'tabCapture']);
+  assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'offscreen', 'storage', 'tabCapture', 'tabs']);
   assert.equal(manifest.host_permissions, undefined);
   assert.equal(manifest.content_scripts, undefined);
   assert.equal(
@@ -83,6 +83,8 @@ async function validateDistribution() {
   assert.equal(icon128.readUInt32BE(20), 128);
   await Promise.all([
     fs.access(path.join(extensionPath, 'extension', 'offscreen.html')),
+    fs.access(path.join(extensionPath, 'extension', 'session.html')),
+    fs.access(path.join(extensionPath, 'extension', 'session.js')),
     fs.access(path.join(extensionPath, 'extension', 'popup.html')),
     fs.access(path.join(extensionPath, 'extension', 'editor.html')),
     fs.access(path.join(extensionPath, 'plugins', 'audio-processor.js')),
@@ -94,6 +96,11 @@ async function validateDistribution() {
 
 async function extensionRequest(page, command, args = {}) {
   return page.evaluate(async ({ commandValue, argsValue }) => {
+    if (['stop', 'setBypass', 'applyPreset'].includes(commandValue) &&
+        !Object.hasOwn(argsValue, 'sessionId')) {
+      const state = await chrome.runtime.sendMessage({ destination: 'worker', command: 'getState', args: {} });
+      argsValue.sessionId = state.result.sessions.find(session => session.status === 'processing')?.sessionId ?? null;
+    }
     const response = await chrome.runtime.sendMessage({
       destination: 'worker',
       command: commandValue,
@@ -110,6 +117,10 @@ async function modelRequest(page, command, args = {}) {
     const client = new ExtensionClient();
     try {
       await client.connect();
+      if (['setPipeline', 'savePreset', 'importPreset', 'workletMessage', 'setTelemetry'].includes(commandValue) &&
+          !Object.hasOwn(argsValue, 'sessionId')) {
+        argsValue.sessionId = client.snapshot.sessions.find(session => session.status === 'processing')?.sessionId ?? null;
+      }
       return await client.request(commandValue, argsValue);
     } finally {
       client.close();
@@ -122,9 +133,12 @@ async function waitForState(page, predicate, description, timeoutMs = transition
   let state = null;
   do {
     state = await extensionRequest(page, 'getState');
-    if ((!predicate.status || state.status === predicate.status) &&
-        (!predicate.powerState || state.powerState === predicate.powerState) &&
-        (!predicate.tabId || state.target?.tabId === predicate.tabId)) return state;
+    const session = predicate.tabId
+      ? state.sessions.find(item => item.tabId === predicate.tabId) : state.sessions[0];
+    if ((!predicate.status || session?.status === predicate.status ||
+          (predicate.status === 'stopped' && !session)) &&
+        (!predicate.powerState || session?.powerState === predicate.powerState) &&
+        (!Object.hasOwn(predicate, 'presetName') || session?.presetName === predicate.presetName)) return state;
     await new Promise(resolve => setTimeout(resolve, 100));
   } while (Date.now() < deadline);
   throw new Error(`${description} Last state: ${JSON.stringify(state)}`);
@@ -198,7 +212,7 @@ async function assertCaptureReleased(page, offscreenRuntime, sourcePage, expecte
     { status: expectedStatus },
     `The failed start did not settle in ${expectedStatus} state.`
   );
-  assert.equal(state.target, null);
+  assert.ok(state.sessions.every(session => session.status === expectedStatus));
   assert.equal(JSON.stringify(state.plugins), pipelineFingerprint);
   assert.equal((await page.evaluate(() => chrome.tabCapture.getCapturedTabs()))
     .some(item => item.status === 'active' || item.status === 'pending'), false);
@@ -341,7 +355,17 @@ async function createAttachedRuntime(connection, target, sessionId) {
     logs,
     exceptions,
     consoleErrors,
+    async addInitializationScript(source) {
+      await connection.send('Page.enable', {}, sessionId);
+      return (await connection.send('Page.addScriptToEvaluateOnNewDocument', { source }, sessionId)).identifier;
+    },
+    async removeInitializationScript(identifier) {
+      await connection.send('Page.removeScriptToEvaluateOnNewDocument', { identifier }, sessionId);
+    },
     async evaluate(expression) {
+      if (target.url.endsWith('/extension/offscreen.html')) {
+        expression = `(() => { const window = document.querySelector('iframe')?.contentWindow || {}; return (${expression}); })()`;
+      }
       const response = await connection.send('Runtime.evaluate', {
         expression,
         awaitPromise: true,
@@ -369,6 +393,31 @@ async function attachExistingRuntime(connection, target) {
   return createAttachedRuntime(connection, target, sessionId);
 }
 
+async function grantTabCapture(cdp, browserCdp, extensionId, page) {
+  await page.bringToFront();
+  const { targetInfos: beforeTargets } = await cdp.send('Target.getTargets', { filter: [{}] });
+  const sourceTarget = beforeTargets.find(target => target.type === 'tab' && target.url === page.url());
+  assert.ok(sourceTarget, `The fixture source target was not found for ${page.url()}.`);
+  const beforeIds = new Set(beforeTargets.map(target => target.targetId));
+  let actionSettled = false;
+  const action = browserCdp.send('Extensions.triggerAction', {
+    id: extensionId, targetId: sourceTarget.targetId
+  }).finally(() => { actionSettled = true; });
+  action.catch(() => {});
+  while (true) {
+    if (actionSettled) break;
+    const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{}] });
+    const popupTarget = targetInfos.find(target => !beforeIds.has(target.targetId) &&
+      target.type === 'other' && target.url === `chrome-extension://${extensionId}/extension/popup.html`);
+    if (popupTarget) {
+      await cdp.send('Target.closeTarget', { targetId: popupTarget.targetId });
+      break;
+    }
+    await Promise.race([action.catch(() => {}), new Promise(resolve => setTimeout(resolve, 50))]);
+  }
+  await action;
+}
+
 function collectPageErrors(context, externalRequests) {
   const errors = [];
   const attach = page => {
@@ -391,12 +440,6 @@ function collectPageErrors(context, externalRequests) {
   context.pages().forEach(attach);
   context.on('page', attach);
   return errors;
-}
-
-function consumeExpectedPageError(errors, expected) {
-  const matches = errors.flatMap((value, index) => value === expected ? [index] : []);
-  assert.equal(matches.length, 1, `Expected one matching fault diagnostic: ${expected}`);
-  errors.splice(matches[0], 1);
 }
 
 export async function waitAndConsumeExpectedRuntimeConsoleError(
@@ -533,37 +576,8 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
         attachExistingRuntime(browserCdp, offscreenTarget)
       ]);
     });
-    await sourcePage.bringToFront();
-    await runNamedPhase('activeTab permission grant', 30_000, async () => {
-      const { targetInfos: beforeTargets } = await cdp.send('Target.getTargets', { filter: [{}] });
-      const sourceTarget = beforeTargets.find(target =>
-        target.type === 'tab' && target.url === sourcePage.url()
-      );
-      assert.ok(sourceTarget, `The fixture source target was not found for ${sourcePage.url()}.`);
-      const beforeIds = new Set(beforeTargets.map(target => target.targetId));
-      let actionSettled = false;
-      const action = browserCdp.send('Extensions.triggerAction', {
-        id: extensionId,
-        targetId: sourceTarget.targetId
-      }).finally(() => { actionSettled = true; });
-      action.catch(() => {});
-      const popupUrl = `chrome-extension://${extensionId}/extension/popup.html`;
-      while (true) {
-        if (actionSettled) break;
-        const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{}] });
-        const popupTarget = targetInfos.find(target => !beforeIds.has(target.targetId) &&
-          target.type === 'other' && target.url === popupUrl);
-        if (popupTarget) {
-          await cdp.send('Target.closeTarget', { targetId: popupTarget.targetId });
-          break;
-        }
-        await Promise.race([
-          action.catch(() => {}),
-          new Promise(resolve => setTimeout(resolve, 50))
-        ]);
-      }
-      await action;
-    });
+    await runNamedPhase('activeTab permission grant', 30_000,
+      () => grantTabCapture(cdp, browserCdp, extensionId, sourcePage));
     const sourceTabs = await controlPage.evaluate(async () => {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       return tabs.map(tab => ({ id: tab.id, url: tab.url }));
@@ -613,37 +627,31 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     });
 
     await runNamedPhase('injected WASM startup failure cleanup', 60_000, async () => {
-      assert.equal(await offscreenRuntime.evaluate(`(() => {
-      globalThis.__extensionSmokeOriginalFetch = globalThis.fetch;
-      globalThis.__extensionSmokeWasmFailures = 0;
+      await offscreenRuntime.evaluate('globalThis.__extensionSmokeWasmFailures = 0');
+      const injection = await offscreenRuntime.addInitializationScript(`
+      if (location.pathname === '/extension/session.html') {
+      const originalFetch = globalThis.fetch;
       globalThis.fetch = (...args) => {
         const url = String(args[0]?.url || args[0] || '');
         const resourceUrl = url.split('#', 1)[0].split('?', 1)[0];
         if (resourceUrl.includes('/plugins/dsp/effetune-dsp') && resourceUrl.endsWith('.wasm')) {
-          globalThis.__extensionSmokeWasmFailures += 1;
+          parent.__extensionSmokeWasmFailures += 1;
           return Promise.reject(new TypeError('Injected WASM fetch failure'));
         }
-        return globalThis.__extensionSmokeOriginalFetch(...args);
+        return originalFetch(...args);
       };
-      return globalThis.fetch !== globalThis.__extensionSmokeOriginalFetch;
-      })()`), true);
+      }`);
       try {
         const wasmFailure = await extensionRequest(controlPage, 'start', { tabId: sourceTabId });
-        assert.equal(wasmFailure.status, 'error');
-        assert.match(wasmFailure.error, /website is playing normally/i);
+        assert.equal(wasmFailure.sessions[0].status, 'error');
+        assert.match(wasmFailure.sessions[0].error, /website is playing normally/i);
         await assertCaptureReleased(
           controlPage, offscreenRuntime, sourcePage, 'error', initialPipelineFingerprint
         );
-        consumeExpectedPageError(
-          errors,
-          `${controlPage.url()}: [EffeTune extension] Tab audio could not be processed. ` +
-            'The website is playing normally. Start EffeTune again to retry.'
-        );
       } finally {
+        await offscreenRuntime.removeInitializationScript(injection);
         assert.ok(await offscreenRuntime.evaluate(`(() => {
-          globalThis.fetch = globalThis.__extensionSmokeOriginalFetch;
           const failures = globalThis.__extensionSmokeWasmFailures;
-          delete globalThis.__extensionSmokeOriginalFetch;
           delete globalThis.__extensionSmokeWasmFailures;
           return failures;
         })()`) >= 1);
@@ -658,34 +666,27 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     });
 
     await runNamedPhase('injected AudioWorklet startup failure cleanup', 60_000, async () => {
-      assert.equal(await offscreenRuntime.evaluate(`(() => {
-      globalThis.__extensionSmokeOriginalAudioWorkletNode = globalThis.AudioWorkletNode;
-      globalThis.__extensionSmokeWorkletFailures = 0;
+      await offscreenRuntime.evaluate('globalThis.__extensionSmokeWorkletFailures = 0');
+      const injection = await offscreenRuntime.addInitializationScript(`
+      if (location.pathname === '/extension/session.html') {
       globalThis.AudioWorkletNode = new Proxy(globalThis.AudioWorkletNode, {
         construct() {
-          globalThis.__extensionSmokeWorkletFailures += 1;
+          parent.__extensionSmokeWorkletFailures += 1;
           throw new DOMException('Injected AudioWorkletNode failure', 'NotSupportedError');
         }
       });
-      return globalThis.AudioWorkletNode !== globalThis.__extensionSmokeOriginalAudioWorkletNode;
-      })()`), true);
+      }`);
       try {
         const workletFailure = await extensionRequest(controlPage, 'start', { tabId: sourceTabId });
-        assert.equal(workletFailure.status, 'error');
-        assert.match(workletFailure.error, /website is playing normally/i);
+        assert.equal(workletFailure.sessions[0].status, 'error');
+        assert.match(workletFailure.sessions[0].error, /website is playing normally/i);
         await assertCaptureReleased(
           controlPage, offscreenRuntime, sourcePage, 'error', initialPipelineFingerprint
         );
-        consumeExpectedPageError(
-          errors,
-          `${controlPage.url()}: [EffeTune extension] Tab audio could not be processed. ` +
-            'The website is playing normally. Start EffeTune again to retry.'
-        );
       } finally {
+        await offscreenRuntime.removeInitializationScript(injection);
         assert.ok(await offscreenRuntime.evaluate(`(() => {
-          globalThis.AudioWorkletNode = globalThis.__extensionSmokeOriginalAudioWorkletNode;
           const failures = globalThis.__extensionSmokeWorkletFailures;
-          delete globalThis.__extensionSmokeOriginalAudioWorkletNode;
           delete globalThis.__extensionSmokeWorkletFailures;
           return failures;
         })()`) >= 1);
@@ -729,14 +730,16 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     const processing = await waitForState(controlPage, {
       status: 'processing', tabId: sourceTabId
     }, 'The extension did not enter processing state.');
-    assert.equal(processing.target.title, 'EffeTune browser extension audio smoke');
-    assert.equal(processing.sampleRate, 48000);
+    assert.equal(processing.sessions[0].title, 'EffeTune browser extension audio smoke');
+    assert.equal(processing.sampleRate, null);
+    assert.equal(processing.sessions[0].sampleRate,
+      await offscreenRuntime.evaluate('window.audioManager.audioContext.sampleRate'));
 
     const captured = await controlPage.evaluate(() => chrome.tabCapture.getCapturedTabs());
     assert.ok(captured.some(item => item.tabId === sourceTabId && item.status === 'active'));
     const contexts = await controlPage.evaluate(() => chrome.runtime.getContexts({
       contextTypes: ['OFFSCREEN_DOCUMENT']
-    }));
+    })).then(items => items.filter(item => item.documentUrl.endsWith('/extension/offscreen.html')));
     assert.equal(contexts.length, 1);
     assert.ok(contexts[0].documentUrl.endsWith('/extension/offscreen.html'));
     process.stdout.write('Extension capture and WASM startup passed.\n');
@@ -783,7 +786,7 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
         plugins: current.map(plugin => plugin.nm === 'Section' ? { ...plugin, en: enabled } : plugin)
       });
       const sectionState = await extensionRequest(editor, 'getState');
-      assert.equal(sectionState.status, 'processing');
+      assert.equal(sectionState.sessions[0].status, 'processing');
       assert.equal(sectionState.plugins.find(plugin => plugin.nm === 'Section')?.en, enabled);
       assert.equal((await editor.evaluate(() => chrome.tabCapture.getCapturedTabs()))
         .find(item => item.tabId === sourceTabId)?.status, 'active');
@@ -799,7 +802,8 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     assert.ok(Object.hasOwn(editorSnapshot.presets, 'Browser smoke'));
     process.stdout.write('Representative DSP pipeline and telemetry passed.\n');
     await extensionRequest(editor, 'setBypass', { enabled: true });
-    assert.equal((await extensionRequest(editor, 'getState')).masterBypass, true);
+    assert.equal((await extensionRequest(editor, 'getState')).sessions[0].masterBypass, true);
+    assert.equal((await extensionRequest(editor, 'getState')).masterBypass, false);
     assert.equal((await editor.evaluate(() => chrome.tabCapture.getCapturedTabs()))
       .find(item => item.tabId === sourceTabId)?.status, 'active');
     await extensionRequest(editor, 'setBypass', { enabled: false });
@@ -826,17 +830,20 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
       ] }),
       error => matchesExactEvaluationError(
         error,
-        'These settings could not be applied. Check the effects, channels and impulse response files. Your previous pipeline has been kept.'
+        'These settings could not be applied. Check the effects, channels and impulse response files, then try again.'
       )
     );
     await waitAndConsumeExpectedRuntimeConsoleError(
       offscreenRuntime,
       exactConsoleDiagnostic(
-        'Editor update failed: Error: This preset uses audio buses. ' +
+        'Session action failed: Error: This preset uses audio buses. ' +
           'The extension supports one serial stereo pipeline.'
       ),
       'invalid topology rejection'
     );
+    await waitAndConsumeExpectedRuntimeConsoleError(offscreenRuntime,
+      exactConsoleDiagnostic('Editor update failed: Error: The preset could not be applied. Check its effects, channels and impulse response files.'),
+      'invalid topology response');
     assert.equal(JSON.stringify((await extensionRequest(editor, 'getState')).plugins),
       assetPipelineFingerprint);
     process.stdout.write('Generated assets and preset rejection passed.\n');
@@ -869,17 +876,20 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
       ] }),
       error => matchesExactEvaluationError(
         error,
-        'These settings could not be applied. Check the effects, channels and impulse response files. Your previous pipeline has been kept.'
+        'These settings could not be applied. Check the effects, channels and impulse response files, then try again.'
       )
     );
     await waitAndConsumeExpectedRuntimeConsoleError(
       offscreenRuntime,
       exactConsoleDiagnostic(
-        'Editor update failed: Error: An impulse response is missing. ' +
+        'Session action failed: Error: An impulse response is missing. ' +
           'Import its file in IR Reverb, then load this preset again.'
       ),
       'missing impulse response rejection'
     );
+    await waitAndConsumeExpectedRuntimeConsoleError(offscreenRuntime,
+      exactConsoleDiagnostic('Editor update failed: Error: The preset could not be applied. Check its effects, channels and impulse response files.'),
+      'missing impulse response response');
     assert.equal(JSON.stringify((await extensionRequest(editor, 'getState')).plugins),
       irPipelineFingerprint);
 
@@ -890,15 +900,59 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
       const tabs = await chrome.tabs.query({});
       return tabs.find(tab => tab.url === url)?.id;
     }, secondPage.url());
-    const duplicateStart = await extensionRequest(editor, 'start', { tabId: secondTabId });
-    assert.equal(duplicateStart.target.tabId, sourceTabId);
+    await grantTabCapture(cdp, browserCdp, extensionId, secondPage);
+    const twoSessions = await extensionRequest(editor, 'start', { tabId: secondTabId });
+    assert.equal(twoSessions.sessions.filter(session => session.status === 'processing').length, 2);
     assert.equal((await editor.evaluate(() => chrome.tabCapture.getCapturedTabs()))
-      .filter(item => item.status === 'active').length, 1);
+      .filter(item => item.status === 'active').length, 2);
+    const secondSession = twoSessions.sessions.find(session => session.tabId === secondTabId);
+    const duplicateStart = await extensionRequest(editor, 'start', { tabId: secondTabId });
+    assert.equal(duplicateStart.sessions.find(session => session.tabId === secondTabId).sessionId,
+      secondSession.sessionId);
+    await extensionRequest(editor, 'stop', { sessionId: secondSession.sessionId });
+    const firstAfterStop = await waitForState(editor, { tabId: sourceTabId, status: 'processing' },
+      'Stopping the second tab interrupted the first tab.');
+    assert.equal(firstAfterStop.sessions.find(session => session.tabId === sourceTabId).plugins[0].ir, latestIrId);
     await secondPage.close();
+
+    await offscreenRuntime.evaluate(`globalThis.__extensionSmokeTrack = window.audioManager.stream.getAudioTracks()[0]`);
+    const changedRate = await modelRequest(editor, 'setSampleRate', { sampleRate: 44100 });
+    assert.equal(changedRate.sessions.find(session => session.tabId === sourceTabId).sampleRate, 44100);
+    assert.equal(await offscreenRuntime.evaluate(`globalThis.__extensionSmokeTrack === window.audioManager.stream.getAudioTracks()[0] && globalThis.__extensionSmokeTrack.readyState === 'live'`), true);
+    await modelRequest(editor, 'setSampleRate', { sampleRate: null });
+    await offscreenRuntime.evaluate('delete globalThis.__extensionSmokeTrack');
 
     await modelRequest(editor, 'setPipeline', { plugins: [
       { nm: 'Volume', en: true, vl: -3, ib: 0, ob: 0, ch: 'A' }
     ] });
+    await runNamedPhase('URL navigation preset selection', 60_000, async () => {
+      const originalUrl = sourcePage.url();
+      const matchedUrl = new URL('/extension-rule-smoke/music', originalUrl).href;
+      const defaultPipeline = (await extensionRequest(editor, 'getState')).plugins;
+      await modelRequest(editor, 'setRules', { rules: [{
+        pattern: `${new URL(originalUrl).host}/extension-rule-smoke/*`,
+        preset: 'Browser smoke', enabled: true
+      }] });
+      await offscreenRuntime.evaluate('globalThis.__extensionSmokeNavigationTrack = window.audioManager.stream.getAudioTracks()[0]');
+      for (const [url, presetName, expectedNames] of [
+        [matchedUrl, 'Browser smoke', representativePipeline.map(plugin => plugin.nm)],
+        [originalUrl, null, defaultPipeline.map(plugin => plugin.nm)]
+      ]) {
+        // A same-document navigation exercises tabs.onUpdated without replacing
+        // the source's audio elements or requesting a new capture permission.
+        await sourcePage.evaluate(nextUrl => history.pushState(null, '', nextUrl), url);
+        const state = await waitForState(editor, { tabId: sourceTabId, status: 'processing', presetName },
+          'Navigation did not select the expected URL preset.');
+        const session = state.sessions.find(item => item.tabId === sourceTabId);
+        assert.deepEqual(session.plugins.map(plugin => plugin.nm), expectedNames);
+        if (presetName === null) assert.deepEqual(session.plugins, defaultPipeline);
+        assert.equal((await editor.evaluate(() => chrome.tabCapture.getCapturedTabs()))
+          .find(item => item.tabId === sourceTabId)?.status, 'active');
+        assert.equal(await offscreenRuntime.evaluate('globalThis.__extensionSmokeNavigationTrack === window.audioManager.stream.getAudioTracks()[0] && globalThis.__extensionSmokeNavigationTrack.readyState === "live"'), true);
+      }
+      await modelRequest(editor, 'setRules', { rules: [] });
+      await offscreenRuntime.evaluate('delete globalThis.__extensionSmokeNavigationTrack');
+    });
     await editor.close();
     await extensionRequest(controlPage, 'applyPreset', { name: 'Browser smoke' });
     assert.deepEqual((await extensionRequest(controlPage, 'getState')).plugins.map(plugin => plugin.nm),
@@ -929,7 +983,7 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     assert.equal(recoveredState.plugins[0].ir, latestIrId);
     assert.equal((await recovered.evaluate(() => chrome.runtime.getContexts({
       contextTypes: ['OFFSCREEN_DOCUMENT']
-    }))).length, 1);
+    }))).filter(item => item.documentUrl.endsWith('/extension/offscreen.html')).length, 1);
     const recoveredWorkerTarget = await findTarget(
       cdp,
       target => target.type === 'service_worker' &&
@@ -1088,7 +1142,7 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     await extensionRequest(recovered, 'stop');
     const stopped = await waitForState(recovered, { status: 'stopped' },
       'The extension did not stop.');
-    assert.equal(stopped.target, null);
+    assert.equal(stopped.sessions[0].status, 'stopped');
     assert.equal((await recovered.evaluate(() => chrome.tabCapture.getCapturedTabs()))
       .some(item => item.status === 'active' || item.status === 'pending'), false);
     assert.equal((await sourcePage.evaluate(() => window.__browserExtensionAudio.snapshot())).state, 'running');
@@ -1104,7 +1158,7 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     await recovered.close();
     await controlPage.close().catch(() => {});
     assert.deepEqual([...new Set(externalRequests)], []);
-    assert.deepEqual(errors, []);
+    assert.deepEqual(errors, [], `Page errors: ${JSON.stringify(errors)}; Offscreen errors: ${JSON.stringify(offscreenRuntime.consoleErrors)}`);
     assert.deepEqual(offscreenRuntime.exceptions, []);
     assert.deepEqual(offscreenRuntime.consoleErrors, []);
     assert.deepEqual(workerRuntime.exceptions, []);

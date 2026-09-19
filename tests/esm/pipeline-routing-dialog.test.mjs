@@ -151,6 +151,7 @@ function createPlugin(overrides = {}) {
 async function withRoutingGlobals(calls, options, callback) {
   const documentRef = options.document ?? createDocument(calls, options);
   const timeoutCallbacks = [];
+  const clearedTimeouts = [];
   await withGlobals({
     document: documentRef,
     window: options.window ?? createWindow(calls, options),
@@ -158,8 +159,12 @@ async function withRoutingGlobals(calls, options, callback) {
       calls.push(['setTimeout', delay]);
       timeoutCallbacks.push(fn);
       return timeoutCallbacks.length;
+    },
+    clearTimeout(id) {
+      calls.push(['clearTimeout', id]);
+      clearedTimeouts.push(id);
     }
-  }, async () => callback({ documentRef, timeoutCallbacks }));
+  }, async () => callback({ documentRef, timeoutCallbacks, clearedTimeouts }));
 }
 
 test('dialog header translates labels, closes existing dialogs, and has fallback text', async () => {
@@ -332,6 +337,34 @@ test('showRoutingDialog replaces existing dialogs and delayed outside clicks clo
     clickListener({ target: outside, composedPath: () => [outside] });
     assert.equal(dialog.removed, true);
     assert.equal(documentRef.listeners.has('click'), false);
+  });
+});
+
+test('reopening routing dialogs clears pending and registered outside-click handlers', async () => {
+  const calls = [];
+  const documentRef = createDocument(calls, { measureWidth: 100 });
+  const button = new FakeElement('button', documentRef, calls);
+  const plugin = createPlugin();
+  const handler = new PipelineRoutingDialog(createPipelineCore(calls));
+
+  await withRoutingGlobals(calls, { document: documentRef }, async ({ timeoutCallbacks, clearedTimeouts }) => {
+    handler.showRoutingDialog(plugin, button);
+    const firstDialog = documentRef.body.children.find(child => child.className === 'routing-dialog');
+    documentRef.routingDialog = firstDialog;
+
+    handler.showRoutingDialog(plugin, button);
+    const secondDialog = documentRef.body.children.find(child => child.className === 'routing-dialog');
+    documentRef.routingDialog = secondDialog;
+    assert.equal(firstDialog.removed, true);
+    assert.deepEqual(clearedTimeouts, [1]);
+
+    timeoutCallbacks[1]();
+    assert.equal(documentRef.listeners.has('click'), true);
+
+    handler.showRoutingDialog(plugin, button);
+    assert.equal(secondDialog.removed, true);
+    assert.equal(documentRef.listeners.has('click'), false);
+    assert.equal(calls.filter(call => call[0] === 'documentRemoveEventListener').length, 1);
   });
 });
 

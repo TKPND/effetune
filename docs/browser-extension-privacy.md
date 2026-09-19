@@ -16,7 +16,7 @@ This policy applies to the EffeTune browser extension for Google Chrome and Micr
 
 ## Summary
 
-- EffeTune processes audio from a tab only after you choose **Start processing**.
+- EffeTune processes audio from a tab only after you choose **Start on this tab**, for up to four tabs at once.
 - Captured tab audio is processed on your device in real time. EffeTune does not record it, store it, or send it to the EffeTune operator.
 - Your effect settings, presets, imported measurements, and impulse responses are stored in the extension's local browser storage. They are not automatically synchronized with the EffeTune web app, desktop app, or another device.
 - EffeTune does not include operator-run advertising or analytics and does not sell your data.
@@ -26,21 +26,21 @@ This policy applies to the EffeTune browser extension for Google Chrome and Micr
 
 ### Selected tab audio
 
-When you choose **Start processing**, EffeTune captures the audio stream of the selected tab and applies your effect pipeline on your device. The audio is used only while the processing session is active. It is not recorded or saved by the extension and is not sent to the EffeTune operator or to another service.
+When you choose **Start on this tab**, EffeTune captures the audio stream of the selected tab and applies your effect pipeline on your device. The audio is used only while the processing session is active. It is not recorded or saved by the extension and is not sent to the EffeTune operator or to another service.
 
-The audio in a tab can contain personal or sensitive material. Start processing only on a tab whose audio you intend to process, and choose **Stop processing** when you are finished.
+The audio in a tab can contain personal or sensitive material. Start processing only on a tab whose audio you intend to process, and choose **Stop** beside that tab when you are finished.
 
 ### Selected tab information
 
-To start and display the session, the extension temporarily accesses the selected tab's browser identifier, title, and URL. The URL is checked only to confirm that the selected tab is a regular `http` or `https` website. The title is shown in the extension so you can identify the tab being processed.
+To start and display a session, the extension temporarily accesses the selected tab's browser identifier, title, and URL. It checks that the tab is a regular `http` or `https` website and uses its URL to choose a saved preset from your URL rules. While the session is active, URL changes can select a different preset. The title is shown so you can identify the tab being processed. The extension does not read page content or insert scripts into websites.
 
-EffeTune does not create a browsing-history record. This tab information is not added to your saved presets or settings and is discarded when the processing session ends.
+EffeTune does not create a browsing-history record. This tab information is not added to your saved presets or settings. Stopped sessions can remain visible until the tab closes, a new session starts for that tab, or the extension's audio host closes.
 
 ### Settings, presets, measurements, and impulse responses
 
 The extension stores the following information locally in the browser profile:
 
-- effect-pipeline settings, effect parameters, interface preferences, and the master bypass setting;
+- effect-pipeline settings, effect parameters, interface preferences, URL rules, and the sample rate setting;
 - complete pipeline presets and effect presets that you save or import;
 - measurement files that you choose to import, including any measurement names, response data, and included impulse-response data; and
 - impulse-response files that you choose to import, including the file information and audio data needed by compatible effects.
@@ -61,6 +61,7 @@ EffeTune requests only these extension permissions:
 
 - **tabCapture** — captures audio from the tab where you explicitly start processing.
 - **activeTab** — identifies the tab from which you invoked EffeTune. It does not grant permanent access to every website.
+- **tabs** — reads the URL of tabs where you started processing so EffeTune can select saved presets at startup and after navigation.
 - **offscreen** — keeps the local Web Audio processing session running while the popup or editor is closed.
 - **storage** — saves your settings and presets in the extension's local browser storage.
 
@@ -78,8 +79,9 @@ EffeTune's use of information received through Chrome APIs follows the Chrome We
 
 ## Retention and deletion
 
-- Captured tab audio is not retained. Processing ends when you choose **Stop processing**, close the captured tab, end the capture session, or close the browser.
-- The selected tab information used for the active session is not retained after that session ends.
+- Captured tab audio is not retained. Processing ends when you choose **Stop**, close the captured tab, end the capture session, or close the browser.
+- Session tab information is held only in memory, including while a stopped session remains visible. Closing the tab or the extension's audio host removes it; it is never saved as browsing history.
+- Delete saved URL rules through **Settings** → **URL rules…**.
 - Settings and presets remain in the extension's local browser storage until you replace or delete them, clear the extension's storage, or remove the extension.
 - To delete a saved preset, open **Pipeline Presets**, select it, and choose **Delete Selected**.
 - To delete an imported measurement, select it in Room EQ's **Measurement** list and choose **Delete** beside the list. EffeTune clears assignments that use that measurement before deleting it.

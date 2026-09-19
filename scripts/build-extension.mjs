@@ -42,7 +42,7 @@ export async function buildExtension() {
     const definitions = await fs.readFile(path.join(root, 'plugins/plugins.txt'), 'utf8');
     const pluginPaths = [...definitions.matchAll(/^([^#\[\s][^:\n]+):[^\n]*\|/gm)].map(match => `plugins/${match[1]}`);
     const scripts = new Set([
-        'extension/service-worker.js', 'extension/offscreen.js', 'extension/editor.js', 'extension/popup.js',
+        'extension/service-worker.js', 'extension/offscreen.js', 'extension/session.js', 'extension/editor.js', 'extension/popup.js',
         'plugins/plugin-base.js', 'plugins/graph-point-interaction.js', 'plugins/frequency-axis.js',
         'plugins/spectrum-overlay.js', 'plugins/frequency-preview.js', 'plugins/theme-palette.js',
         'plugins/multires-spectrum.js',

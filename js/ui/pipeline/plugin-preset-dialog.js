@@ -1,4 +1,5 @@
 import { PluginPresetStore } from './plugin-preset-store.js';
+import { runExitMotion } from '../motion.js';
 
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -175,7 +176,7 @@ export class PluginPresetDialog {
     }
 
     async show(provider, anchorButton, { focusSaveName = false } = {}) {
-        this.close();
+        this.close({ immediate: true });
         this.activeProvider = provider;
         const generation = this.generation;
 
@@ -532,11 +533,15 @@ export class PluginPresetDialog {
         if (this.activeProvider?.isAttachedToPipeline?.() === false) this.close();
     }
 
-    close() {
+    close({ immediate = false } = {}) {
         this.generation += 1;
         this.renderRevision += 1;
         this.activeProvider = null;
-        document.querySelector('.preset-dialog')?.remove();
+        const dialog = document.querySelector('.preset-dialog');
+        if (dialog) {
+            if (immediate) dialog.remove();
+            else runExitMotion(dialog, () => dialog.remove());
+        }
         if (this.closeHandlerTimer !== null) {
             clearTimeout(this.closeHandlerTimer);
             this.closeHandlerTimer = null;

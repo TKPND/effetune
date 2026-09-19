@@ -3,6 +3,10 @@
  * Provides preset and file handling functionality when running in Electron
  */
 import { getAudioMimeType } from '../audio/audio-mime.js';
+import {
+  appendExternalAssetWarning,
+  collectUniquePipelinePlugins
+} from '../ui/pipeline/external-asset-info.js';
 
 export { getAudioMimeType };
 
@@ -245,7 +249,16 @@ export async function exportPreset(isElectron) {
 
     if (!saveResult.success) {
       console.error('Failed to save preset:', saveResult.error);
+      return;
     }
+
+    const plugins = collectUniquePipelinePlugins(window.uiManager.audioManager?.pipeline);
+    const message = appendExternalAssetWarning(
+      window.uiManager.t?.('success.presetSaved', { name: presetData.name || 'preset' }) ||
+        `Preset "${presetData.name || 'preset'}" saved!`,
+      plugins
+    );
+    window.uiManager.showTransientMessage?.(message, false, {}, 5000);
   } catch (error) {
     console.error('Error exporting preset:', error);
   }

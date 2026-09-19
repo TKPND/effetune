@@ -541,7 +541,7 @@
   "dialog.config.powerSaving.silenceThreshold": "मौन सीमा",
   "dialog.config.powerSaving.fullSuspendDelay": "इतने समय बाद ऑडियो इनपुट रोकें",
   "dialog.config.powerSaving.skipDisplayDspWhenHidden": "छिपे होने पर डिस्प्ले DSP छोड़ें",
-  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "जब Analyzer के ग्राफ़ दिखाई नहीं दे सकते, जैसे EffeTune के मिनिमाइज़ होने, मिनी प्लेयर में होने या बैकग्राउंड में चलने पर, उनका प्रोसेसिंग बायपास करता है।",
+  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "जब Analyzer के ग्राफ़ दिखाई नहीं दे सकते, जैसे Effect Pipeline न दिखने पर (संगीत लाइब्रेरी खुली होने या डबल ब्लाइंड टेस्ट के दौरान), या EffeTune के मिनिमाइज़ होने, मिनी प्लेयर में होने या बैकग्राउंड में चलने पर, उनका प्रोसेसिंग बायपास करता है।",
   "dialog.config.powerSaving.delay.1m": "1 मिनट",
   "dialog.config.powerSaving.delay.5m": "5 मिनट",
   "dialog.config.powerSaving.delay.15m": "15 मिनट",

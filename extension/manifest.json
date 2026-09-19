@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "EffeTune",
-  "description": "Shape the sound of one browser tab with EffeTune effects.",
+  "description": "Shape the sound of your browser tabs with EffeTune effects.",
   "version": "0.0.0",
   "minimum_chrome_version": "116",
-  "permissions": ["tabCapture", "activeTab", "offscreen", "storage"],
+  "permissions": ["tabCapture", "activeTab", "offscreen", "storage", "tabs"],
   "incognito": "not_allowed",
   "action": { "default_popup": "extension/popup.html", "default_title": "EffeTune" },
   "background": { "service_worker": "extension/service-worker.js", "type": "module" },

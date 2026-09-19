@@ -1,3 +1,5 @@
+import { runExitMotion } from '../motion.js';
+
 /**
  * PipelineAIDialog - Handles the AI question dialog for effectors
  * Manages the UI for asking AI about plugin functionality
@@ -10,6 +12,8 @@ export class PipelineAIDialog {
     constructor(pipelineCore) {
         this.pipelineCore = pipelineCore;
         this.pluginManager = pipelineCore.pluginManager;
+        this.closeHandlerTimer = null;
+        this.closeHandler = null;
     }
 
     /**
@@ -21,7 +25,7 @@ export class PipelineAIDialog {
         // Remove any existing dialog
         const existingDialog = document.querySelector('.ai-dialog');
         if (existingDialog) {
-            existingDialog.remove();
+            this.closeDialog(existingDialog, { immediate: true });
         }
         
         // Create dialog
@@ -77,7 +81,7 @@ export class PipelineAIDialog {
             : 'Close';
         closeBtn.onclick = () => {
             const dialog = document.querySelector('.ai-dialog');
-            if (dialog) dialog.remove();
+            if (dialog) this.closeDialog(dialog);
         };
         header.appendChild(closeBtn);
         
@@ -182,7 +186,7 @@ export class PipelineAIDialog {
             
             // Close the dialog
             const dialog = document.querySelector('.ai-dialog');
-            if (dialog) dialog.remove();
+            if (dialog) this.closeDialog(dialog);
             
         } catch (error) {
             console.error('Error asking AI:', error);
@@ -212,14 +216,28 @@ export class PipelineAIDialog {
      */
     setupCloseHandler(dialog) {
         // Prevent immediate closing by delaying the click handler
-        setTimeout(() => {
+        this.closeHandlerTimer = setTimeout(() => {
+            this.closeHandlerTimer = null;
             // Close dialog when clicking outside
-            document.addEventListener('click', function closeDialog(e) {
+            this.closeHandler = e => {
                 if (!dialog.contains(e.target)) {
-                    dialog.remove();
-                    document.removeEventListener('click', closeDialog);
+                    this.closeDialog(dialog);
                 }
-            });
+            };
+            document.addEventListener('click', this.closeHandler);
         }, 100);
+    }
+
+    closeDialog(dialog, { immediate = false } = {}) {
+        if (this.closeHandlerTimer !== null) {
+            clearTimeout(this.closeHandlerTimer);
+            this.closeHandlerTimer = null;
+        }
+        if (this.closeHandler) {
+            document.removeEventListener('click', this.closeHandler);
+            this.closeHandler = null;
+        }
+        if (immediate) dialog.remove();
+        else runExitMotion(dialog, () => dialog.remove());
     }
 }

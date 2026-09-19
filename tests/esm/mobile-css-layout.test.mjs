@@ -316,3 +316,80 @@ test('mobile player places the queue list below the primary play pause control',
   assert.match(playlistRule, /box-sizing:\s*border-box;/);
   assert.doesNotMatch(playlistRule, /margin-top:/);
 });
+
+test('mobile motion tokens honor reduced motion preferences', () => {
+  const css = readCss('../../effetune-mobile.css');
+
+  assert.match(
+    css,
+    /body\.layout-mobile\s*\{[^{}]*--et-motion-enter:\s*220ms;[^{}]*--et-motion-exit:\s*160ms;/,
+    'mobile layout should define the shared entrance and exit durations'
+  );
+  assert.match(
+    css,
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*body\.layout-mobile\s*\{[^{}]*--et-motion-enter:\s*0ms;[^{}]*--et-motion-exit:\s*0ms;[^{}]*\}\s*\}/,
+    'reduced motion should disable both mobile motion durations'
+  );
+});
+
+test('mobile overflow menu accepts input only while open', () => {
+  const css = readCss('../../effetune-mobile.css');
+
+  assert.match(
+    css,
+    /body\.layout-mobile \.mobile-overflow-menu\s*\{(?=[^{}]*pointer-events:\s*none;)[^{}]*\}/,
+    'closed and closing overflow menu should ignore pointer input'
+  );
+  assert.match(
+    css,
+    /body\.layout-mobile \.mobile-overflow-menu\.mobile-open\s*\{(?=[^{}]*pointer-events:\s*auto;)[^{}]*\}/,
+    'open overflow menu should accept pointer input'
+  );
+});
+
+test('mobile effect list uses directional entrance and exit transitions', () => {
+  const css = readCss('../../effetune-mobile.css');
+
+  assert.match(
+    css,
+    /body\.layout-mobile \.plugin-list\s*\{(?=[^{}]*visibility:\s*hidden;)(?=[^{}]*translate:\s*100% 0;)(?![^{}]*display:\s*none;)[^{}]*\}/,
+    'closed effect list should be parked off-screen without display: none'
+  );
+  assert.match(
+    css,
+    /body\.layout-mobile \.plugin-list\.mobile-open\s*\{(?=[^{}]*translate:\s*none;)(?=[^{}]*var\(--et-motion-enter\))[^{}]*\}/,
+    'opening the effect list should slide it into place with the entrance duration'
+  );
+  assert.match(
+    css,
+    /body\.layout-mobile \.plugin-list\.mobile-closing\s*\{(?=[^{}]*translate:\s*100% 0;)(?=[^{}]*var\(--et-motion-exit\))[^{}]*\}/,
+    'closing the effect list should slide it off-screen with the exit duration'
+  );
+});
+
+test('mobile dialogs use sheet entrance and exit animations', () => {
+  const css = readCss('../../effetune-mobile.css');
+
+  assert.match(css, /@keyframes\s+et-sheet-in\s*\{/);
+  assert.match(css, /@keyframes\s+et-sheet-out\s*\{/);
+  assert.match(
+    css,
+    /body\.layout-mobile \.routing-dialog\.mobile-closing,\s*body\.layout-mobile \.preset-dialog\.mobile-closing,\s*body\.layout-mobile \.ai-dialog\.mobile-closing\s*\{(?=[^{}]*animation:\s*et-sheet-out var\(--et-motion-exit\))(?=[^{}]*\bforwards\b)[^{}]*\}/,
+    'mobile dialog exit rule should cover AI and keep the sheet exit end state'
+  );
+});
+
+test('mobile overflow menu stays within the safe viewport and scrolls long menus', () => {
+  const css = readCss('../../effetune-mobile.css');
+  const menuRule = css.match(/body\.layout-mobile \.mobile-overflow-menu\s*\{([^{}]*)\}/)?.[1];
+
+  assert.ok(menuRule, 'mobile overflow menu should have a base rule');
+  assert.match(menuRule, /top:\s*calc\(8px \+ env\(safe-area-inset-top\)\);/);
+  assert.match(
+    menuRule,
+    /max-height:\s*calc\(100svh - 16px - env\(safe-area-inset-top\) - env\(safe-area-inset-bottom\)\);/,
+    'menu height should leave room for both outer gaps and safe area insets'
+  );
+  assert.match(menuRule, /box-sizing:\s*border-box;/, 'menu padding and borders must fit inside its height limit');
+  assert.match(menuRule, /overflow-y:\s*auto;/, 'items beyond the available height must remain reachable by scrolling');
+});

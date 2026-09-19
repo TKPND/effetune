@@ -7,6 +7,7 @@ export class CollapseManager {
         this.pullTab = document.getElementById('pluginListPullTab');
         this.mainContainer = document.querySelector('.main-container');
         this.isCollapsed = false;
+        this.readyForLayout = false;
         
         // Sidebar button functionality
         this.sidebarButton = document.getElementById('sidebarButton');
@@ -194,9 +195,9 @@ export class CollapseManager {
         if (this.isMobileLayout()) {
             return;
         }
-        // Only proceed if the app is fully initialized
-        if (!window.app || !window.app.initialized) {
-            return;
+        if (!this.readyForLayout) {
+            if (!window.app?.initialized) return;
+            this.readyForLayout = true;
         }
 
         const pipeline = document.getElementById('pipeline');
@@ -226,6 +227,12 @@ export class CollapseManager {
              }
         }
     }
+
+    markReady() {
+        if (this.readyForLayout) return;
+        this.readyForLayout = true;
+        this.checkWindowWidthAndAdjust();
+    }
     
     // Initialize after app is fully loaded
     initializeAfterAppLoaded() {
@@ -235,7 +242,7 @@ export class CollapseManager {
         
         // First, check if the app is already initialized
         if (window.app && window.app.initialized) {
-            this.checkWindowWidthAndAdjust();
+            this.markReady();
             return;
         }
         
@@ -247,7 +254,7 @@ export class CollapseManager {
             const checkAppInitialized = () => {
                 if (window.app && window.app.initialized) {
                     // App is initialized, perform the window width check
-                    this.checkWindowWidthAndAdjust();
+                    this.markReady();
                     return true;
                 }
                 return false;

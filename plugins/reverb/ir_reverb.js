@@ -1412,7 +1412,7 @@ class IRReverbPlugin extends PluginBase {
             this._setStatus(this._t('irReverb.error.notFound', 'IR not found: {name}', {
                 name: this.ir ? `IR ${this.ir.slice(0, 8)}` :
                     this._t('irReverb.name.impulseResponse', 'Impulse response')
-            }), 'error');
+            }), 'warning');
             return;
         }
         this._setStatus(this._t('irReverb.status.importPrompt',

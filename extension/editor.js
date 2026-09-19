@@ -4,14 +4,18 @@ import { hasPreparationStatus, mirrorPreparationStatus, refreshPreparationStatus
 import { initializePluginModel, serializePipeline } from './model.js';
 import { PipelineManager } from '../js/ui/pipeline-manager.js';
 import { PluginListManager } from '../js/ui/plugin-list-manager.js';
+import { LayoutModeManager } from '../js/ui/layout-mode-manager.js';
+import { MobileNumberKeypad } from '../js/ui/mobile-number-keypad.js';
 import { TelemetryHub } from '../js/audio/telemetry-hub.js';
 import { installRangeFillStyling } from '../js/ui/range-fill.js';
 import { applySerializedState, getSerializablePluginStateShort, convertShortToLongFormat } from '../js/utils/serialization-utils.js';
 import dataStorage, { MeasurementImportError } from '../features/measurement/dataStorage.js';
+import { ExtensionMobileShell } from './mobile-shell.js';
 
 const MAXIMUM_MEASUREMENT_IMPORT_BYTES = 128 * 1024 * 1024;
 const TRANSIENT_MESSAGE_DURATION_MS = 3000;
 const VIRTUAL_MEASUREMENT_CHANNEL_SEPARATOR = '::ch=';
+const SAMPLE_RATES = new Set([44100, 48000, 96000, 192000]);
 
 const STATUS_LABELS = Object.freeze({
   stopped: 'Not processing',
@@ -27,6 +31,27 @@ function stableStringify(value) {
     return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+function isLiveSession(session) {
+  return session?.status === 'starting' || session?.status === 'processing';
+}
+
+export function selectEditorSnapshot(snapshot, sessionId) {
+  if (!Array.isArray(snapshot?.sessions)) return snapshot;
+  const session = snapshot.sessions.find(candidate => candidate.sessionId === sessionId && isLiveSession(candidate));
+  if (session) return { ...snapshot, ...session, plugins: session.plugins || [] };
+  return {
+    ...snapshot,
+    status: 'stopped',
+    title: '',
+    error: null,
+    presetName: null,
+    preparationStatuses: [],
+    plugins: snapshot.plugins || [],
+    masterBypass: snapshot.masterBypass === true,
+    sampleRate: snapshot.sampleRate
+  };
 }
 
 function parseJson5Object(text) {
@@ -61,7 +86,7 @@ export function createUiManager(translations, showMessage, hideMessage) {
     translations,
     englishTranslations: translations,
     expandedPlugins: new Set(),
-    layoutMode: { isMobile: false },
+    layoutMode: new LayoutModeManager(),
     debugChannelCount: 2,
     t(key, params = {}) {
       return substitute(translations[key] || key, params);
@@ -161,11 +186,12 @@ export class ExtensionAudioManager {
   }
 
   request(command, args = {}) {
-    // File preparation reserves its place immediately; ordinary payloads are
-    // captured now so subsequent local edits cannot change the queued intent.
+    // Reserve file preparation immediately and capture the target and ordinary
+    // payloads now so subsequent edits or session changes cannot redirect them.
     const payload = typeof args === 'function' ? args : structuredClone(args);
+    const sessionId = this.client.sessionId;
     return this.enqueue(async () => this.client.request(command,
-      typeof payload === 'function' ? await payload() : payload));
+      typeof payload === 'function' ? await payload() : payload, sessionId));
   }
 
   serializeCurrentPipeline() {
@@ -236,6 +262,8 @@ export class ExtensionEditor {
     this.messageTimer = null;
     this.messageRevision = 0;
     this.measurementUiObserver = null;
+    this.ruleDraft = [];
+    this.changingSession = false;
   }
 
   showMessage(text, success = false, duration = 0) {
@@ -287,8 +315,18 @@ export class ExtensionEditor {
       target: this.document.getElementById('editorTarget'),
       status: this.document.getElementById('editorStatus'),
       sampleRate: this.document.getElementById('editorSampleRate'),
+      sessionSelect: this.document.getElementById('editorSessionSelect'),
       settingsMenuButton: this.document.getElementById('editorSettingsMenuButton'),
       settingsMenu: this.document.getElementById('editorSettingsMenu'),
+      sampleRateSelect: this.document.getElementById('editorSampleRateSelect'),
+      urlRules: this.document.getElementById('editorUrlRules'),
+      rulesDialog: this.document.getElementById('urlRulesDialog'),
+      rulesList: this.document.getElementById('urlRulesList'),
+      emptyRules: this.document.getElementById('emptyUrlRules'),
+      addRule: this.document.getElementById('addUrlRuleButton'),
+      saveRules: this.document.getElementById('saveUrlRulesButton'),
+      cancelRules: this.document.getElementById('cancelUrlRulesButton'),
+      closeRules: this.document.getElementById('closeUrlRulesButton'),
       importMeasurement: this.document.getElementById('editorImportMeasurement'),
       measurementFile: this.document.getElementById('editorMeasurementFile'),
       importPreset: this.document.getElementById('editorImportPreset'),
@@ -304,6 +342,8 @@ export class ExtensionEditor {
       loadEnglishTranslations(),
       initializePluginModel()
     ]);
+    const firstSession = snapshot.sessions?.find(isLiveSession);
+    this.client.sessionId = firstSession?.sessionId || null;
     this.snapshot = snapshot;
     window.irLibraryService = new ExtensionIrLibraryClient(this.client);
     await window.irLibraryService.refresh();
@@ -313,7 +353,7 @@ export class ExtensionEditor {
     this.pluginManager.createPlugin = name => {
       const plugin = createPlugin(name);
       plugin.setWasmAssetTargetResolver?.(() => []);
-      mirrorPreparationStatus(plugin, () => this.snapshot?.preparationStatuses);
+      mirrorPreparationStatus(plugin, () => this.currentSnapshot()?.preparationStatuses);
       return plugin;
     };
     this.uiManager = createUiManager(
@@ -321,6 +361,24 @@ export class ExtensionEditor {
       (text, success, duration) => this.showMessage(text, success, duration),
       () => this.hideMessage()
     );
+    this.mobileShell = new ExtensionMobileShell({
+      documentRef: this.document,
+      translate: (key, fallback) => translations[key] || fallback
+    });
+    this.uiManager.mobileNav = this.mobileShell;
+    this.mobileNumberKeypad = new MobileNumberKeypad({
+      documentRef: this.document,
+      isEnabled: () => this.uiManager.layoutMode.isMobile,
+      translate: (key, fallback) => translations[key] || fallback
+    });
+    this.layoutModeUnsubscribe = this.uiManager.layoutMode.onChange(mode => {
+      this.mobileShell.applyMode(mode);
+      const columnManager = this.pipelineManager?.core?.columnManager;
+      columnManager?.updatePipelineColumns(columnManager.getCurrentColumns());
+      this.pluginListManager?.updatePositions();
+      if (!this.uiManager.layoutMode.isMobile) this.mobileNumberKeypad.cancel();
+    });
+    this.mobileShell.applyMode(this.uiManager.layoutMode.mode);
     window.uiManager = this.uiManager;
     window.pluginManager = this.pluginManager;
 
@@ -360,7 +418,7 @@ export class ExtensionEditor {
     this.pluginListManager.initPluginList();
     this.pipelineManager.initDragAndDrop();
     this.rangeFillController.refresh();
-    this.collapseEffectListAtNarrowWidth();
+    this.pluginListManager.collapseManager.markReady();
     this.pipelineManager.historyManager.saveState();
     await this.updateTelemetrySubscription();
     return this;
@@ -374,6 +432,31 @@ export class ExtensionEditor {
             plugin.id === event.detail.pluginId && hasPreparationStatus(plugin))) return;
       this.audioManager.telemetryHub.handleMessage(event.detail);
       this.audioManager.workletPort.deliver(event.detail);
+    });
+    this.elements.sessionSelect?.addEventListener('change', () => {
+      void this.changeSession(this.elements.sessionSelect.value || null);
+    });
+    this.elements.sampleRateSelect?.addEventListener('change', () => {
+      const value = this.elements.sampleRateSelect.value;
+      const sampleRate = value === '' ? null : Number(value);
+      if (sampleRate !== null && !SAMPLE_RATES.has(sampleRate)) return;
+      void this.client.request('setSampleRate', { sampleRate }).catch(error => {
+        this.reportError(error, 'The sample rate could not be changed. Your current setting was kept.');
+      });
+    });
+    this.elements.urlRules?.addEventListener('click', () => {
+      this.closeSettingsMenu();
+      this.openRulesDialog();
+    });
+    this.elements.addRule?.addEventListener('click', () => {
+      this.ruleDraft.push({ pattern: '', preset: Object.keys(this.snapshot?.presets || {})[0] || '', enabled: true });
+      this.renderRuleDraft();
+    });
+    this.elements.saveRules?.addEventListener('click', () => void this.saveRules());
+    this.elements.cancelRules?.addEventListener('click', () => this.closeRulesDialog());
+    this.elements.closeRules?.addEventListener('click', () => this.closeRulesDialog());
+    this.elements.rulesDialog?.addEventListener('click', event => {
+      if (event.target === this.elements.rulesDialog) this.closeRulesDialog();
     });
     this.elements.settingsMenuButton.addEventListener('click', event => {
       event?.stopPropagation?.();
@@ -395,13 +478,19 @@ export class ExtensionEditor {
     });
     this.elements.undo.addEventListener('click', () => this.pipelineManager.undo());
     this.elements.redo.addEventListener('click', () => this.pipelineManager.redo());
-    this.document.addEventListener('visibilitychange', () => this.updateTelemetrySubscription());
+    this.document.addEventListener('visibilitychange', () => {
+      if (!this.changingSession) void this.updateTelemetrySubscription();
+    });
     this.document.addEventListener('click', event => {
-      if (event?.target === this.elements.settingsMenuButton || event?.target === this.elements.settingsMenu) return;
+      if (event?.target === this.elements.settingsMenuButton ||
+          this.elements.settingsMenu?.contains?.(event?.target)) return;
       this.closeSettingsMenu();
     });
     this.document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') this.closeSettingsMenu();
+      if (event.key === 'Escape') {
+        if (!this.elements.rulesDialog?.hidden) this.closeRulesDialog();
+        else this.closeSettingsMenu();
+      }
     });
     window.addEventListener('pagehide', () => {
       this.client.request('setTelemetry', { enabled: false }).catch(() => {});
@@ -416,6 +505,157 @@ export class ExtensionEditor {
   closeSettingsMenu() {
     this.elements.settingsMenu?.classList.remove('show');
     this.elements.settingsMenuButton?.setAttribute?.('aria-expanded', 'false');
+  }
+
+  currentSnapshot(snapshot = this.snapshot) {
+    return selectEditorSnapshot(snapshot, this.client.sessionId || null);
+  }
+
+  reconcileSession(snapshot) {
+    if (this.changingSession) return false;
+    if (!Array.isArray(snapshot?.sessions)) return false;
+    const liveSessions = snapshot.sessions.filter(isLiveSession);
+    if (liveSessions.some(session => session.sessionId === this.client.sessionId)) return false;
+    // Keep the visible pipeline until its edits settle, then reconcile again
+    // from the queue's settled callback.
+    if (this.audioManager?.pendingMutations > 0) return false;
+    const nextSessionId = liveSessions[0]?.sessionId || null;
+    if (this.client.sessionId === nextSessionId) return false;
+    this.client.sessionId = nextSessionId;
+    void this.updateTelemetrySubscription();
+    return true;
+  }
+
+  async changeSession(sessionId) {
+    if (this.changingSession || sessionId === this.client.sessionId) return;
+    this.changingSession = true;
+    const previousSessionId = this.client.sessionId;
+    const unlockInput = this.lockEditorInput();
+    try {
+      await this.audioManager.mutationQueue;
+      await this.client.request('setTelemetry', { enabled: false });
+      const snapshot = await this.client.request('getState');
+      this.client.sessionId = sessionId;
+      if (!this.snapshot || snapshot.revision >= this.snapshot.revision) this.snapshot = snapshot;
+    } catch (error) {
+      this.reportError(error, 'That pipeline could not be opened. Try again.');
+    } finally {
+      try {
+        await this.updateTelemetrySubscription();
+      } finally {
+        this.changingSession = false;
+        try {
+          const sessionChanged = this.client.sessionId !== previousSessionId;
+          this.restoreSnapshot(this.snapshot, sessionChanged, sessionChanged);
+        } finally {
+          unlockInput();
+        }
+      }
+    }
+  }
+
+  renderSessionOptions(snapshot) {
+    const select = this.elements.sessionSelect;
+    if (!select || !Array.isArray(snapshot?.sessions)) return;
+    const liveSessions = snapshot.sessions.filter(isLiveSession);
+    select.replaceChildren();
+    if (liveSessions.length === 0) select.add(new Option('Offline pipeline', ''));
+    for (const session of liveSessions) {
+      select.add(new Option(session.title || `Tab ${session.tabId}`, session.sessionId));
+    }
+    select.value = this.client.sessionId || '';
+  }
+
+  openRulesDialog() {
+    this.ruleDraft = structuredClone(this.snapshot?.rules || []);
+    this.renderRuleDraft();
+    this.elements.rulesDialog.hidden = false;
+  }
+
+  closeRulesDialog() {
+    if (this.elements.rulesDialog) this.elements.rulesDialog.hidden = true;
+  }
+
+  renderRuleDraft() {
+    const list = this.elements.rulesList;
+    if (!list) return;
+    const presets = Object.keys(this.snapshot?.presets || {}).sort((left, right) => left.localeCompare(right));
+    list.replaceChildren(...this.ruleDraft.map((rule, index) => {
+      const row = this.document.createElement('div');
+      row.className = 'url-rule-row';
+      const enabledLabel = this.document.createElement('label');
+      enabledLabel.className = 'url-rule-enabled';
+      enabledLabel.title = 'Enable rule';
+      const enabled = this.document.createElement('input');
+      enabled.type = 'checkbox';
+      enabled.checked = rule.enabled !== false;
+      enabled.setAttribute('aria-label', `Enable rule ${index + 1}`);
+      enabled.addEventListener('change', () => { rule.enabled = enabled.checked; });
+      enabledLabel.appendChild(enabled);
+      const pattern = this.document.createElement('input');
+      pattern.type = 'text';
+      pattern.value = rule.pattern || '';
+      pattern.placeholder = 'example.com/path/*';
+      pattern.setAttribute('aria-label', `Pattern for rule ${index + 1}`);
+      pattern.addEventListener('input', () => { rule.pattern = pattern.value; });
+      const preset = this.document.createElement('select');
+      preset.setAttribute('aria-label', `Preset for rule ${index + 1}`);
+      const names = presets.includes(rule.preset) || !rule.preset ? presets : [rule.preset, ...presets];
+      if (names.length === 0) preset.add(new Option('No saved presets', ''));
+      for (const name of names) {
+        preset.add(new Option(name === rule.preset && !presets.includes(name) ? `${name} (missing)` : name, name));
+      }
+      preset.value = rule.preset || '';
+      preset.addEventListener('change', () => { rule.preset = preset.value; });
+      const makeButton = (text, label, className, disabled, action) => {
+        const button = this.document.createElement('button');
+        button.type = 'button';
+        button.textContent = text;
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.className = className;
+        button.disabled = disabled;
+        button.addEventListener('click', action);
+        return button;
+      };
+      const up = makeButton('↑', `Move rule ${index + 1} up`, 'url-rule-move-up', index === 0, () => {
+        [this.ruleDraft[index - 1], this.ruleDraft[index]] = [this.ruleDraft[index], this.ruleDraft[index - 1]];
+        this.renderRuleDraft();
+      });
+      const down = makeButton('↓', `Move rule ${index + 1} down`, 'url-rule-move-down', index === this.ruleDraft.length - 1, () => {
+        [this.ruleDraft[index], this.ruleDraft[index + 1]] = [this.ruleDraft[index + 1], this.ruleDraft[index]];
+        this.renderRuleDraft();
+      });
+      const remove = makeButton('×', `Delete rule ${index + 1}`, 'url-rule-delete', false, () => {
+        this.ruleDraft.splice(index, 1);
+        this.renderRuleDraft();
+      });
+      row.append(enabledLabel, pattern, preset, up, down, remove);
+      return row;
+    }));
+    this.elements.emptyRules.hidden = this.ruleDraft.length !== 0;
+  }
+
+  async saveRules() {
+    const rules = this.ruleDraft.map(rule => ({
+      pattern: String(rule.pattern || '').trim(),
+      preset: String(rule.preset || ''),
+      enabled: rule.enabled !== false
+    }));
+    if (rules.some(rule => !rule.pattern || !rule.preset)) {
+      this.showMessage('Each URL rule needs both a pattern and a saved preset.', false);
+      return;
+    }
+    this.elements.saveRules.disabled = true;
+    try {
+      await this.client.request('setRules', { rules });
+      this.closeRulesDialog();
+      this.showMessage('URL rules saved.', true, TRANSIENT_MESSAGE_DURATION_MS);
+    } catch (error) {
+      this.reportError(error, 'The URL rules could not be saved. Check the patterns and try again.');
+    } finally {
+      this.elements.saveRules.disabled = false;
+    }
   }
 
   serializeVisiblePipeline() {
@@ -437,20 +677,40 @@ export class ExtensionEditor {
     this.pipelineManager.core.updateAllPluginDisplayState?.();
   }
 
-  restoreSnapshot(snapshot, force = false) {
+  resetPipelineHistory() {
+    const history = this.pipelineManager.historyManager;
+    history.endOperation?.();
+    history.history = [];
+    history.historyIndex = -1;
+    history.saveState();
+  }
+
+  restoreSnapshot(snapshot, force = false, resetHistory = false) {
     if (!snapshot || (this.snapshot && snapshot.revision < this.snapshot.revision)) return;
-    const rebuild = force || !this.pipelineMatches(snapshot);
+    if (this.changingSession) {
+      this.snapshot = snapshot;
+      return;
+    }
+    const sessionChanged = this.reconcileSession(snapshot);
+    const historyBoundary = resetHistory || sessionChanged;
+    const selectedSnapshot = this.currentSnapshot(snapshot);
+    const rebuild = force || !this.pipelineMatches(selectedSnapshot);
     this.snapshot = snapshot;
-    this.syncRuntimeState(snapshot);
-    this.renderSession();
+    this.syncRuntimeState(selectedSnapshot);
+    this.renderSessionOptions(snapshot);
+    this.renderGlobalSettings(snapshot);
+    this.renderSession(selectedSnapshot);
     if (!force && this.audioManager.pendingMutations > 0) return;
     refreshPreparationStatuses(this.audioManager.pipeline);
-    if (!rebuild) return;
+    if (!rebuild) {
+      if (historyBoundary) this.resetPipelineHistory();
+      return;
+    }
 
     this.audioManager.suppressMutations = true;
     try {
       for (const plugin of this.audioManager.pipeline) plugin.cleanup?.();
-      const plugins = (snapshot.plugins || []).map(state => {
+      const plugins = (selectedSnapshot.plugins || []).map(state => {
         const plugin = this.pluginManager.createPlugin(state.nm);
         plugin.id = state.id;
         plugin.audioManager = this.audioManager;
@@ -465,19 +725,26 @@ export class ExtensionEditor {
       for (const plugin of plugins) this.uiManager.expandedPlugins.add(plugin);
       this.pipelineManager.updatePipelineUI(true);
       this.rangeFillController?.refresh();
-      this.pipelineManager.historyManager.saveState();
+      if (historyBoundary) this.resetPipelineHistory();
+      else this.pipelineManager.historyManager.saveState();
     } finally {
       this.audioManager.suppressMutations = false;
     }
   }
 
-  renderSession() {
-    const snapshot = this.snapshot;
-    this.elements.target.textContent = snapshot.target?.title || 'No tab selected';
-    this.elements.target.title = snapshot.target?.title || '';
+  renderGlobalSettings(snapshot) {
+    if (this.elements.sampleRateSelect) {
+      this.elements.sampleRateSelect.value = snapshot.sampleRate == null ? '' : String(snapshot.sampleRate);
+    }
+  }
+
+  renderSession(snapshot = this.currentSnapshot()) {
+    const title = snapshot.title || snapshot.target?.title || '';
+    this.elements.target.textContent = title || 'Offline pipeline';
+    this.elements.target.title = title;
     this.elements.status.textContent = STATUS_LABELS[snapshot.status] || STATUS_LABELS.error;
     this.elements.status.className = `editor-status ${snapshot.status === 'processing' ? 'processing' : snapshot.status === 'error' ? 'error' : ''}`.trim();
-    this.elements.sampleRate.textContent = snapshot.sampleRate ? `${snapshot.sampleRate.toLocaleString()} Hz` : '';
+    this.elements.sampleRate.textContent = snapshot.sampleRate ? `${snapshot.sampleRate.toLocaleString()} Hz` : 'Auto';
     if (snapshot.status === 'error') {
       if (snapshot.error) console.error('[EffeTune extension]', snapshot.error);
       this.showMessage('Processing stopped. Your pipeline is saved; choose a playable tab and start again from the EffeTune button.', false);
@@ -693,14 +960,25 @@ export class ExtensionEditor {
     await Promise.all(consumers.map(plugin => plugin._refreshMeasurements(false)));
   }
 
-  async deleteImportedMeasurement(targetPlugin) {
+  lockEditorInput() {
     const body = this.document.body;
-    const previousInert = body.inert;
-    const blockKeyboard = event => {
+    const previousInert = body?.inert || false;
+    // Inert controls still leave document shortcuts and pending input events.
+    const events = ['keydown', 'paste', 'drop', 'change', 'input'];
+    const blockInput = event => {
       event.preventDefault();
       event.stopImmediatePropagation();
     };
-    let locked = false;
+    if (body) body.inert = true;
+    for (const type of events) this.document.addEventListener?.(type, blockInput, true);
+    return () => {
+      for (const type of events) this.document.removeEventListener?.(type, blockInput, true);
+      if (body) body.inert = previousInert;
+    };
+  }
+
+  async deleteImportedMeasurement(targetPlugin) {
+    let unlockInput;
     try {
       await this.measurementStorage.initialize();
       const measurementId = baseMeasurementId(targetPlugin?.measurementId);
@@ -713,9 +991,7 @@ export class ExtensionEditor {
       if (!await this.confirmImportedMeasurementDeletion(measurement)) return false;
       // Parameter setters change the visible model before joining the remote queue.
       // Keep editor input locked until both stores and the measurement lists agree.
-      body.inert = true;
-      this.document.addEventListener('keydown', blockKeyboard, true);
-      locked = true;
+      unlockInput = this.lockEditorInput();
       await this.audioManager.mutationQueue;
       const mutationGeneration = this.audioManager.mutationGeneration;
       const affected = this.clearDeletedMeasurementReferences(measurementId);
@@ -749,19 +1025,17 @@ export class ExtensionEditor {
       this.showMessage('The imported measurement could not be deleted. Try again.', false);
       return false;
     } finally {
-      if (locked) {
-        this.document.removeEventListener('keydown', blockKeyboard, true);
-        body.inert = previousInert;
-      }
+      unlockInput?.();
     }
   }
 
   async exportPreset() {
     try {
       const snapshot = await this.audioManager.request('getState');
+      const selectedSnapshot = this.currentSnapshot(snapshot);
       const preset = {
         ...this.pipelineManager.getCurrentPresetData(),
-        pipeline: snapshot.plugins.map(({ id, ...state }) => convertShortToLongFormat(state))
+        pipeline: selectedSnapshot.plugins.map(({ id, ...state }) => convertShortToLongFormat(state))
       };
       const blob = new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -783,15 +1057,6 @@ export class ExtensionEditor {
       .catch(error => console.error('[EffeTune extension] Telemetry subscription failed', error));
   }
 
-  collapseEffectListAtNarrowWidth() {
-    const media = window.matchMedia?.('(max-width: 980px)');
-    const collapse = () => {
-      const manager = this.pluginListManager?.collapseManager;
-      if (media?.matches && manager && !manager.isCollapsed) manager.togglePluginListCollapse();
-    };
-    collapse();
-    media?.addEventListener?.('change', collapse);
-  }
 }
 
 if (typeof chrome !== 'undefined' && typeof document !== 'undefined') {

@@ -546,7 +546,7 @@
   "dialog.config.powerSaving.silenceThreshold": "Silence threshold",
   "dialog.config.powerSaving.fullSuspendDelay": "Stop audio input after",
   "dialog.config.powerSaving.skipDisplayDspWhenHidden": "Skip display-only DSP when hidden",
-  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "Bypasses analyzers when their graphs cannot be shown, including when EffeTune is minimized, in Mini Player, or in the background.",
+  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "Bypasses analyzers when their graphs cannot be shown, including when the Effect Pipeline is not displayed (for example, in the Music Library or during a Double Blind Test) and when EffeTune is minimized, in Mini Player, or in the background.",
   "dialog.config.powerSaving.delay.1m": "1 minute",
   "dialog.config.powerSaving.delay.5m": "5 minutes",
   "dialog.config.powerSaving.delay.15m": "15 minutes",

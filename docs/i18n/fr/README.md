@@ -14,7 +14,7 @@ Un processeur d'effets audio en temps réel, conçu pour les passionnés de musi
 
 ### Extension de navigateur
 
-Traitez un onglet Chrome ou Edge sans périphérique audio virtuel. Consultez le [guide de l’extension de navigateur](browser-extension.md).
+Traitez jusqu’à quatre onglets Chrome ou Edge avec des chaînes indépendantes, des préréglages selon l’URL et une fréquence d’échantillonnage réglable, sans périphérique audio virtuel. Consultez le [guide de l’extension de navigateur](browser-extension.md).
 
 [![Screenshot](../../../images/screenshot.png)](https://effetune.frieve.com/effetune.html)
 
@@ -54,10 +54,6 @@ Avant d'utiliser EffeTune, vous devez configurer votre routage audio. Voici comm
    - Ou sélectionnez **Ouvrir un fichier musical...** depuis le menu **Fichier** (application de bureau uniquement)
    - Ou faites glisser le fichier musical dans la fenêtre
 - Pour une utilisation limitée au lecteur, sélectionnez Aucun (lecteur de fichiers musicaux uniquement) comme périphérique d'entrée dans Configuration audio afin de ne pas utiliser d'entrée audio en direct
-
-### Lecture sans interruption
-
-**Lecture sans interruption** est activée par défaut et peut être modifiée dans **Configuration audio**. Lorsqu’elle est activée, les morceaux locaux compatibles s’enchaînent sans silence ; la prise en charge dépend du format du fichier et du navigateur ou de l’application utilisés. Les formats non pris en charge et certains environnements mobiles passent automatiquement à un mode de secours économe en mémoire, si bien qu’un bref silence peut tout de même se produire. La désactiver privilégie une consommation de mémoire réduite et la stabilité, avec un bref silence possible entre les morceaux. Ce changement n’interrompt pas le morceau en cours.
 
 ### Configuration des services de streaming
 
@@ -274,6 +270,10 @@ Pour retirer la réponse propre à l’interface audio, reliez directement sa so
 Les mesures contenant des données de réponse impulsionnelle affichent un graphique **Réponse impulsionnelle** normalisé dans les résultats. La vue initiale couvre 0 à 10 ms à partir du début détecté. Utilisez la molette ou les boutons pour modifier l’échelle temporelle, puis faites glisser le graphique ou utilisez le curseur pour vous déplacer. La sélection d’un point met le graphique à jour ; **Tous (moyenne)** affiche le premier point dont la réponse impulsionnelle a été enregistrée et l’identifie au-dessus du graphique. Utilisez **Exporter la réponse impulsionnelle (WAV)** sous le graphique pour enregistrer la réponse complète et non normalisée du point affiché dans un fichier WAV mono à virgule flottante 32 bits, à la fréquence d’échantillonnage de la mesure.
 
 Pour examiner la fréquence, la phase, le retard de groupe minimal, le retard de groupe excédentaire et l'impulsion du pipeline actif, avec jusqu'à quatre sorties et des réponses de haut-parleurs enregistrées, consultez le [guide de Pipeline Analyzer](pipeline-analyzer.md).
+
+### Lecture sans interruption
+
+**Lecture sans interruption** est activée par défaut et peut être modifiée dans **Configuration audio**. Lorsqu’elle est activée, les morceaux locaux compatibles s’enchaînent sans silence ; la prise en charge dépend du format du fichier et du navigateur ou de l’application utilisés. Les formats non pris en charge et certains environnements mobiles passent automatiquement à un mode de secours économe en mémoire, si bien qu’un bref silence peut tout de même se produire. La désactiver privilégie une consommation de mémoire réduite et la stabilité, avec un bref silence possible entre les morceaux. Ce changement n’interrompt pas le morceau en cours.
 
 ## Combinaisons d'effets courantes
 

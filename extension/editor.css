@@ -1,10 +1,8 @@
-:root { color-scheme: light dark; }
-
 .extension-editor {
   min-width: 760px;
   margin: 0;
-  color: #202124;
-  background: #f4f6fa;
+  color: var(--et-text-primary);
+  background: var(--et-base);
 }
 
 .extension-header {
@@ -17,23 +15,40 @@
   gap: 20px;
   min-height: 70px;
   padding: 12px 20px;
-  border-bottom: 1px solid #d9deea;
-  background: rgb(255 255 255 / 96%);
+  border-bottom: 1px solid var(--et-border-strong);
+  background: color-mix(in srgb, var(--et-base) 96%, transparent);
   backdrop-filter: blur(8px);
 }
 
 .extension-brand, .extension-session { display: flex; align-items: center; gap: 12px; }
 .extension-brand img { border-radius: 10px; }
 .extension-brand h1 { margin: 0; font-size: 20px; }
-.extension-brand p { max-width: 42vw; margin: 2px 0 0; overflow: hidden; color: #687181; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.editor-status { border-radius: 999px; padding: 5px 10px; color: #4d5667; background: #e9edf4; font-size: 12px; font-weight: 700; }
-.editor-status.processing { color: #0d7045; background: #dff5ea; }
-.editor-status.error { color: #a32f35; background: #fde6e7; }
-.editor-sample-rate { color: #687181; font-size: 12px; }
-.extension-session .settings-menu { top: calc(100% + 8px); }
+.extension-brand p { max-width: 42vw; margin: 2px 0 0; overflow: hidden; color: var(--et-text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.editor-status { border-radius: 999px; padding: 5px 10px; color: var(--et-text-secondary); background: var(--et-surface-17); font-size: 12px; font-weight: 700; }
+.editor-status.processing { color: #9ee7c4; background: #174b36; }
+.editor-status.error { color: #ffc1c4; background: #54282b; }
+.editor-sample-rate { color: var(--et-text-muted); font-size: 12px; }
+.editor-session-picker { display: flex; align-items: center; }
+.editor-session-picker select, .settings-menu-field select, .url-rule-row input, .url-rule-row select {
+  min-width: 0;
+  border: 1px solid var(--et-surface-28);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--et-text-primary);
+  background: var(--et-input-gradient);
+}
+.extension-editor select option {
+  color: var(--et-text-primary) !important;
+  background-color: var(--et-surface-14) !important;
+}
+.editor-session-picker select { width: min(280px, 28vw); }
+.extension-session .settings-menu { top: calc(100% + 8px); overflow: visible; }
+.settings-menu-field { display: grid; gap: 6px; padding: 9px 12px; color: var(--et-text-secondary); font-size: 12px; }
+.settings-menu-field select { width: 100%; }
+.settings-menu-divider { height: 1px; margin: 3px 0; background: var(--et-border-strong); }
 .editor-message {
   position: fixed;
-  z-index: 1100;
+  z-index: 1400;
   top: 106px;
   right: 14px;
   max-width: min(560px, calc(100vw - 28px));
@@ -41,17 +56,55 @@
   border-radius: 8px;
   padding: 9px 11px;
   box-shadow: 0 8px 22px rgb(0 0 0 / 22%);
-  color: #7c2d12;
-  background: #fff0e8;
+  color: #ffd8c3;
+  background: #4a291e;
   font-size: 13px;
 }
-.editor-message.success { color: #0d6841; background: #e2f5eb; }
+.editor-message.success { color: #b9f2d5; background: #174331; }
 .extension-editor .main-container { min-height: calc(100vh - 95px); }
 .extension-editor .plugin-list { top: 95px; height: calc(100vh - 95px); }
 .extension-editor .routing-button, .extension-editor .ai-button, .extension-editor .help-button { display: none; }
 .extension-editor #systemPresetsTab, .extension-editor #userPresetsTab { display: none; }
 .extension-editor .pipeline-item { min-width: 0; max-width: none; }
 .extension-editor .pipeline-item .plugin-ui { overflow-x: auto; }
+
+.extension-dialog-overlay {
+  position: fixed;
+  z-index: 1300;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(0 0 0 / 60%);
+}
+.extension-dialog-overlay[hidden] { display: none; }
+.extension-dialog {
+  width: min(840px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid var(--et-border-strong);
+  border-radius: 10px;
+  padding: 20px;
+  color: var(--et-text-primary);
+  background: var(--et-panel-gradient);
+  box-shadow: 0 22px 54px rgb(0 0 0 / 55%);
+}
+.extension-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.extension-dialog-heading h2 { margin: 0; font-size: 20px; }
+.extension-dialog-heading p { margin: 5px 0 0; color: var(--et-text-secondary); font-size: 13px; }
+.extension-dialog-heading code { color: var(--et-text-primary); }
+.extension-dialog-close { min-width: 34px; border: 0; padding: 4px 8px; color: var(--et-text-secondary); background: transparent; font-size: 24px; cursor: pointer; }
+.url-rules-list { display: grid; gap: 8px; margin: 18px 0 10px; }
+.url-rule-row { display: grid; grid-template-columns: auto minmax(160px, 1.5fr) minmax(130px, 1fr) auto auto auto; align-items: center; gap: 7px; }
+.url-rule-enabled { display: inline-flex; align-items: center; justify-content: center; }
+.url-rule-enabled input { width: 18px; height: 18px; accent-color: var(--et-accent); }
+.url-rule-row button, .url-rule-add, .extension-dialog-actions button { min-height: 32px; border: 1px solid var(--et-surface-28); border-radius: 4px; padding: 5px 10px; color: var(--et-text-primary); background: var(--et-button-gradient); cursor: pointer; }
+.url-rule-row button { min-width: 32px; padding-inline: 7px; }
+.url-rule-row button:disabled { cursor: default; opacity: .45; }
+.empty-url-rules { margin: 18px 0 10px; color: var(--et-text-muted); font-size: 13px; }
+.url-rule-add { margin-bottom: 18px; }
+.extension-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--et-border-strong); padding-top: 14px; }
+.extension-dialog-actions .extension-dialog-primary { border-color: var(--et-accent); background: var(--et-accent); color: #fff; }
 
 .extension-measurement-delete-overlay {
   position: fixed;
@@ -83,18 +136,65 @@
 .extension-measurement-delete-dialog .dialog-buttons button { min-width: 82px; border-radius: 4px; padding: 8px 12px; }
 .extension-measurement-delete-dialog .extension-measurement-delete-confirm { color: #ffb0b0 !important; }
 
-@media (max-width: 980px) {
-  .extension-header { align-items: flex-start; }
-  .extension-session { flex-wrap: wrap; justify-content: flex-end; }
+body.extension-editor.layout-mobile {
+  --et-bottom-nav-height: 0px;
+  --et-mini-player-height: 0px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .extension-editor { color: #edf0f6; background: #17191e; }
-  .extension-header { border-color: #3a404c; background: rgb(31 34 41 / 96%); }
-  .extension-brand p, .editor-sample-rate { color: #aeb6c5; }
-  .editor-status { color: #c6ccda; background: #363c47; }
-  .editor-status.processing { color: #9ee7c4; background: #174b36; }
-  .editor-status.error { color: #ffc1c4; background: #54282b; }
-  .editor-message { color: #ffd8c3; background: #4a291e; }
-  .editor-message.success { color: #b9f2d5; background: #174331; }
+body.extension-editor.layout-mobile .extension-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+body.extension-editor.layout-mobile .extension-brand,
+body.extension-editor.layout-mobile .extension-session {
+  width: 100%;
+  min-width: 0;
+}
+
+body.extension-editor.layout-mobile .extension-session {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+body.extension-editor.layout-mobile .extension-brand > div,
+body.extension-editor.layout-mobile .editor-session-picker {
+  min-width: 0;
+}
+
+body.extension-editor.layout-mobile .editor-session-picker {
+  flex: 1 1 180px;
+}
+
+body.extension-editor.layout-mobile .editor-session-picker select {
+  width: 100%;
+}
+
+body.extension-editor.layout-mobile .extension-header button,
+body.extension-editor.layout-mobile .extension-header select {
+  min-height: var(--et-mobile-control-height);
+}
+
+body.extension-editor.layout-mobile .extension-brand h1 {
+  padding-right: 0;
+}
+
+body.extension-editor.layout-mobile .plugin-list {
+  height: auto;
+}
+
+body.extension-editor.layout-mobile .tab-switcher {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.extension-editor.layout-mobile .url-rule-row {
+  grid-template-columns: auto minmax(150px, 1fr) minmax(120px, 1fr);
+}
+
+body.extension-editor.layout-mobile .url-rule-row .url-rule-move-up {
+  grid-column: 1;
 }

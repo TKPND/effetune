@@ -450,11 +450,13 @@ async function withUIHarness(options = {}, callback) {
   const calls = [];
   const document = createDocument();
   seedDocument(document);
+  if (options.bodyClassName) document.body.className = options.bodyClassName;
   const storage = createStorage();
   const opened = [];
   const objectUrls = [];
   const timers = [];
   const { audioManager, pluginManager } = createManagers(calls);
+  if (options.powerPolicyController) audioManager.powerPolicyController = options.powerPolicyController;
   const electronIntegration = options.electronIntegration ?? {
     isElectronEnvironment: () => Boolean(options.isElectron),
     updateApplicationMenu: () => calls.push(['electron.updateApplicationMenu']),
@@ -532,6 +534,7 @@ async function withUIHarness(options = {}, callback) {
         calls.push(['MutationObserver', this]);
       }
       observe(...args) {
+        this.target = args[0];
         calls.push(['MutationObserver.observe', ...args]);
       }
     },
@@ -972,6 +975,54 @@ test('rapid mini player toggles preserve the latest requested mode', async () =>
   });
 });
 
+test('suppresses analyzer DSP whenever the Effect Pipeline is not displayed', async () => {
+  const startupSuppression = [];
+  await withUIHarness({
+    bodyClassName: 'view-library',
+    powerPolicyController: {
+      setDspUiSuppressed: (reason, suppressed) => startupSuppression.push([reason, suppressed])
+    }
+  }, async ({ manager }) => {
+    assert.equal(manager.effectPipelineHidden, true);
+  });
+  assert.deepEqual(startupSuppression, [['effect-pipeline-hidden', true]]);
+
+  await withUIHarness({}, async ({ audioManager, document, manager }) => {
+    const suppression = [];
+    audioManager.powerPolicyController = {
+      setDspUiSuppressed: (reason, suppressed) => suppression.push([reason, suppressed])
+    };
+    const observer = manager.effectPipelineVisibilityObserver;
+    assert.equal(observer.target, document.body);
+    assert.equal(manager.effectPipelineHidden, false);
+    const setBodyClasses = (...classes) => {
+      document.body.className = classes.join(' ');
+      observer.listener([{ type: 'attributes', attributeName: 'class' }]);
+    };
+
+    setBodyClasses('view-library');
+    setBodyClasses('view-library', 'layout-mini-player');
+    setBodyClasses();
+    setBodyClasses('view-player');
+    setBodyClasses('layout-mobile', 'view-player');
+    setBodyClasses('layout-mobile', 'view-effects');
+    manager.doubleBlindTest = { isActive: () => true };
+    manager.updateEffectPipelineVisibility();
+    setBodyClasses('layout-mobile', 'view-effects', 'layout-mini-player');
+    manager.doubleBlindTest = { isActive: () => false };
+    manager.updateEffectPipelineVisibility();
+
+    assert.deepEqual(suppression, [
+      ['effect-pipeline-hidden', true],
+      ['effect-pipeline-hidden', false],
+      ['effect-pipeline-hidden', true],
+      ['effect-pipeline-hidden', false],
+      ['effect-pipeline-hidden', true],
+      ['effect-pipeline-hidden', false]
+    ]);
+  });
+});
+
 test('handles invalid URL state and URL updates', async () => {
   await withUIHarness({ search: '?p=bad!' }, async ({ calls, manager, timers, window }) => {
     manager.audioManager.pipeline = [createPlugin('Gain')];
@@ -1009,8 +1060,8 @@ test('handles invalid URL state and URL updates', async () => {
 test('updates audio, sleep, sample-rate, language, translations, and UI text', async () => {
   await withUIHarness({ isElectron: true, appConfig: { language: 'ja' }, language: 'ja-JP' }, async ({ calls, document, manager }) => {
     manager.initAudio();
-    assert.equal(calls.some(call => call[0] === 'MutationObserver.observe'), true);
-    const observer = calls.find(call => call[0] === 'MutationObserver')?.[1];
+    assert.equal(calls.some(call => call[0] === 'MutationObserver.observe' && call[1] === manager.sampleRate), true);
+    const observer = calls.find(call => call[0] === 'MutationObserver' && call[1].target === manager.sampleRate)?.[1];
     manager.sampleRate.textContent = 'Sleep';
     observer.listener([{ type: 'childList' }]);
     assert.match(manager.sampleRate.textContent, /Hz/);

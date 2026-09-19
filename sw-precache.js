@@ -1,4 +1,4 @@
-self.EFFECTUNE_CACHE_VERSION = "effetune-v2.10.0-f3b5659ddd6d6128";
+self.EFFECTUNE_CACHE_VERSION = "effetune-v2.11.0-b436f222320b5002";
 self.EFFECTUNE_PRECACHE_URLS = [
   "./effetune-library.css",
   "./effetune-mobile.css",
@@ -209,6 +209,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/ui/mobile-menu.js",
   "./js/ui/mobile-nav.js",
   "./js/ui/mobile-number-keypad.js",
+  "./js/ui/motion.js",
   "./js/ui/pipeline-manager.js",
   "./js/ui/pipeline/clipboard-manager.js",
   "./js/ui/pipeline/external-asset-info.js",

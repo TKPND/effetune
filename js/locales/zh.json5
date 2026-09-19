@@ -541,7 +541,7 @@
   "dialog.config.powerSaving.silenceThreshold": "静音阈值",
   "dialog.config.powerSaving.fullSuspendDelay": "在以下时间后停止音频输入",
   "dialog.config.powerSaving.skipDisplayDspWhenHidden": "隐藏时跳过显示类 DSP",
-  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "当图表无法显示时绕过分析器处理，包括 EffeTune 最小化、处于迷你播放器或在后台运行时。",
+  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "当图表无法显示时绕过分析器处理，包括 Effect Pipeline 未显示时（例如打开音乐库或进行双盲测试时），以及 EffeTune 最小化、处于迷你播放器或在后台运行时。",
   "dialog.config.powerSaving.delay.1m": "1分钟",
   "dialog.config.powerSaving.delay.5m": "5分钟",
   "dialog.config.powerSaving.delay.15m": "15分钟",

@@ -6,6 +6,7 @@
   <base href="../">
   <title>EffeTune Pipeline Editor</title>
   <link rel="stylesheet" href="effetune.css">
+  <link rel="stylesheet" href="effetune-mobile.css">
   <link rel="stylesheet" href="pipeline-analyzer.css">
   <link rel="stylesheet" href="extension/editor.css">
 </head>
@@ -16,11 +17,28 @@
       <div><h1>EffeTune Pipeline Editor</h1><p id="editorTarget">No tab selected</p></div>
     </div>
     <div class="extension-session">
+      <div class="editor-session-picker">
+        <select id="editorSessionSelect" aria-label="Pipeline to edit">
+          <option value="">Offline pipeline</option>
+        </select>
+      </div>
       <span id="editorStatus" class="editor-status">Connecting…</span>
       <span id="editorSampleRate" class="editor-sample-rate"></span>
       <div class="settings-menu-container">
         <button class="header-button settings-menu-button" id="editorSettingsMenuButton" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.07A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.05.05a2 2 0 1 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.07A1.7 1.7 0 0 0 4.6 8.97a1.7 1.7 0 0 0-.34-1.88l-.05-.05a2 2 0 1 1 2.83-2.83l.05.05A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.07V3a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1.03 1.53 1.7 1.7 0 0 0 1.88-.34l.05-.05a2 2 0 1 1 2.83 2.83l-.05.05A1.7 1.7 0 0 0 19.4 8.97 1.7 1.7 0 0 0 20.93 10H21a2 2 0 0 1 0 4h-.07A1.7 1.7 0 0 0 19.4 15z"/></svg></button>
         <div class="settings-menu" id="editorSettingsMenu" role="menu">
+          <label class="settings-menu-field" for="editorSampleRateSelect">
+            <span>Sample rate</span>
+            <select id="editorSampleRateSelect">
+              <option value="">Auto</option>
+              <option value="44100">44.1 kHz</option>
+              <option value="48000">48 kHz</option>
+              <option value="96000">96 kHz</option>
+              <option value="192000">192 kHz</option>
+            </select>
+          </label>
+          <button class="settings-menu-item" id="editorUrlRules" type="button" role="menuitem">URL rules…</button>
+          <div class="settings-menu-divider" role="separator"></div>
           <button class="settings-menu-item" id="editorImportMeasurement" type="button" role="menuitem">Import measurement…</button>
           <button class="settings-menu-item" id="editorImportPreset" type="button" role="menuitem">Import preset…</button>
           <button class="settings-menu-item" id="editorExportPreset" type="button" role="menuitem">Export preset</button>
@@ -33,6 +51,25 @@
   <input id="editorPresetFile" type="file" accept=".effetune_preset,.json,application/json" hidden>
 
   <p id="editorMessage" class="editor-message" role="status" aria-live="polite" hidden></p>
+
+  <div id="urlRulesDialog" class="extension-dialog-overlay" hidden>
+    <section class="extension-dialog url-rules-dialog" role="dialog" aria-modal="true" aria-labelledby="urlRulesTitle">
+      <div class="extension-dialog-heading">
+        <div>
+          <h2 id="urlRulesTitle">URL rules</h2>
+          <p>Use host/path patterns such as <code>example.com/music/*</code>. The first match wins.</p>
+        </div>
+        <button id="closeUrlRulesButton" class="extension-dialog-close" type="button" aria-label="Close URL rules">×</button>
+      </div>
+      <div id="urlRulesList" class="url-rules-list"></div>
+      <p id="emptyUrlRules" class="empty-url-rules">No URL rules yet.</p>
+      <button id="addUrlRuleButton" class="url-rule-add" type="button">Add rule</button>
+      <div class="extension-dialog-actions">
+        <button id="cancelUrlRulesButton" type="button">Cancel</button>
+        <button id="saveUrlRulesButton" class="extension-dialog-primary" type="button">Save rules</button>
+      </div>
+    </section>
+  </div>
 
   <div class="main-container">
     <div class="plugin-list-shell">

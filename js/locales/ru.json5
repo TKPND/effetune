@@ -541,7 +541,7 @@
   "dialog.config.powerSaving.silenceThreshold": "Порог тишины",
   "dialog.config.powerSaving.fullSuspendDelay": "Остановить аудиовход через",
   "dialog.config.powerSaving.skipDisplayDspWhenHidden": "Отключать DSP визуализации, когда приложение скрыто",
-  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "Отключает обработку анализаторов, когда их графики нельзя показать: при свёрнутом EffeTune, в мини-плеере или в фоновом режиме.",
+  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "Отключает обработку анализаторов, когда их графики нельзя показать: когда Effect Pipeline не отображается (например, в разделе «Музыкальная библиотека» или во время двойного слепого теста), при свёрнутом EffeTune, в мини-плеере или в фоновом режиме.",
   "dialog.config.powerSaving.delay.1m": "1 минуту",
   "dialog.config.powerSaving.delay.5m": "5 минут",
   "dialog.config.powerSaving.delay.15m": "15 минут",

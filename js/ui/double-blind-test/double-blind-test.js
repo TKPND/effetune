@@ -270,6 +270,8 @@ export class DoubleBlindTest {
             ui.urlReflectionEnabled = true;
             try { ui.updateURL(); } catch (_) { /* ignore */ }
         }
+        // Analyzers pause while the test panel replaces the Effect Pipeline.
+        ui.updateEffectPipelineVisibility?.();
     }
 
     /** Remove the entire effect-pipeline display from the DOM (not just hide it). */

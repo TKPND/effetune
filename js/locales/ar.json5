@@ -541,7 +541,7 @@
   "dialog.config.powerSaving.silenceThreshold": "عتبة الصمت",
   "dialog.config.powerSaving.fullSuspendDelay": "إيقاف إدخال الصوت بعد",
   "dialog.config.powerSaving.skipDisplayDspWhenHidden": "تخطي معالجة العرض عند الإخفاء",
-  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "يتجاوز معالجة أدوات التحليل عندما يتعذر عرض رسومها، بما في ذلك عند تصغير EffeTune أو استخدام المشغّل المصغّر أو تشغيله في الخلفية.",
+  "dialog.config.powerSaving.skipDisplayDspWhenHiddenHelp": "يتجاوز معالجة أدوات التحليل عندما يتعذر عرض رسومها، بما في ذلك عندما لا يكون Effect Pipeline معروضًا (مثل فتح مكتبة الموسيقى أو إجراء اختبار مزدوج التعمية)، وعند تصغير EffeTune أو استخدام المشغّل المصغّر أو تشغيله في الخلفية.",
   "dialog.config.powerSaving.delay.1m": "دقيقة واحدة",
   "dialog.config.powerSaving.delay.5m": "5 دقائق",
   "dialog.config.powerSaving.delay.15m": "15 دقيقة",

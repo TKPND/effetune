@@ -76,3 +76,30 @@ export function isNewerVersion(targetVersion, currentVersion) {
         return false;
     }
 }
+
+// Desktop application releases are tagged `v<version>`. The repository also
+// publishes DSP library releases tagged `dsp-v<version>`, which must never be
+// offered as a desktop update.
+const APP_RELEASE_TAG_PATTERN = /^v\d/i;
+
+export function selectLatestAppRelease(releases) {
+    if (!Array.isArray(releases)) return null;
+
+    let latest = null;
+    for (const release of releases) {
+        if (!release || release.draft || release.prerelease) continue;
+
+        const tag = String(release.tag_name ?? '').trim();
+        if (!APP_RELEASE_TAG_PATTERN.test(tag)) continue;
+
+        const version = normalizeReleaseVersion(release);
+        // A non-empty release name is required by the published-release contract.
+        const name = typeof release.name === 'string' ? release.name.trim() : '';
+        if (!version || !name) continue;
+
+        if (!latest || compareSemVer(version, latest.version) > 0) {
+            latest = { tag, version, name };
+        }
+    }
+    return latest;
+}

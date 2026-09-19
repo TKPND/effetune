@@ -121,6 +121,7 @@ function createHandler(options = {}) {
 
 async function withAIGlobals(calls, options, callback) {
   const timeouts = [];
+  const clearedTimeouts = [];
   const documentRef = options.document ?? createDocument(calls, options);
   await withGlobals({
     document: documentRef,
@@ -130,8 +131,12 @@ async function withAIGlobals(calls, options, callback) {
       timeouts.push(fn);
       return timeouts.length;
     },
+    clearTimeout(id) {
+      calls.push(['clearTimeout', id]);
+      clearedTimeouts.push(id);
+    },
     console: options.console ?? console
-  }, async () => callback({ documentRef, timeouts }));
+  }, async () => callback({ documentRef, timeouts, clearedTimeouts }));
 }
 
 test('constructor and showAIDialog replace existing dialogs and build translated content', async () => {
@@ -290,5 +295,29 @@ test('setupCloseHandler ignores inside clicks and removes outside-click dialogs'
     listener({ target: outside });
     assert.equal(dialog.removed, true);
     assert.equal(documentRef.listeners.has('click'), false);
+  });
+});
+
+test('reopening AI dialogs clears pending and registered outside-click handlers', async () => {
+  const calls = [];
+  const documentRef = createDocument(calls);
+  const handler = createHandler();
+
+  await withAIGlobals(calls, { document: documentRef }, async ({ timeouts, clearedTimeouts }) => {
+    handler.showAIDialog({ name: 'Compressor' }, {});
+    const firstDialog = documentRef.currentDialog;
+
+    handler.showAIDialog({ name: 'Limiter' }, {});
+    const secondDialog = documentRef.currentDialog;
+    assert.equal(firstDialog.removed, true);
+    assert.deepEqual(clearedTimeouts, [1]);
+
+    timeouts[1]();
+    assert.equal(documentRef.listeners.has('click'), true);
+
+    handler.showAIDialog({ name: 'Equalizer' }, {});
+    assert.equal(secondDialog.removed, true);
+    assert.equal(documentRef.listeners.has('click'), false);
+    assert.equal(calls.filter(call => call[0] === 'documentRemoveEventListener').length, 1);
   });
 });

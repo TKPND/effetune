@@ -144,7 +144,6 @@ class SpatialMapperPlugin extends PluginBase {
         this.fm = Array.from(SPATIAL_MAPPER_IDENTITY_MATRIX);
         this.rm = Array.from(SPATIAL_MAPPER_IDENTITY_MATRIX);
         this._selectedComponentKey = 'dm';
-        this._actualChannelCount = 0;
         this.registerProcessor(SPATIAL_MAPPER_PASS_THROUGH_PROCESSOR);
     }
 
@@ -181,6 +180,7 @@ class SpatialMapperPlugin extends PluginBase {
         }
         if (params.enabled !== undefined) this.enabled = params.enabled !== false;
         this.updateParameters();
+        this._syncRoutingUI();
     }
 
     getParameters() {
@@ -201,9 +201,25 @@ class SpatialMapperPlugin extends PluginBase {
         };
     }
 
-    _displayOutputChannelCount() {
-        const actual = Math.max(this.getChannelCountForUI(), this._actualChannelCount || 0);
-        return actual > 8 ? 16 : 8;
+    // Width of the bus this plugin actually receives: only 'All' passes the whole
+    // pipeline, a pair selection passes two channels and a single selection one.
+    _routedChannelCount() {
+        const count = Math.round(Number(this.getChannelCountForUI()));
+        const pipeline = Number.isFinite(count) ? Math.min(Math.max(count, 1), SPATIAL_MAPPER_MATRIX_SIZE) : 2;
+        if (this.channel === 'A') return pipeline;
+        if (this.channel === null || this.channel === undefined ||
+            /^(34|56|78|910|1112|1314|1516)$/.test(String(this.channel))) {
+            return Math.min(pipeline, 2);
+        }
+        return 1;
+    }
+
+    _displayInputChannelCount() {
+        return Math.min(this.ic, this._routedChannelCount());
+    }
+
+    onChannelSelectionChanged() {
+        this._syncRoutingUI();
     }
 
     _setSelectedComponent(key) {
@@ -222,8 +238,9 @@ class SpatialMapperPlugin extends PluginBase {
 
     _syncRoutingUI() {
         if (!this._routingTableWrapper) return;
-        const outputCount = this._displayOutputChannelCount();
-        if (this._routingInputCount !== this.ic || this._routingOutputCount !== outputCount) {
+        const outputCount = this._routedChannelCount();
+        if (this._routingInputCount !== this._displayInputChannelCount() ||
+            this._routingOutputCount !== outputCount) {
             this._buildRoutingTable();
             return;
         }
@@ -251,8 +268,8 @@ class SpatialMapperPlugin extends PluginBase {
     }
 
     _buildRoutingTable() {
-        const inputCount = this.ic;
-        const outputCount = this._displayOutputChannelCount();
+        const inputCount = this._displayInputChannelCount();
+        const outputCount = this._routedChannelCount();
         const table = document.createElement('table');
         table.className = 'spatial-mapper-routing-table';
         const head = document.createElement('thead');
@@ -294,7 +311,6 @@ class SpatialMapperPlugin extends PluginBase {
                 const label = `Output ${output + 1} from Input ${input + 1}`;
                 const control = this.createParameterControl(label, -1, 1, 0.01, matrix[index], value => {
                     this._setMatrixCell(output, input, value);
-                    this._syncRoutingUI();
                 });
                 control.classList.toggle('spatial-mapper-routing-control', true);
                 const [, slider, numberInput] = control.children;
@@ -364,15 +380,6 @@ class SpatialMapperPlugin extends PluginBase {
         this._buildRoutingTable();
         this.registerUIRefresh(() => this._syncRoutingUI());
         return container;
-    }
-
-    onMessage(message) {
-        const channelCount = message?.type === 'processBuffer' && message.pluginId === this.id ?
-            Number(message.measurements?.channels) : 0;
-        if (!Number.isInteger(channelCount) || channelCount < 1 || channelCount > 16 ||
-            channelCount === this._actualChannelCount) return;
-        this._actualChannelCount = channelCount;
-        this._syncRoutingUI();
     }
 }
 

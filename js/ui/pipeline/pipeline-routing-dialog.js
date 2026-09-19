@@ -1,4 +1,5 @@
 import { enableStandardSelect } from '../standard-select.js';
+import { runExitMotion } from '../motion.js';
 
 /**
  * PipelineRoutingDialog - Handles the routing dialog for bus and channel configuration
@@ -11,6 +12,8 @@ export class PipelineRoutingDialog {
      */
     constructor(pipelineCore) {
         this.pipelineCore = pipelineCore;
+        this.closeHandlerTimer = null;
+        this.closeHandler = null;
     }
 
     /**
@@ -22,7 +25,7 @@ export class PipelineRoutingDialog {
         // Remove any existing dialog
         const existingDialog = document.querySelector('.routing-dialog');
         if (existingDialog) {
-            existingDialog.remove();
+            this.closeDialog(existingDialog, { immediate: true });
         }
         
         // Create dialog
@@ -76,7 +79,7 @@ export class PipelineRoutingDialog {
             : 'Close';
         closeBtn.onclick = () => {
             const dialog = document.querySelector('.routing-dialog');
-            if (dialog) dialog.remove();
+            if (dialog) this.closeDialog(dialog);
         };
         header.appendChild(closeBtn);
         
@@ -309,15 +312,29 @@ export class PipelineRoutingDialog {
      */
     setupCloseHandler(dialog, button) {
         // Prevent immediate closing by delaying the click handler
-        setTimeout(() => {
+        this.closeHandlerTimer = setTimeout(() => {
+            this.closeHandlerTimer = null;
             // Close dialog when clicking outside
-            document.addEventListener('click', function closeDialog(e) {
+            this.closeHandler = e => {
                 if (!e.composedPath().includes(dialog) && e.target !== button) {
-                    dialog.remove();
-                    document.removeEventListener('click', closeDialog);
+                    this.closeDialog(dialog);
                 }
-            });
+            };
+            document.addEventListener('click', this.closeHandler);
         }, 100);
+    }
+
+    closeDialog(dialog, { immediate = false } = {}) {
+        if (this.closeHandlerTimer !== null) {
+            clearTimeout(this.closeHandlerTimer);
+            this.closeHandlerTimer = null;
+        }
+        if (this.closeHandler) {
+            document.removeEventListener('click', this.closeHandler);
+            this.closeHandler = null;
+        }
+        if (immediate) dialog.remove();
+        else runExitMotion(dialog, () => dialog.remove());
     }
 
     /**

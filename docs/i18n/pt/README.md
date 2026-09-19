@@ -14,7 +14,7 @@ Um processador de efeitos de áudio em tempo real, projetado para entusiastas do
 
 ### Extensão do navegador
 
-Processe uma aba do Chrome ou Edge sem um dispositivo de áudio virtual. Consulte o [guia da extensão do navegador](browser-extension.md).
+Processe até quatro abas do Chrome ou Edge com cadeias independentes, predefinições por URL e taxa de amostragem ajustável, sem dispositivo de áudio virtual. Consulte o [guia da extensão do navegador](browser-extension.md).
 
 [![Screenshot](../../../images/screenshot.png)](https://effetune.frieve.com/effetune.html)
 
@@ -54,10 +54,6 @@ Antes de usar o EffeTune, você precisará configurar o roteamento de áudio. Ve
    - Ou selecione Abrir arquivo de música... no menu Arquivo (apenas aplicativo desktop)
    - Ou arraste o arquivo de música para a janela
 - Para usar apenas o player, selecione Nenhum (somente player de arquivos de música) como dispositivo de entrada em Configuração de Áudio para não usar uma entrada de áudio ao vivo
-
-### Reprodução sem intervalos
-
-**Reprodução sem intervalos** vem ativada por padrão e pode ser alterada em **Configuração de Áudio**. Quando está ativada, faixas locais compatíveis são reproduzidas sem intervalo; o suporte é limitado pelo formato do arquivo e pelo navegador ou aplicativo em uso. Formatos não suportados e alguns ambientes móveis usam automaticamente um modo alternativo que limita a memória, portanto ainda pode haver um breve intervalo. Ao desativá-la, o aplicativo prioriza menor uso de memória e estabilidade, e pode haver um pequeno intervalo entre as faixas. Alterar essa opção não interrompe a faixa atual.
 
 ### Configuração para Serviços de Streaming
 
@@ -274,6 +270,10 @@ Para remover a resposta da própria interface de áudio, conecte diretamente a s
 As medições que contêm dados de resposta ao impulso mostram um gráfico normalizado de **Resposta ao impulso** nos resultados. A visualização inicial cobre de 0 a 10 ms a partir do início detectado. Use a roda do mouse ou os botões para ajustar o zoom do eixo de tempo e arraste o gráfico ou use o controle deslizante para percorrê-lo. Ao selecionar um ponto, o gráfico é atualizado; **Todos (média)** mostra o primeiro ponto com uma resposta ao impulso salva e o identifica acima do gráfico. Use **Exportar resposta ao impulso (WAV)** abaixo do gráfico para salvar a resposta completa e não normalizada do ponto exibido como um WAV mono de ponto flutuante de 32 bits na taxa de amostragem da medição.
 
 Para consultar frequência, fase, atraso de grupo mínimo, atraso de grupo excedente e impulso do pipeline ativo, com até quatro saídas e respostas de alto-falantes salvas, veja o [guia do Pipeline Analyzer](pipeline-analyzer.md).
+
+### Reprodução sem intervalos
+
+**Reprodução sem intervalos** vem ativada por padrão e pode ser alterada em **Configuração de Áudio**. Quando está ativada, faixas locais compatíveis são reproduzidas sem intervalo; o suporte é limitado pelo formato do arquivo e pelo navegador ou aplicativo em uso. Formatos não suportados e alguns ambientes móveis usam automaticamente um modo alternativo que limita a memória, portanto ainda pode haver um breve intervalo. Ao desativá-la, o aplicativo prioriza menor uso de memória e estabilidade, e pode haver um pequeno intervalo entre as faixas. Alterar essa opção não interrompe a faixa atual.
 
 ## Combinações Comuns de Efeitos
 

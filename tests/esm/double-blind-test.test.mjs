@@ -555,6 +555,9 @@ function createHarness(options = {}) {
       calls.push(['updatePipelineToggleButton']);
       if (options.throwPipelineRestore) throw new Error('toggle failed');
     },
+    updateEffectPipelineVisibility() {
+      calls.push(['updateEffectPipelineVisibility', dbt.isActive(), main?.style.display]);
+    },
     pipelineManager: {
       updatePipelineUI() {
         calls.push(['updatePipelineUI']);
@@ -660,6 +663,9 @@ test('validates pipeline availability and manages entry/exit gating', async () =
     assert.equal(h.uiManager.urlReflectionEnabled, false);
     assert.equal(h.historyReplacements[0].url, 'https://example.test/effetune.html');
     assert.equal(h.main.style.display, 'none');
+    assert.deepEqual(h.calls.filter(call => call[0] === 'updateEffectPipelineVisibility'), [
+      ['updateEffectPipelineVisibility', true, 'none']
+    ]);
     assert.equal(h.document.body.style.minWidth, '640px');
     assert.equal(h.document.listenerCount('keydown'), 1);
     assert.equal(h.menuRefreshes.length, 1);
@@ -673,6 +679,8 @@ test('validates pipeline availability and manages entry/exit gating', async () =
     assert.equal(h.uiManager.urlReflectionEnabled, true);
     assert.equal(h.urlUpdates.length, 1);
     assert.equal(h.main.style.display, '');
+    assert.deepEqual(h.calls.filter(call => call[0] === 'updateEffectPipelineVisibility').at(-1),
+      ['updateEffectPipelineVisibility', false, '']);
     assert.equal(h.main.children.length, 2);
     assert.equal(h.document.body.style.minWidth, '');
     assert.deepEqual(h.calls.filter(call => call[0] === 'setCurrentPipeline').at(-1), ['setCurrentPipeline', 'B', true]);

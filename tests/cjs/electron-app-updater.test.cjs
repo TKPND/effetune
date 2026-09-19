@@ -18,7 +18,9 @@ function createHarness(options = {}) {
   const app = new EventEmitter();
   app.isPackaged = options.isPackaged ?? true;
   const calls = [];
+  const feeds = [];
   const updater = {
+    setFeedURL(feed) { feeds.push(feed); },
     async checkForUpdates() {
       calls.push('check');
       if (options.checkError) throw options.checkError;
@@ -35,9 +37,11 @@ function createHarness(options = {}) {
     app,
     platform: options.platform ?? 'win32',
     env: options.env ?? {},
+    releaseDownloadBaseUrl: 'https://releases.example/download',
     loadUpdater() { calls.push('load'); return updater; }
   });
-  return { app, appUpdater, calls, updater };
+  if (options.targetTag !== null) appUpdater.setTargetRelease(options.targetTag ?? 'v3.0.0');
+  return { app, appUpdater, calls, feeds, updater };
 }
 
 test('only packaged Windows installer installations support in-app updates', async () => {
@@ -55,9 +59,27 @@ test('only packaged Windows installer installations support in-app updates', asy
   }
 });
 
+test('installation is refused until a desktop release is pinned', async () => {
+  const { app, appUpdater, calls, feeds } = createHarness({ targetTag: null });
+  await assert.rejects(appUpdater.downloadUpdate(), /pinned/);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(feeds, []);
+  assert.equal(app.listenerCount('quit'), 0);
+
+  // A later check that finds an update pins the release and enables the install.
+  appUpdater.setTargetRelease('v3.1.0');
+  await appUpdater.downloadUpdate();
+  assert.deepEqual(calls, ['load', 'check', 'download']);
+  assert.deepEqual(feeds, [{
+    provider: 'generic',
+    url: 'https://releases.example/download/v3.1.0/',
+    useMultipleRangeRequest: false
+  }]);
+});
+
 test('download is lazy and single-flight, and installation runs once only after quit', async () => {
   const download = deferred();
-  const { app, appUpdater, calls, updater } = createHarness({ downloadPromise: download.promise });
+  const { app, appUpdater, calls, updater, feeds } = createHarness({ downloadPromise: download.promise });
   assert.deepEqual(calls, []);
   const first = appUpdater.downloadUpdate();
   assert.equal(appUpdater.downloadUpdate(), first);
@@ -66,6 +88,11 @@ test('download is lazy and single-flight, and installation runs once only after 
   assert.equal(updater.autoDownload, false);
   assert.equal(updater.autoInstallOnAppQuit, false);
   assert.equal(updater.logger, console);
+  assert.deepEqual(feeds, [{
+    provider: 'generic',
+    url: 'https://releases.example/download/v3.0.0/',
+    useMultipleRangeRequest: false
+  }]);
   assert.equal(app.listenerCount('quit'), 0);
   download.resolve();
   await first;

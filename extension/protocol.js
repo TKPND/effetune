@@ -1,6 +1,7 @@
 export const CHANNEL_NAME = 'effetune-extension';
 export const CONTROL_COMMANDS = new Set(['getState', 'start', 'stop', 'setBypass', 'applyPreset', 'openEditor']);
-export const MODEL_COMMANDS = new Set(['getState', 'setPipeline', 'savePreset', 'importPreset', 'deletePreset', 'workletMessage', 'setTelemetry', 'irLibrary']);
+export const MODEL_COMMANDS = new Set(['getState', 'setPipeline', 'savePreset', 'importPreset', 'deletePreset', 'workletMessage', 'setTelemetry', 'irLibrary', 'setRules', 'setSampleRate']);
+const SESSION_COMMANDS = new Set(['stop', 'setBypass', 'applyPreset', 'setPipeline', 'savePreset', 'importPreset', 'workletMessage', 'setTelemetry']);
 
 export function isInternalSender(sender, paths, runtime = chrome.runtime) {
     return sender?.id === runtime.id && paths.some(path => sender.url === runtime.getURL(path));
@@ -20,9 +21,10 @@ export class ExtensionClient extends EventTarget {
         this.pending = new Map();
         this.sequence = 0;
         this.snapshot = null;
+        this.sessionId = null;
         this.channel.onmessage = ({ data }) => {
             if (data?.kind === 'state') this.acceptState(data.state);
-            if (data?.kind === 'workletMessage') {
+            if (data?.kind === 'workletMessage' && data.sessionId === this.sessionId) {
                 this.dispatchEvent(new CustomEvent('workletMessage', { detail: data.message }));
             }
             if (data?.kind === 'irLibraryProgress' && data.clientId === this.id) {
@@ -50,10 +52,11 @@ export class ExtensionClient extends EventTarget {
         return state;
     }
 
-    async request(command, args = {}) {
+    async request(command, args = {}, sessionId = this.sessionId) {
+        if (SESSION_COMMANDS.has(command)) args = { sessionId, ...args };
         if (CONTROL_COMMANDS.has(command)) {
             const result = await runtimeRequest(command, args);
-            if (result?.status) this.acceptState(result);
+            if (result?.revision !== undefined) this.acceptState(result);
             return result;
         }
         if (!MODEL_COMMANDS.has(command)) throw new Error('This action is unavailable.');
@@ -72,12 +75,12 @@ export class ExtensionClient extends EventTarget {
             this.pending.set(requestId, { resolve, reject, timer });
             this.channel.postMessage({ kind: 'request', clientId: this.id, requestId, command, args });
         });
-        if (result?.status) this.acceptState(result);
+        if (result?.revision !== undefined) this.acceptState(result);
         return result;
     }
 
     sendFrequencyPreview(frequency) {
-        this.channel.postMessage({ kind: 'frequencyPreview', clientId: this.id, frequency });
+        this.channel.postMessage({ kind: 'frequencyPreview', clientId: this.id, sessionId: this.sessionId, frequency });
     }
 
     close() {

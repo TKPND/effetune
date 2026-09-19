@@ -155,7 +155,20 @@ test('Spatial Mapper routing UI edits the selected component at out * 16 + in', 
   const plugin = new Plugin();
   const ui = plugin.createUI();
   assert.equal(ui.className, 'plugin-parameter-ui spatial-mapper-ui');
-  assert.equal(plugin._routingControls.length, 8);
+  // Stereo bus routing hands the plugin two channels of the six-channel pipeline.
+  assert.equal(plugin._routingControls.length, 2);
+  assert.equal(plugin._routingControls[0].length, 2);
+  plugin.setParameters({ ic: 4 });
+  assert.equal(plugin._routingControls[0].length, 2);
+  plugin.channel = 'L';
+  plugin.updateParameters();
+  assert.equal(plugin._routingControls.length, 1);
+  assert.equal(plugin._routingControls[0].length, 1);
+  plugin.channel = 'A';
+  plugin.updateParameters();
+  assert.equal(plugin._routingControls.length, 6);
+  assert.equal(plugin._routingControls[0].length, 4);
+  plugin.setParameters({ ic: 2 });
   assert.equal(plugin._routingControls[0].length, 2);
 
   for (const key of ['dm', 'fm', 'rm']) {
@@ -189,8 +202,7 @@ test('Spatial Mapper routing UI edits the selected component at out * 16 + in', 
   assert.equal(Number(numberInput.value), 0.35);
 
   plugin.setParameters({ ic: 4 });
-  plugin._syncRoutingUI();
-  assert.equal(plugin._routingControls.length, 8);
+  assert.equal(plugin._routingControls.length, 6);
   assert.equal(plugin._routingControls[0].length, 4);
   assert.equal(plugin.fm[2 * 16 + 1], 0.35);
   assert.equal(Number(plugin._routingControls[2][1].slider.value), 0.35);

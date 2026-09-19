@@ -555,8 +555,8 @@ export class AudioManager {
     }
 
     // Captured streams are acquired by their host, independently of DSP lifetime.
-    async initializeCapturedStream(stream) {
-        const preferences = { sampleRate: 48000, outputChannels: 2, lowLatencyOutput: true,
+    async initializeCapturedStream(stream, { sampleRate = 48000 } = {}) {
+        const preferences = { sampleRate, outputChannels: 2, lowLatencyOutput: true,
             latencyHint: 'interactive', useWasmDsp: true, outputDeviceId: 'default' };
         const contextError = await this.contextManager.initAudioContext(preferences);
         if (contextError) throw new Error(contextError);
@@ -576,14 +576,14 @@ export class AudioManager {
         return this.contextManager.audioContext.sampleRate;
     }
 
-    async closeCapturedStream() {
+    async closeCapturedStream({ releaseInput = true } = {}) {
         this._clearSyncedMeasurements();
         this.telemetryHub?.setVisualSyncResolver?.(null);
         if (this._visualSyncUpdateTimer != null) clearTimeout(this._visualSyncUpdateTimer);
         this._visualSyncUpdateTimer = null;
         this._removeDspVisibilityListener();
         this.powerPolicyController.dispose();
-        this.ioManager.cleanupAudio();
+        this.ioManager.cleanupAudio({ releaseInput });
         this.contextManager.workletNode?.disconnect();
         await this.contextManager.closeAudioContext();
         this.updateExposedProperties();

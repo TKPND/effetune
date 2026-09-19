@@ -7,6 +7,8 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const baseCss = read('../../effetune-theme.css') +
   read('../../effetune.css').replace('@import url("effetune-theme.css");', '');
 const extensionCss = read('../../extension/editor.css');
+const collapseManagerSource = read('../../js/ui/plugin-list/collapse-manager.js')
+  .replace('export class CollapseManager', 'class CollapseManager');
 
 async function captureLayout(page, { extension, collapsed, columns }) {
   const bodyClass = extension ? 'extension-editor' : '';
@@ -120,6 +122,106 @@ test('extension reuses canonical fixed pipeline, pull-tab, and toolbar geometry'
   }
 });
 
+test('extension editor collapses its desktop sidebar before the fixed pipeline overflows', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
+    await page.setContent(`
+      <body class="extension-editor layout-desktop">
+        <div class="main-container">
+          <div class="plugin-list-shell">
+            <div class="plugin-list" id="pluginList"></div>
+            <div class="plugin-list-pull-tab" id="pluginListPullTab">◀</div>
+          </div>
+          <div class="pipeline" id="pipeline"><div id="pipelineList"><div class="pipeline-column"></div></div></div>
+        </div>
+      </body>`);
+    await page.addStyleTag({ content: `${baseCss}${extensionCss}\n* { transition: none !important; }` });
+    await page.locator('#pipeline').evaluate(element => { element.style.width = '1104px'; });
+    const expanded = await page.evaluate(() => ({
+      pipelineRight: document.getElementById('pipeline').getBoundingClientRect().right,
+      scrollWidth: document.documentElement.scrollWidth
+    }));
+    assert.ok(expanded.pipelineRight > 1180);
+    assert.ok(expanded.scrollWidth > 1200);
+
+    await page.addScriptTag({ type: 'module', content: `
+      ${collapseManagerSource}
+      window.appInitializedListener = true;
+      window.uiManager = { layoutMode: { isMobile: false } };
+      const manager = new CollapseManager({ pluginList: document.getElementById('pluginList') });
+      manager.markReady();
+      window.extensionCollapseTest = manager;
+    ` });
+    await page.waitForFunction(() => document.querySelector('.main-container').classList.contains('plugin-list-collapsed'));
+    const collapsed = await page.evaluate(() => ({
+      pipelineRight: document.getElementById('pipeline').getBoundingClientRect().right,
+      scrollWidth: document.documentElement.scrollWidth,
+      ariaExpanded: document.getElementById('pluginListPullTab').getAttribute('aria-expanded')
+    }));
+    assert.ok(collapsed.pipelineRight <= 1180);
+    assert.equal(collapsed.scrollWidth, 1200);
+    assert.equal(collapsed.ariaExpanded, 'false');
+
+    await page.setViewportSize({ width: 1600, height: 700 });
+    await page.waitForFunction(() => !document.querySelector('.main-container').classList.contains('plugin-list-collapsed'));
+    const expandedAgain = await page.evaluate(() => ({
+      pipelineRight: document.getElementById('pipeline').getBoundingClientRect().right,
+      scrollWidth: document.documentElement.scrollWidth
+    }));
+    assert.ok(expandedAgain.pipelineRight <= 1580);
+    assert.equal(expandedAgain.scrollWidth, 1600);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('extension editor colors stay on the canonical theme in every browser color mode', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 760, height: 700 } });
+    await page.setContent(`
+      <body class="extension-editor">
+        <header class="extension-header">
+          <div class="extension-brand"><h1>EffeTune</h1><p>Listening tab</p></div>
+          <span class="editor-status">Connected</span>
+        </header>
+        <div class="pipeline-item">
+          <span class="plugin-name">Graphic Equalizer</span>
+          <select><option>Preset</option></select>
+          <input type="text" value="0.0">
+        </div>
+      </body>`);
+    await page.addStyleTag({ content: `${baseCss}${extensionCss}\n* { transition: none !important; }` });
+
+    const captureColors = async colorScheme => {
+      await page.emulateMedia({ colorScheme });
+      return page.evaluate(() => {
+        const style = selector => getComputedStyle(document.querySelector(selector));
+        return {
+          rootColorScheme: getComputedStyle(document.documentElement).colorScheme,
+          body: { color: style('body').color, background: style('body').backgroundColor },
+          header: { color: style('h1').color, background: style('header').backgroundColor },
+          pluginName: style('.plugin-name').color,
+          select: { color: style('select').color, background: style('select').backgroundColor },
+          input: { color: style('input').color, background: style('input').backgroundColor }
+        };
+      });
+    };
+
+    const lightBrowser = await captureColors('light');
+    const darkBrowser = await captureColors('dark');
+    assert.deepEqual(lightBrowser, darkBrowser);
+    assert.equal(lightBrowser.rootColorScheme, 'dark');
+    assert.equal(lightBrowser.pluginName, 'rgb(246, 248, 251)');
+    assert.notEqual(lightBrowser.pluginName, lightBrowser.body.background);
+    assert.notEqual(lightBrowser.select.color, lightBrowser.select.background);
+    assert.notEqual(lightBrowser.input.color, lightBrowser.input.background);
+  } finally {
+    await browser.close();
+  }
+});
+
 
 test('extension popup keeps long tab titles truncated and Apply reachable', async () => {
   const browser = await chromium.launch({ headless: true });
@@ -130,12 +232,26 @@ test('extension popup keeps long tab titles truncated and Apply reachable', asyn
       .replace('<script type="module" src="extension/popup.js"></script>', '');
     await page.setContent(html);
     await page.addStyleTag({ content: read('../../extension/popup.css') });
+    await page.locator('#emptySessions').evaluate(element => { element.hidden = true; });
+    await page.locator('#sessionList').evaluate(element => {
+      element.innerHTML = `
+        <article class="session-row">
+          <label class="session-row-main">
+            <input type="radio" checked>
+            <span class="session-row-copy">
+              <span class="session-title"></span>
+              <span class="session-status"><span class="status-indicator processing"></span>Processing</span>
+            </span>
+          </label>
+          <div class="session-actions"><label><input type="checkbox">Bypass</label><button>Stop</button></div>
+        </article>`;
+    });
     for (const title of ['Short title', '長いブラウザタブのタイトルです。'.repeat(50), 'x'.repeat(1000)]) {
-      await page.locator('#targetTitle').evaluate((element, text) => {
+      await page.locator('.session-title').evaluate((element, text) => {
         element.textContent = text;
       }, title);
       const layout = await page.evaluate(() => {
-        const title = document.getElementById('targetTitle');
+        const title = document.querySelector('.session-title');
         const apply = document.getElementById('applyPresetButton').getBoundingClientRect();
         return {
           width: document.body.getBoundingClientRect().width,
@@ -157,6 +273,34 @@ test('extension popup keeps long tab titles truncated and Apply reachable', asyn
       await page.locator('#applyPresetButton').evaluate(button => { button.disabled = false; });
       await page.locator('#applyPresetButton').click({ timeout: 2000 });
     }
+  } finally {
+    await browser.close();
+  }
+});
+
+test('extension popup uses the available width in a mobile browser tab', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 412, height: 700 } });
+    const html = read('../../extension/popup.html')
+      .replace('<link rel="stylesheet" href="extension/popup.css">', '')
+      .replace('<script type="module" src="extension/popup.js"></script>', '');
+    await page.setContent(html);
+    await page.addStyleTag({ content: read('../../extension/popup.css') });
+
+    const layout = await page.evaluate(() => {
+      const body = document.body.getBoundingClientRect();
+      const controls = [...document.querySelectorAll('button, select')].map(element =>
+        element.getBoundingClientRect().height);
+      return {
+        body: { left: body.left, right: body.right, width: body.width },
+        scrollWidth: document.documentElement.scrollWidth,
+        minimumControlHeight: Math.min(...controls)
+      };
+    });
+    assert.deepEqual(layout.body, { left: 0, right: 412, width: 412 });
+    assert.equal(layout.scrollWidth, 412);
+    assert.ok(layout.minimumControlHeight >= 40);
   } finally {
     await browser.close();
   }

@@ -14,7 +14,7 @@ Un procesador de efectos de audio en tiempo real, diseñado para entusiastas del
 
 ### Extensión de navegador
 
-Procesa una pestaña de Chrome o Edge sin un dispositivo de audio virtual. Consulta la [guía de la extensión de navegador](browser-extension.md).
+Procesa hasta cuatro pestañas de Chrome o Edge con cadenas independientes, preajustes según la URL y frecuencia de muestreo ajustable, sin un dispositivo de audio virtual. Consulta la [guía de la extensión de navegador](browser-extension.md).
 
 [![Screenshot](../../../images/screenshot.png)](https://effetune.frieve.com/effetune.html)
 
@@ -54,10 +54,6 @@ Antes de usar EffeTune, deberás configurar el enrutamiento de audio. Aquí se e
    - O selecciona **Abrir archivo de música...** desde el menú **Archivo** (solo aplicación de escritorio)
    - O arrastra el archivo de música a la ventana
 - Para usar solo el reproductor, selecciona Ninguno (solo reproductor de archivos de música) como dispositivo de entrada en Configuración de audio y evita usar una entrada de audio en vivo
-
-### Reproducción sin pausas
-
-**Reproducción sin pausas** está activada de forma predeterminada y puede cambiarse en **Configuración de audio**. Cuando está activada, las pistas locales compatibles se enlazan sin pausa; la compatibilidad está limitada por el formato del archivo y el navegador o la aplicación actuales. Los formatos no compatibles y algunos entornos móviles usan automáticamente un modo alternativo que limita la memoria, por lo que aún puede haber una pausa breve. Al desactivarla se priorizan un menor uso de memoria y la estabilidad, y puede aparecer una pausa breve entre pistas. Cambiar esta opción no interrumpe la pista actual.
 
 ### Configuración para Servicios de Streaming
 
@@ -274,6 +270,10 @@ Para eliminar la respuesta propia de la interfaz de audio, conecta directamente 
 Las mediciones que contienen datos de respuesta impulsional muestran un gráfico normalizado de **Respuesta impulsional** en los resultados. La vista inicial abarca de 0 a 10 ms desde el inicio detectado. Usa la rueda del ratón o los botones para ampliar o reducir el eje temporal, y arrastra el gráfico o usa el control deslizante para desplazarte. Al seleccionar un punto de medición se actualiza el gráfico; **Todos (promedio)** muestra el primer punto con una respuesta impulsional guardada y lo identifica sobre el gráfico. Usa **Exportar respuesta impulsional (WAV)** debajo del gráfico para guardar la respuesta completa y sin normalizar del punto mostrado como un WAV mono de coma flotante de 32 bits con la frecuencia de muestreo de la medición.
 
 Para consultar la frecuencia, fase, retardo de grupo mínimo, retardo de grupo excedente e impulso del pipeline activo, con hasta cuatro salidas y respuestas de altavoz guardadas, consulta la [guía de Pipeline Analyzer](pipeline-analyzer.md).
+
+### Reproducción sin pausas
+
+**Reproducción sin pausas** está activada de forma predeterminada y puede cambiarse en **Configuración de audio**. Cuando está activada, las pistas locales compatibles se enlazan sin pausa; la compatibilidad está limitada por el formato del archivo y el navegador o la aplicación actuales. Los formatos no compatibles y algunos entornos móviles usan automáticamente un modo alternativo que limita la memoria, por lo que aún puede haber una pausa breve. Al desactivarla se priorizan un menor uso de memoria y la estabilidad, y puede aparecer una pausa breve entre pistas. Cambiar esta opción no interrumpe la pista actual.
 
 ## Combinaciones Comunes de Efectos
 

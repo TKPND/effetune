@@ -236,6 +236,8 @@ export class UIManager {
         this.externalAssetSummaryTimer = null;
         this.shareAttemptRevision = 0;
         this.audioGlitchWarningTimer = null;
+        this.effectPipelineHidden = null;
+        this.effectPipelineVisibilityObserver = null;
 
         // UI elements
         this.errorDisplay = document.getElementById('errorDisplay');
@@ -313,6 +315,7 @@ export class UIManager {
         this.initOpenMusicButton();
         this.initOpenLibraryButton();
         this.initLibraryRecovery();
+        this.initEffectPipelineVisibilityTracking();
 
         // Initialize clipboard buttons
         this.undoButton = document.getElementById('undoButton');
@@ -2207,6 +2210,33 @@ export class UIManager {
             return this.showEffectPipelineView(options);
         }
         return this.showLibraryView(options);
+    }
+
+    // Analyzer output is only drawn inside the Effect Pipeline, so analyzer DSP
+    // is suppressed while the Music Library, the mobile Player tab, or a
+    // Double Blind Test replaces the pipeline. Body classes change from many
+    // places, so they are observed instead of hooked at each call site.
+    initEffectPipelineVisibilityTracking() {
+        const body = document.body;
+        if (body && typeof MutationObserver === 'function') {
+            this.effectPipelineVisibilityObserver = new MutationObserver(() => this.updateEffectPipelineVisibility());
+            this.effectPipelineVisibilityObserver.observe(body, { attributes: true, attributeFilter: ['class'] });
+        }
+        this.updateEffectPipelineVisibility();
+    }
+
+    isEffectPipelineHidden() {
+        const classList = document.body?.classList;
+        return Boolean(classList?.contains('view-library') ||
+            (classList?.contains('layout-mobile') && classList?.contains('view-player')) ||
+            this.isDoubleBlindActive());
+    }
+
+    updateEffectPipelineVisibility() {
+        const hidden = this.isEffectPipelineHidden();
+        if (hidden === this.effectPipelineHidden) return;
+        this.effectPipelineHidden = hidden;
+        this.audioManager?.powerPolicyController?.setDspUiSuppressed?.('effect-pipeline-hidden', hidden);
     }
 
     /**
