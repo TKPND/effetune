@@ -398,6 +398,7 @@
   "library.job.phase.ready": "جاهز للتثبيت",
   "library.job.phase.cancel_requested": "طُلب الإلغاء",
   "library.job.phase.committing": "جارٍ التثبيت",
+  "library.job.phase.starting_playback": "جارٍ بدء التشغيل",
   "library.job.terminal.succeeded": "اكتمل",
   "library.job.terminal.failed": "فشل",
   "library.job.terminal.cancelled": "أُلغي",
@@ -444,6 +445,8 @@
   "library.confirm.mergeFolders": "يحتوي المجلد المحدد على مجلدات موجودة بالفعل في المكتبة. هل تريد استبدالها بالمجلد الأصل المحدد؟",
   "library.confirm.deletePlaylist": "هل تريد حذف قائمة التشغيل هذه؟ ستبقى المقاطع في مكتبتك.",
   "library.error.actionFailed": "تعذر على مكتبة الموسيقى إكمال هذا الإجراء. يُرجى المحاولة مرة أخرى.",
+  "library.error.playbackStartTimeout": "تعذر بدء التشغيل لأن تحميل المقطع توقف. يُرجى المحاولة مرة أخرى.",
+  "library.error.playbackStartFailed": "تعذر بدء التشغيل. يُرجى المحاولة مرة أخرى.",
   "library.error.folderAlreadyAdded": "{name} موجود بالفعل في مكتبتك.",
   "library.error.folderInsideExisting": "{name} مضمّن بالفعل في {existing}.",
   "library.recovery.initializing.title": "جارٍ تشغيل مكتبة الموسيقى",
@@ -804,6 +807,7 @@
 
   // FIR filters
   "crosstalkCancellation.error.design": "تعذر إعداد مرشحات Crosstalk Cancellation. تحقّق من القياسات الأربعة المحددة والإعدادات، ثم أعد المحاولة.",
+  "bassManagement.error.design": "تعذر إعداد مرشحات Bass Management. جرّب تقليل Taps ثم أعد المحاولة.",
   "firCrossover.error.design": "تعذر تصميم مرشحات FIR Crossover. جرّب قيمة أقل لـ Taps أو إعدادات أقل حدة.",
   "fiveBandFirPeq.error.design": "تعذر تصميم مرشح 5Band FIR PEQ. جرّب قيمة أقل لـ Taps أو إعدادات أقل حدة.",
   "fiveBandFirPeq.graph.target": "الهدف",

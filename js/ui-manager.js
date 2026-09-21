@@ -2074,7 +2074,7 @@ export class UIManager {
             service,
             sequenceClient,
             runtime: this.libraryManager.runtime,
-            requestFolderAccess: folderId => this.libraryManager?.requestFolderAccess(folderId)
+            requestFolderAccess: (...args) => this.libraryManager?.requestFolderAccess(...args)
         });
         this.libraryManager.bulkOperationService = this.libraryPlaybackBridge;
         if (this.audioPlayer) this.audioPlayer.libraryOperationService = this.libraryPlaybackBridge;

@@ -236,6 +236,7 @@ def _expand_legacy_short_key_arrays_v1(
     effect_label: str,
     members: Mapping[str, str],
     item_label: str = "channel",
+    extend_eight_channel_defaults: bool = False,
 ) -> None:
     """Rename the app's whole-array short keys onto their public parameter names.
 
@@ -258,10 +259,17 @@ def _expand_legacy_short_key_arrays_v1(
                 f"legacy {effect_label} contains unsupported or incomplete "
                 f"{item_label} settings"
             )
-        # App presets retain eight channels when the extended channels are at their defaults.
-        original_count = 7 if legacy_name == "l" else 8
-        default_value = 0 if legacy_name in ("v", "d") else False
-        parameters[public_name] = values + [default_value] * 8 if len(values) == original_count else values
+        if extend_eight_channel_defaults:
+            # MultiChannel Panel presets retain eight channels when the extended
+            # channels are at their defaults.
+            original_count = 7 if legacy_name == "l" else 8
+            default_value = 0 if legacy_name in ("v", "d") else False
+            values = (
+                values + [default_value] * 8
+                if len(values) == original_count
+                else values
+            )
+        parameters[public_name] = values
 
 
 def _prepare_legacy_parameters_v1(
@@ -314,6 +322,18 @@ def _prepare_legacy_parameters_v1(
                 "legacy Matrix supplies routing settings more than once"
             )
         parameters["matrixRoutes"] = parameters.pop("mx")
+    elif effect_type == "BassManagement":
+        _expand_legacy_short_key_arrays_v1(
+            parameters,
+            effect_label="Bass Management",
+            members={
+                "ro": "roles",
+                "fc": "frequencies",
+                "sl": "slopes",
+                "rt": "routes",
+                "ri": "routeInversions",
+            },
+        )
     elif effect_type == "MultibandCompressor":
         discarded = _expand_legacy_object_array_v1(
             parameters,
@@ -402,6 +422,7 @@ def _prepare_legacy_parameters_v1(
                 "d": "delay",
                 "l": "link",
             },
+            extend_eight_channel_defaults=True,
         )
     elif effect_type == "MultibandSaturation":
         _expand_legacy_object_array_v1(

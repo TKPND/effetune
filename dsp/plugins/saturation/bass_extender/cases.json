@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "sampleRate": 48000, "blockSize": 127, "channels": 2,
+    "channelMode": "stereo",
+    "params": { "am": 25, "og": 0 }
+  },
+  "cases": [
+    { "id": "mixed-noise-default", "stimulus": "noise" },
+    { "id": "octave-generation-sweep-mono", "stimulus": "sweep", "channels": 1, "channelMode": "mono", "frames": 48001, "params": { "am": 100 } },
+    { "id": "dry-exact", "stimulus": "noise", "params": { "am": 0, "og": 0 } },
+    { "id": "impulse-44100", "stimulus": "imp", "sampleRate": 44100, "blockSize": 63 },
+    { "id": "noise-88200", "stimulus": "noise", "sampleRate": 88200, "blockSize": 65 },
+    { "id": "sweep-96000", "stimulus": "sweep", "sampleRate": 96000, "blockSize": 257 },
+    { "id": "noise-176400", "stimulus": "noise", "sampleRate": 176400, "params": { "am": 100, "og": -6 } },
+    { "id": "silence-192000", "stimulus": "silence", "sampleRate": 192000, "channels": 1, "channelMode": "mono" },
+    { "id": "single-frame", "stimulus": "noise", "blockSize": 1, "frames": 4097 },
+    { "id": "automation", "stimulus": "noise", "frames": 24001, "events": [
+      { "frame": 4001, "params": { "am": 100 } },
+      { "frame": 10003, "params": { "og": -12 } },
+      { "frame": 17001, "params": { "am": 0, "og": 0 } }
+    ] }
+  ]
+}

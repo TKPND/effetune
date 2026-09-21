@@ -217,12 +217,42 @@ void testMultiChannelLevelFrame() {
   TOPOLOGY_CHECK(payload[17u] == 0u && payload[18u] == 0u && payload[19u] == 0u);
 }
 
+void testMultiChannelPeakWindowWithIrregularBlocks() {
+  const effetune::KernelDescriptor *descriptor = et_kernel_descriptor_MultiChannelPanelPlugin();
+  KernelHarness harness(descriptor, 960.0F, 1u, 17u);
+  std::array<float, effetune::generated::MultiChannelPanelPluginParams::kFloatCount> params{};
+  TOPOLOGY_CHECK(harness.kernel->stageParameters(params.data(),
+                                                 static_cast<std::uint32_t>(params.size()),
+                                                 descriptor->paramsHash) == ET_OK);
+
+  const std::array<std::uint32_t, 4> block_sizes = {5u, 3u, 7u, 17u};
+  bool first_sample = true;
+  for (const std::uint32_t block_size : block_sizes) {
+    std::vector<float> audio(block_size, 0.25F);
+    if (first_sample) {
+      audio[0] = 1.0F;
+      first_sample = false;
+    }
+    harness.process(audio.data(), 1u, block_size);
+  }
+
+  TOPOLOGY_CHECK(harness.telemetry() == 28u);
+  checkFrameHeader(harness, 10u, 12u);
+  TOPOLOGY_CHECK(near(readF32(harness.output.data() + 20u), 1.0F));
+
+  std::array<float, 1> next = {0.1F};
+  harness.process(next.data(), 1u, 1u);
+  TOPOLOGY_CHECK(harness.telemetry() == 28u);
+  TOPOLOGY_CHECK(near(readF32(harness.output.data() + 20u), 0.25F));
+}
+
 } // namespace
 
 int main() {
   testDescriptorsAndChannelCountFrames();
   testChannelDividerOutOfRangeSlopeClampsToSectionCapacity();
   testMultiChannelLevelFrame();
+  testMultiChannelPeakWindowWithIrregularBlocks();
   if (failures != 0) {
     std::fprintf(stderr, "Basics topology native tests failed: %d\n", failures);
     return 1;

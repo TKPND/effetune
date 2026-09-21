@@ -1,6 +1,6 @@
 ---
 title: "Plugins de base - EffeTune"
-description: "Plugins audio essentiels, dont Volume, Mute, Stereo Balance, FIR Crossover, Matrix et plus encore."
+description: "Plugins audio essentiels, dont Bass Management, Volume, Mute, Stereo Balance, FIR Crossover, Matrix et plus encore."
 lang: fr
 ---
 
@@ -15,6 +15,7 @@ Appuyez sur l’icône de spectre d’un graphique compatible pour passer succes
 
 ## Liste des plugins
 
+* [Bass Management](#bass-management) - Envoie les graves gérés et le LFE vers les sorties de caisson choisies
 * [Channel Divider](#channel-divider) - Divise l'audio stéréo en bandes de fréquences et les répartit vers des paires de sorties stéréo
 * [DC Offset](#dc-offset) - Ajoute ou corrige un décalage DC constant
 * [FIR Crossover](#fir-crossover) - Répartit le signal stéréo en bandes à forte pente avec des filtres FIR
@@ -24,6 +25,38 @@ Appuyez sur l’icône de spectre d’un graphique compatible pour passer succes
 * [Polarity Inversion](#polarity-inversion) - Inverse la polarité du signal pour correction ou routage spécial
 * [Stereo Balance](#stereo-balance) - Ajuste l'équilibre gauche-droite de votre musique
 * [Volume](#volume) - Contrôle le volume de la lecture
+
+## Bass Management
+
+Bass Management envoie les graves des canaux principaux sélectionnés et toute entrée LFE dédiée vers les sorties de caisson choisies. Chaque canal **Managed** garde les aigus sur sa sortie principale et envoie les graves aux caissons. Il s'utilise avec un bus multicanal alimentant des enceintes principales et un ou plusieurs caissons, et nécessite le moteur WASM DSP.
+
+Tant qu'aucune **Sub Outputs** n'est sélectionnée, Bass Management ne sépare ni ne distribue les graves aux caissons ; les canaux d'entrée passent sans crossover. Une nouvelle instance démarre avec les canaux réels du bus réglés sur **Managed** et aucune **Sub Outputs** sélectionnée.
+
+Sélectionnez **All** dans le routage de bus de l'effet et prévoyez assez de canaux de sortie pour toutes les enceintes et tous les caissons. Le tableau affiche le rôle de l'entrée et les sorties de caisson. Une sortie de caisson ne peut pas aussi être une enceinte principale **Full Range** ou **Managed**. Une entrée **LFE** peut avoir le même numéro qu'une sortie de caisson : elle est collectée avant la création des sorties et n'est envoyée qu'une fois.
+
+### Guide d'amélioration du son
+
+- Pour une stéréo avec deux caissons, utilisez quatre canaux : réglez 1 et 2 sur **Managed**, puis sélectionnez 3 et 4 comme **Sub Outputs**. Leur rôle devient automatiquement **LFE** ; utilisez Matrix pour conserver ou désactiver chaque trajet de l'enceinte principale vers le caisson.
+- Pour un programme surround, réglez seulement les vrais canaux principaux sur **Managed** et le canal LFE source sur **LFE**, puis choisissez les sorties de caisson.
+- Commencez à 80 Hz et 24 dB/oct pour chaque canal géré. Augmentez la fréquence si l'enceinte principale descend peu dans le grave ; prenez une pente plus forte pour réduire le recouvrement. Vérifiez la plage utile de l'enceinte avant d'augmenter le niveau.
+- Une entrée envoyée à plusieurs caissons est répartie électriquement de façon égale, mais cela n'évite pas les crêtes de signaux combinés. Réduisez **Headroom** si nécessaire, surveillez le niveau après le plugin et utilisez Brickwall Limiter en fin de chaîne pour contrôler les crêtes.
+- Utilisez **LFE Gain** seulement si la source n'a pas déjà appliqué le réglage LFE voulu. Il n'y a pas de correction automatique de niveau cinéma. Ajoutez ensuite un passe-haut, une EQ ou un réglage de polarité par caisson ; utilisez MultiChannel Panel pour trim, mute/solo et jusqu'à 30 ms de delay, puis un limiteur si nécessaire.
+
+### Paramètres
+
+- **Phase** : **IIR** offre moins de latence et modifie la phase autour du crossover. **Linear** aligne temporellement la séparation, mais ajoute une latence visible et peut créer du pre-ringing.
+- **Taps** : choisissez 8192, 16384 ou 32768 pour Linear. Davantage de Taps améliorent la précision des graves et des pentes fortes, mais augmentent préparation et latence. Le réglage initial est 16384 et concerne Linear.
+- **Headroom** atténue toutes les sorties de la même façon. **Bass Gain** règle les graves séparés de **Managed** avant le mixage ; **LFE Gain** règle de même les entrées **LFE**.
+- **Channel Role** définit chaque entrée : **Full Range** conserve toute la source sur sa sortie principale ; **Managed** y conserve les aigus et envoie les graves aux caissons ; **LFE** envoie la source uniquement aux caissons ; **Unused** réserve généralement une entrée pour une sortie de caisson.
+- **Crossover Frequency** règle chaque crossover **Managed** de 20 à 300 Hz ; une valeur plus haute envoie davantage de graves au caisson. **Slope** offre 24, 48 ou 96 dB/oct ; une valeur plus haute réduit le recouvrement.
+- **Sub Outputs** choisit les sorties de chaque entrée **Managed** ou **LFE**. Sélectionner un canal fait passer son **Channel Role** à **LFE**. Une sortie nouvellement sélectionnée commence avec des trajets **ON** à polarité normale depuis toutes les entrées du bus ; utilisez Matrix pour désactiver un trajet. Sans **Sub Outputs**, la séparation des graves et le routage vers les caissons s'arrêtent, et les canaux d'entrée passent sans crossover. **LFE Low-pass**, **LFE Frequency** et **LFE Slope** limitent en option le LFE au-dessus de 20 à 300 Hz avec 24, 48 ou 96 dB/oct, sans filtrer à nouveau les graves déjà séparés.
+- **ON** et **Ø** : dans chaque cellule du tableau des canaux, **ON** envoie cette entrée **Managed** ou **LFE** vers la sortie de caisson choisie. **Ø** inverse la polarité de ce seul trajet entre l'entrée et le caisson, afin de l'ajuster au résultat mesuré ou entendu. **Ø** n'est disponible que lorsque **ON** est activé ; désactiver **ON** désactive aussi **Ø**. La sortie principale de l'entrée ne change pas.
+
+### Affichage, état et calibration
+
+- Le résumé de routage indique quelles entrées alimentent chaque caisson. Vérifiez-le avant d'augmenter le niveau, surtout après avoir changé les canaux. Sélectionnez un canal **Managed** pour voir les réponses passe-haut et passe-bas actives, et non une courbe idéale.
+- L'état indique le mode, la préparation Linear et la latence effective en échantillons et ms. Modifier un réglage Linear peut réduire ou interrompre brièvement le son. Si la préparation échoue, réduisez **Taps** et réessayez. Si l'ancienne configuration ne peut pas être utilisée, les canaux principaux normaux passent avec un retard identique, les sorties réservées sont silencieuses et le LFE ne joue pas avant la fin de la préparation.
+- Le bypass de l'hôte rétablit l'audio et l'affectation d'origine ; le routage, la protection et l'alignement de Bass Management ne restent pas actifs. Pour comparer ou couper le son en conservant le câblage, utilisez MultiChannel Panel après. Linear décrit le crossover : une EQ/passe-haut IIR ou un delay relatif ajouté ensuite change la phase du système entier. Enregistrez la chaîne calibrée dans un seul preset.
 
 ## Channel Divider
 

@@ -335,7 +335,6 @@ class SubSynthPlugin extends PluginBase {
   createUI() {
     const container = document.createElement("div");
     container.className = "sub-synth-plugin-ui plugin-parameter-ui";
-
     // Helper to create a slope select box
     const createSlopeSelect = (current, onChange, paramName) => {
       const select = document.createElement("select");

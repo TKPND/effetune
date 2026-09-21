@@ -170,6 +170,36 @@ test('MultiChannel Panel preserves old array lengths, expands stopped presets, a
   assert.match(css, /\.multichannel-panel-link-button\[hidden\]\s*\{\s*display: none;/);
 });
 
+test('MultiChannel Panel keeps a fixed peak window across irregular block sizes', () => {
+  const Plugin = loadBaselinePlugin('basics/multi_channel_panel.js', 'MultiChannelPanelPlugin');
+  const panel = new Plugin();
+  const process = new Function('data', 'parameters', 'context', panel.processorString);
+  const context = {};
+  const blockSizes = [5, 3, 7, 17];
+  let firstSample = true;
+  let measurements;
+  for (const blockSize of blockSizes) {
+    const data = new Float32Array(blockSize).fill(0.25);
+    if (firstSample) {
+      data[0] = 1;
+      firstSample = false;
+    }
+    const expected = Array.from(data);
+    process(data, {
+      ...panel.getParameters(), enabled: true, channelCount: 1, blockSize, sampleRate: 960
+    }, context);
+    assert.deepEqual(Array.from(data), expected);
+    measurements = data.measurements;
+  }
+  assert.equal(measurements.channels[0].peak, 1);
+
+  const next = Float32Array.of(0.1);
+  process(next, {
+    ...panel.getParameters(), enabled: true, channelCount: 1, blockSize: 1, sampleRate: 960
+  }, context);
+  assert.equal(next.measurements.channels[0].peak, 0.25);
+});
+
 test('MultiChannel Panel active button foregrounds follow their backgrounds and clear together', () => {
   const Plugin = loadBaselinePlugin('basics/multi_channel_panel.js', 'MultiChannelPanelPlugin');
   const panel = new Plugin();

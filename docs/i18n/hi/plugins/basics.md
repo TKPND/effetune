@@ -1,6 +1,6 @@
 ---
 title: "बेसिक प्लगइन - EffeTune"
-description: "Volume, Mute, Stereo Balance, FIR Crossover, Matrix routing आदि सहित बुनियादी ऑडियो प्लगइन।"
+description: "Bass Management, Volume, Mute, Stereo Balance, FIR Crossover, Matrix routing आदि सहित बुनियादी ऑडियो प्लगइन।"
 lang: hi
 ---
 
@@ -15,6 +15,7 @@ lang: hi
 
 ## प्लगइन सूची
 
+- [Bass Management](#bass-management) - managed bass और LFE को चुने हुए subwoofer outputs पर भेजता है
 - [Channel Divider](#channel-divider) - stereo audio को frequency bands में बांटकर stereo output pairs पर भेजता है
 - [DC Offset](#dc-offset) - constant DC offset जोड़ता या ठीक करता है
 - [FIR Crossover](#fir-crossover) - FIR फ़िल्टर से stereo signal को तीखी slope वाले bands में बाँटता है
@@ -24,6 +25,37 @@ lang: hi
 - [Polarity Inversion](#polarity-inversion) - correction या special routing cases के लिए signal polarity flips करता है
 - [Stereo Balance](#stereo-balance) - आपके संगीत का left-right balance समायोजित करता है
 - [Volume](#volume) - music कितनी loud बजेगी, यह नियंत्रित करता है
+
+## Bass Management
+
+Bass Management चुने हुए main channels का low-frequency भाग और dedicated LFE input चुने हुए subwoofer outputs पर भेजता है। **Managed** channel अपने main output पर high frequencies रखता है और bass subwoofers को भेजता है। यह main speakers और एक या अधिक subwoofers वाले multichannel bus के लिए है और WASM DSP engine की आवश्यकता है।
+
+जब तक आप कोई **Sub Outputs** नहीं चुनते, Bass Management bass को अलग करके subwoofers तक नहीं भेजता; input channels बिना crossover के pass होते हैं। नई instance में actual bus channels **Managed** होते हैं और कोई **Sub Outputs** चयनित नहीं होता।
+
+effect bus routing में **All** चुनें और सभी main speakers तथा subwoofers के लिए पर्याप्त output channels सेट करें। तालिका input role और subwoofer outputs दिखाती है। कोई subwoofer output **Full Range** या **Managed** main नहीं हो सकता। **LFE** input और subwoofer output का channel number एक हो सकता है; output बनाने से पहले input लिया जाता है, इसलिए वह केवल एक बार भेजा जाता है।
+
+### साउंड समायोजन गाइड
+
+- stereo और दो subwoofers के लिए चार channels इस्तेमाल करें: 1/2 को **Managed** करें और 3/4 को **Sub Outputs** चुनें। उनकी roles अपने-आप **LFE** हो जाती हैं; हर main-to-subwoofer route को रखने या **OFF** करने के लिए Matrix का उपयोग करें।
+- surround सामग्री में केवल वास्तविक mains को **Managed** और source LFE channel को **LFE** बनाएं। हर managed channel के लिए 80 Hz और 24 dB/oct से शुरू करें; main speaker का bass सीमित हो तो frequency बढ़ाएं और overlap कम करने के लिए Slope बढ़ाएं।
+- कई subwoofers में समान electrical division combined signal peaks को नहीं रोकती। जरूरत हो तो **Headroom** घटाएं, बाद का meter देखें और peak control के लिए chain के अंत में Brickwall Limiter लगाएं। **LFE Gain** तभी उपयोग करें जब source chain ने वांछित LFE adjustment पहले न किया हो।
+- Bass Management के बाद subwoofer-specific high-pass, EQ या polarity रखें; फिर MultiChannel Panel में trim, mute/solo और 30 ms तक delay समायोजित करें।
+
+### पैरामीटर
+
+- **Phase**: **IIR** कम latency देता है और crossover के पास phase बदलता है। **Linear** split को समय में align करता है, लेकिन visible latency और pre-ringing दे सकता है.
+- **Taps**: Linear के लिए 8192, 16384 या 32768 चुनें। अधिक Taps bass और steep Slope की accuracy बढ़ाते हैं, पर preparation और latency बढ़ती है। आरंभिक value 16384 है।
+- **Headroom** सभी outputs को समान रूप से attenuate करता है। **Bass Gain** **Managed** से अलग bass और **LFE Gain** **LFE** input को subwoofer mix से पहले समायोजित करते हैं।
+- **Channel Role**: **Full Range** source को main output पर रखता है; **Managed** highs को main पर और bass को subs पर भेजता है; **LFE** source को केवल subs पर भेजता है; **Unused** सामान्यतः subwoofer output के लिए input reserve करता है।
+- **Crossover Frequency** प्रत्येक **Managed** channel के लिए 20–300 Hz है; अधिक value अधिक bass sub को भेजती है। **Slope** 24/48/96 dB/oct है; अधिक value overlap घटाती है।
+- **Sub Outputs** प्रत्येक **Managed** या **LFE** के outputs चुनता है। channel चुनने पर उसका **Channel Role** **LFE** हो जाता है। नए चुने output पर bus के सभी inputs से normal polarity में **ON** routes शुरू होते हैं; अलग route बंद करने के लिए Matrix इस्तेमाल करें। कोई **Sub Outputs** न होने पर bass को अलग करना और subwoofers तक भेजना रुक जाता है, और input channels बिना crossover के pass होते हैं। **LFE Low-pass**, **LFE Frequency**, **LFE Slope** वैकल्पिक रूप से LFE को 20–300 Hz और 24/48/96 dB/oct पर सीमित करते हैं; पहले अलग किए main bass पर दोबारा filter नहीं लगाते।
+- **ON** और **Ø**: channel table के हर cell में **ON** उस **Managed** या **LFE** input को चुने हुए subwoofer output पर भेजता है। **Ø** केवल input से subwoofer तक के उसी path की polarity उलटता है, जिससे उसे measurement या सुनने के परिणाम के अनुसार मिलाया जा सके। **Ø** केवल **ON** चुने रहने पर उपलब्ध है; **ON** बंद करने पर **Ø** भी बंद हो जाता है। इससे input का main output नहीं बदलता।
+
+### डिस्प्ले, स्थिति और calibration
+
+- routing summary हर subwoofer को feed करने वाले inputs दिखाता है। level बढ़ाने से पहले, खासकर channel count बदलने पर इसे देखें। **Managed** चुनने पर active high-pass और low-pass responses दिखते हैं, ideal curve नहीं।
+- status mode, Linear preparation और samples/ms में effective latency दिखाता है। Linear settings बदलने पर sound थोड़ी देर घट या रुक सकता है। तैयारी विफल हो तो **Taps** घटाकर फिर कोशिश करें। पिछली configuration उपलब्ध न हो तो normal mains matching delay के साथ pass होते हैं, reserved sub outputs silent रहते हैं और तैयारी तक LFE नहीं बजता।
+- host bypass original audio और channel assignment लौटाता है; Bass Management routing, protection और alignment नहीं रहते। wiring रखते हुए compare या mute के लिए बाद में MultiChannel Panel उपयोग करें। बाद का IIR high-pass/EQ या relative delay पूरे Linear system की phase बदलता है, इसलिए calibrated chain को एक preset में रखें।
 
 ## Channel Divider
 

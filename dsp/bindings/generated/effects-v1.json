@@ -289,6 +289,240 @@
       "assets": []
     },
     {
+      "type": "BassManagement",
+      "parameters": [
+        {
+          "name": "phase",
+          "type": "string",
+          "count": 1,
+          "default": "IIR",
+          "values": [
+            "IIR",
+            "Linear"
+          ]
+        },
+        {
+          "name": "taps",
+          "type": "string",
+          "count": 1,
+          "default": "16384",
+          "values": [
+            "8192",
+            "16384",
+            "32768"
+          ]
+        },
+        {
+          "name": "roles",
+          "type": "integer",
+          "count": 16,
+          "default": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimum": 0,
+          "maximum": 3
+        },
+        {
+          "name": "frequencies",
+          "type": "number",
+          "count": 16,
+          "default": [
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80
+          ],
+          "unit": "Hz",
+          "minimum": 20,
+          "maximum": 300
+        },
+        {
+          "name": "slopes",
+          "type": "integer",
+          "count": 16,
+          "default": [
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24,
+            24
+          ],
+          "unit": "dB/oct",
+          "values": [
+            24,
+            48,
+            96
+          ]
+        },
+        {
+          "name": "routes",
+          "type": "integer",
+          "count": 16,
+          "default": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "name": "subs",
+          "type": "integer",
+          "count": 1,
+          "default": 0,
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "name": "lfeFrequency",
+          "type": "number",
+          "count": 1,
+          "default": 120,
+          "unit": "Hz",
+          "minimum": 20,
+          "maximum": 300
+        },
+        {
+          "name": "lfeSlope",
+          "type": "integer",
+          "count": 1,
+          "default": 24,
+          "unit": "dB/oct",
+          "values": [
+            24,
+            48,
+            96
+          ]
+        },
+        {
+          "name": "lfeLowpass",
+          "type": "boolean",
+          "count": 1,
+          "default": false
+        },
+        {
+          "name": "bassGain",
+          "type": "number",
+          "count": 1,
+          "default": 0,
+          "unit": "dB",
+          "minimum": -24,
+          "maximum": 12
+        },
+        {
+          "name": "lfeGain",
+          "type": "number",
+          "count": 1,
+          "default": 0,
+          "unit": "dB",
+          "minimum": -24,
+          "maximum": 12
+        },
+        {
+          "name": "headroom",
+          "type": "number",
+          "count": 1,
+          "default": 0,
+          "unit": "dB",
+          "minimum": -24,
+          "maximum": 0
+        },
+        {
+          "name": "routeInversions",
+          "type": "integer",
+          "count": 16,
+          "default": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimum": 0,
+          "maximum": 65535
+        }
+      ],
+      "seeded": true,
+      "telemetry": [],
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "phase",
+          "taps"
+        ]
+      },
+      "assets": [
+        {
+          "name": "impulseResponse",
+          "kind": "impulseResponse",
+          "required": false
+        }
+      ]
+    },
+    {
       "type": "ChannelDivider",
       "parameters": [
         {
@@ -735,13 +969,57 @@
           "default": 0,
           "unit": "ms",
           "minimum": 0,
-          "maximum": 100
+          "maximum": 500
         }
       ],
       "seeded": false,
       "telemetry": [],
       "latency": {
         "kind": "zero"
+      },
+      "assets": []
+    },
+    {
+      "type": "AttackTonalBalance",
+      "parameters": [
+        {
+          "name": "attack",
+          "type": "number",
+          "count": 1,
+          "default": 0,
+          "unit": "dB",
+          "minimum": -12,
+          "maximum": 12
+        },
+        {
+          "name": "tonal",
+          "type": "number",
+          "count": 1,
+          "default": 0,
+          "unit": "dB",
+          "minimum": -12,
+          "maximum": 12
+        },
+        {
+          "name": "attackEnabled",
+          "type": "boolean",
+          "count": 1,
+          "default": true
+        },
+        {
+          "name": "tonalEnabled",
+          "type": "boolean",
+          "count": 1,
+          "default": true
+        }
+      ],
+      "seeded": false,
+      "telemetry": [],
+      "latency": {
+        "kind": "sampleRateDependent",
+        "dependsOn": [
+          "sampleRate"
+        ]
       },
       "assets": []
     },
@@ -6528,6 +6806,43 @@
       "assets": []
     },
     {
+      "type": "BassExtender",
+      "parameters": [
+        {
+          "name": "amount",
+          "type": "number",
+          "count": 1,
+          "default": 25,
+          "unit": "%",
+          "minimum": 0,
+          "maximum": 100
+        },
+        {
+          "name": "outputGain",
+          "type": "number",
+          "count": 1,
+          "default": 0,
+          "unit": "dB",
+          "minimum": -24,
+          "maximum": 0
+        }
+      ],
+      "seeded": false,
+      "sampleRates": [
+        44100,
+        48000,
+        88200,
+        96000,
+        176400,
+        192000
+      ],
+      "telemetry": [],
+      "latency": {
+        "kind": "zero"
+      },
+      "assets": []
+    },
+    {
       "type": "DynamicSaturation",
       "parameters": [
         {
@@ -6604,12 +6919,27 @@
           "unit": "dB",
           "minimum": -18,
           "maximum": 18
+        },
+        {
+          "name": "oversampling",
+          "type": "integer",
+          "count": 1,
+          "default": 1,
+          "values": [
+            1,
+            2,
+            4,
+            8
+          ]
         }
       ],
       "seeded": false,
       "telemetry": [],
       "latency": {
-        "kind": "zero"
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
       },
       "assets": []
     },
@@ -6661,12 +6991,27 @@
           "unit": "%",
           "minimum": 0,
           "maximum": 100
+        },
+        {
+          "name": "oversampling",
+          "type": "integer",
+          "count": 1,
+          "default": 1,
+          "values": [
+            1,
+            2,
+            4,
+            8
+          ]
         }
       ],
       "seeded": false,
       "telemetry": [],
       "latency": {
-        "kind": "zero"
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
       },
       "assets": []
     },
@@ -6692,12 +7037,28 @@
             "positive",
             "negative"
           ]
+        },
+        {
+          "name": "oversampling",
+          "type": "integer",
+          "count": 1,
+          "default": 1,
+          "values": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ]
         }
       ],
       "seeded": false,
       "telemetry": [],
       "latency": {
-        "kind": "zero"
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
       },
       "assets": []
     },
@@ -6747,12 +7108,27 @@
           "default": 0.5,
           "minimum": 0.1,
           "maximum": 2
+        },
+        {
+          "name": "oversampling",
+          "type": "integer",
+          "count": 1,
+          "default": 1,
+          "values": [
+            1,
+            2,
+            4,
+            8
+          ]
         }
       ],
       "seeded": false,
       "telemetry": [],
       "latency": {
-        "kind": "zero"
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
       },
       "assets": []
     },
@@ -6826,12 +7202,27 @@
           "unit": "dB",
           "minimum": -18,
           "maximum": 18
+        },
+        {
+          "name": "oversampling",
+          "type": "integer",
+          "count": 1,
+          "default": 1,
+          "values": [
+            1,
+            2,
+            4,
+            8
+          ]
         }
       ],
       "seeded": false,
       "telemetry": [],
       "latency": {
-        "kind": "zero"
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
       },
       "assets": []
     },
@@ -6871,12 +7262,27 @@
           "unit": "dB",
           "minimum": -18,
           "maximum": 18
+        },
+        {
+          "name": "oversampling",
+          "type": "integer",
+          "count": 1,
+          "default": 1,
+          "values": [
+            1,
+            2,
+            4,
+            8
+          ]
         }
       ],
       "seeded": false,
       "telemetry": [],
       "latency": {
-        "kind": "zero"
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
       },
       "assets": []
     },
@@ -8557,7 +8963,7 @@
     }
   ],
   "contractDigests": {
-    "publicCatalogSha256": "ddd6609f70b55274f872ece7b2f8fca57b0f8c42736307748a276fee8d7ef0fb",
-    "privateLayoutSha256": "bf3475e88d0983c14c97bf3eee4f3d09b4f85e52de3b5caefda85c2affe85789"
+    "publicCatalogSha256": "5aa43b67d131e45ead6b23301fe587bdd36c97fa22eec5e6eeb45f4e4d1724c5",
+    "privateLayoutSha256": "dcc0f7b37b351e1bf8e87084d9887d238b0179d45b78425a96d9823e66348d67"
   }
 }

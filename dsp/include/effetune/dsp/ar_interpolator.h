@@ -151,26 +151,6 @@ inline bool buildCorrelations(const double *coefficients, std::uint32_t order,
   return true;
 }
 
-inline double knownContribution(const double *window, std::uint32_t pre, std::uint32_t gap,
-                                const double *coefficients, std::uint32_t order,
-                                std::uint32_t unknown) noexcept {
-  const std::uint32_t gap_end = pre + gap;
-  const std::uint32_t window_index = pre + unknown;
-  double rhs = 0.0;
-  for (std::uint32_t residual_offset = 0u; residual_offset <= order; ++residual_offset) {
-    const std::uint32_t residual_index = window_index + residual_offset;
-    double known_residual = 0.0;
-    for (std::uint32_t lag = 0u; lag <= order; ++lag) {
-      const std::uint32_t source_index = residual_index - lag;
-      if (source_index < pre || source_index >= gap_end) {
-        known_residual += arTerm(coefficients, lag) * window[source_index];
-      }
-    }
-    rhs -= arTerm(coefficients, residual_offset) * known_residual;
-  }
-  return rhs;
-}
-
 inline void buildKnownRhs(const double *window, std::uint32_t pre, std::uint32_t gap,
                           const double *coefficients, std::uint32_t order, double *rhs) noexcept {
   for (std::uint32_t unknown = 0u; unknown < gap; ++unknown) {
@@ -287,10 +267,7 @@ inline bool interpolateArGap(double *window, std::uint32_t pre, std::uint32_t ga
   double *factor = scratch;
   double *rhs = factor + static_cast<std::size_t>(gap) * stride;
   ar_interpolator_detail::buildFullFactor(factor, gap, order, correlations.data());
-  for (std::uint32_t unknown = 0u; unknown < gap; ++unknown) {
-    rhs[unknown] =
-        ar_interpolator_detail::knownContribution(window, pre, gap, coefficients, order, unknown);
-  }
+  ar_interpolator_detail::buildKnownRhs(window, pre, gap, coefficients, order, rhs);
   if (!ar_interpolator_detail::factorAndSolve(factor, rhs, gap, order)) {
     return false;
   }

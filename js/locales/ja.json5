@@ -344,6 +344,7 @@
   "library.job.phase.ready": "確定の準備ができました",
   "library.job.phase.cancel_requested": "キャンセルを要求しました",
   "library.job.phase.committing": "確定しています",
+  "library.job.phase.starting_playback": "再生を開始しています",
   "library.job.terminal.succeeded": "完了しました",
   "library.job.terminal.failed": "失敗しました",
   "library.job.terminal.cancelled": "キャンセルしました",
@@ -390,6 +391,8 @@
   "library.confirm.mergeFolders": "選択したフォルダには、既にライブラリに登録されているフォルダが含まれています。それらを選択した親フォルダに置き換えますか？",
   "library.confirm.deletePlaylist": "このプレイリストを削除しますか？ 曲はライブラリに残ります。",
   "library.error.actionFailed": "ミュージックライブラリで操作を完了できませんでした。もう一度お試しください。",
+  "library.error.playbackStartTimeout": "曲の読み込みが止まったため、再生を開始できませんでした。もう一度お試しください。",
+  "library.error.playbackStartFailed": "再生を開始できませんでした。もう一度お試しください。",
   "library.error.folderAlreadyAdded": "{name} は既にライブラリに登録されています。",
   "library.error.folderInsideExisting": "{name} は既に {existing} に含まれています。",
   "library.recovery.initializing.title": "ミュージックライブラリを起動しています",
@@ -807,6 +810,7 @@
 
   // FIR filters
   "crosstalkCancellation.error.design": "Crosstalk Cancellationフィルターを準備できませんでした。選択した4つの測定と設定を確認して、もう一度お試しください。",
+  "bassManagement.error.design": "Bass Managementフィルターを準備できませんでした。Tapsを減らして、もう一度お試しください。",
   "firCrossover.error.design": "FIRクロスオーバーフィルターを設計できませんでした。Tapsを減らすか、設定を緩やかにしてください。",
   "fiveBandFirPeq.error.design": "5Band FIR PEQフィルターを設計できませんでした。Tapsを減らすか、設定を緩やかにしてください。",
   "fiveBandFirPeq.graph.target": "設計値",

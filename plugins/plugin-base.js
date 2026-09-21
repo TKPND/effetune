@@ -939,6 +939,66 @@ class PluginBase {
         }
     }
 
+    // Embed the shared FIR implementation in processors so worklets and offline rendering agree.
+    static oversamplingProcessorSource(maximum = 8, bands = 1) {
+        return `
+            const osFactor = [2, 4, 8, ${maximum}].includes(parameters.os) ? parameters.os : 1;
+            const osChannels = parameters.channelCount * ${bands};
+            if (!context.shaperOS || context.shaperOS.factor !== osFactor ||
+                context.shaperOS.channels !== osChannels) {
+                const length = osFactor === 1 ? 0 : 64 * osFactor + 1;
+                const coefficients = new Float64Array(length);
+                let sum = 0;
+                for (let tap = 0; tap < length; tap++) {
+                    const offset = tap - 32 * osFactor;
+                    const angle = 2 * Math.PI * tap / (length - 1);
+                    const window = 0.42 - 0.5 * Math.cos(angle) + 0.08 * Math.cos(2 * angle);
+                    const cutoff = 0.475 / osFactor;
+                    coefficients[tap] = (offset === 0 ? 2 * cutoff :
+                        Math.sin(2 * Math.PI * cutoff * offset) / (Math.PI * offset)) * window;
+                    sum += coefficients[tap];
+                }
+                for (let tap = 0; tap < length; tap++) coefficients[tap] /= sum;
+                context.shaperOS = { factor: osFactor, channels: osChannels, coefficients,
+                    states: Array.from({ length: osFactor === 1 ? 0 : osChannels }, () => ({
+                        input: new Float64Array(65), output: new Float64Array(length),
+                        dry: new Float64Array(64), ip: 0, op: 0, dp: 0
+                    })) };
+            }
+            const shapeSample = (channel, input, shape) => {
+                if (osFactor === 1) return shape(input);
+                const state = context.shaperOS.states[channel];
+                const coefficients = context.shaperOS.coefficients;
+                const length = coefficients.length;
+                state.input[state.ip] = input;
+                let output = 0;
+                for (let phase = 0; phase < osFactor; phase++) {
+                    let interpolated = 0;
+                    for (let tap = phase, delay = 0; tap < length; tap += osFactor, delay++) {
+                        interpolated += coefficients[tap] * state.input[(state.ip + 65 - delay) % 65];
+                    }
+                    state.output[state.op] = shape(interpolated * osFactor);
+                    if (phase === 0) {
+                        for (let tap = 0; tap < length; tap++) {
+                            output += coefficients[tap] * state.output[(state.op + length - tap) % length];
+                        }
+                    }
+                    state.op = (state.op + 1) % length;
+                }
+                state.ip = (state.ip + 1) % 65;
+                return output;
+            };
+            const delaySample = (channel, input) => {
+                if (osFactor === 1) return input;
+                const state = context.shaperOS.states[channel];
+                const output = state.dry[state.dp];
+                state.dry[state.dp] = input;
+                state.dp = (state.dp + 1) % 64;
+                return output;
+            };
+        `;
+    }
+
     // Register the processor function with the audio worklet and store it for offline processing.
     registerProcessor(processorFunction) {
         if (typeof __EFFECTUNE_WASM_ONLY__ !== 'undefined' && __EFFECTUNE_WASM_ONLY__) return;

@@ -1,5 +1,6 @@
 #include "effetune/kernel.h"
 #include "ExciterPluginParams.h"
+#include "effetune/dsp/oversampled_shaper.h"
 
 #include <algorithm>
 #include <array>
@@ -27,12 +28,14 @@ class ExciterKernel final : public PluginKernel {
 
 public:
   void prepare(const PrepareInfo &info) override {
+    shaper_.prepare(info.maxChannels * 1u);
     sample_rate_ = static_cast<double>(info.sampleRate);
     max_channels_ = info.maxChannels;
     states_.resize(max_channels_);
   }
 
   void reset() noexcept override {
+    shaper_.reset();
     clearState();
     initialized_ = false;
     filter_initialized_ = false;
@@ -41,6 +44,7 @@ public:
 
   void process(float *audio, std::uint32_t channel_count, std::uint32_t frame_count,
                const ProcessInfo &) noexcept override {
+    shaper_.configure(dsp::OversampledShaper::factor(params_.oversampling, 8u), channel_count * 1u);
     if (audio == nullptr || channel_count == 0u || channel_count > max_channels_) {
       return;
     }
@@ -76,8 +80,10 @@ public:
           x1 = dry;
           const double magnitude = filtered >= 0.0 ? filtered : -filtered;
           y1 = magnitude < 1.0e-25 ? 0.0 : filtered;
-          const double wet = std::tanh(drive * (y1 + bias)) - bias_offset;
-          audio[offset + frame] = static_cast<float>(dry + wet * mix);
+          const double wet = shaper_.process(channel, y1, [&](double sample) {
+            return std::tanh(drive * (sample + bias)) - bias_offset;
+          });
+          audio[offset + frame] = static_cast<float>(shaper_.delay(channel, dry) + wet * mix);
         }
       } else if (slope == 2u) {
         for (std::uint32_t frame = 0u; frame < frame_count; ++frame) {
@@ -91,14 +97,18 @@ public:
           y2 = y1;
           const double magnitude = filtered >= 0.0 ? filtered : -filtered;
           y1 = magnitude < 1.0e-25 ? 0.0 : filtered;
-          const double wet = std::tanh(drive * (y1 + bias)) - bias_offset;
-          audio[offset + frame] = static_cast<float>(dry + wet * mix);
+          const double wet = shaper_.process(channel, y1, [&](double sample) {
+            return std::tanh(drive * (sample + bias)) - bias_offset;
+          });
+          audio[offset + frame] = static_cast<float>(shaper_.delay(channel, dry) + wet * mix);
         }
       } else {
         for (std::uint32_t frame = 0u; frame < frame_count; ++frame) {
           const double dry = static_cast<double>(audio[offset + frame]);
-          const double wet = std::tanh(drive * (dry + bias)) - bias_offset;
-          audio[offset + frame] = static_cast<float>(dry + wet * mix);
+          const double wet = shaper_.process(channel, dry, [&](double sample) {
+            return std::tanh(drive * (sample + bias)) - bias_offset;
+          });
+          audio[offset + frame] = static_cast<float>(shaper_.delay(channel, dry) + wet * mix);
         }
       }
       state.x1 = x1;
@@ -109,7 +119,15 @@ public:
     coefficient_ramp_.advance(frame_count);
   }
 
+  [[nodiscard]] std::uint32_t latencySamples() const noexcept override {
+    const auto &parameters = params_pending_ ? staged_params_ : params_;
+    return dsp::OversampledShaper::factor(parameters.oversampling, 8u) == 1u
+               ? 0u
+               : dsp::OversampledShaper::kLatency;
+  }
+
 private:
+  dsp::OversampledShaper shaper_;
   struct FilterCoefficients {
     double b0 = 0.0;
     double b1 = 0.0;

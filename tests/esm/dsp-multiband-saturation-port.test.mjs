@@ -50,8 +50,8 @@ test('Multiband Saturation schema and packer freeze structured band order', asyn
   const raw = JSON.parse(await fs.readFile(schemaPath, 'utf8'));
   const schema = validateParamSpec(raw, schemaPath);
   assert.equal(schema.type, 'MultibandSaturationPlugin');
-  assert.equal(schema.hash, 0x29a70026);
-  assert.equal(schema.floatCount, 14);
+  assert.equal(schema.hash, 0xa48eec70);
+  assert.equal(schema.floatCount, 15);
   assert.deepEqual(
     raw.fields.map(({ name, key, kind, objectArrayKey, memberKey, count }) =>
       [name, key, kind, objectArrayKey ?? null, memberKey ?? null, count ?? 1]),
@@ -61,14 +61,15 @@ test('Multiband Saturation schema and packer freeze structured band order', asyn
       ['drive', 'dr', 'float', 'bands', 'dr', 3],
       ['bias', 'bs', 'float', 'bands', 'bs', 3],
       ['mix', 'mx', 'float', 'bands', 'mx', 3],
-      ['gain', 'gn', 'float', 'bands', 'gn', 3]
+      ['gain', 'gn', 'float', 'bands', 'gn', 3],
+      ['oversampling', 'os', 'int', null, null, 1]
     ]
   );
 
   const descriptor = DSP_PARAM_PACKERS.get('MultibandSaturationPlugin');
   assert.ok(descriptor);
   assert.equal(descriptor.hash, schema.hash);
-  assert.equal(descriptor.floatCount, 14);
+  assert.equal(descriptor.floatCount, 15);
   assert.deepEqual(
     [...descriptor.pack({})],
     [
@@ -76,7 +77,7 @@ test('Multiband Saturation schema and packer freeze structured band order', asyn
       1.5, 1.5, 1.5,
       Math.fround(0.1), Math.fround(0.1), Math.fround(0.1),
       100, 100, 100,
-      0, 0, 0
+      0, 0, 0, 1
     ]
   );
   assert.deepEqual(
@@ -94,7 +95,7 @@ test('Multiband Saturation schema and packer freeze structured band order', asyn
       10, 0, 5,
       Math.fround(-0.3), 0, Math.fround(0.3),
       0, 50, 100,
-      -18, 0, 18
+      -18, 0, 18, 1
     ]
   );
 });
@@ -103,7 +104,7 @@ test('Multiband Saturation goldens preserve crossover fades and band transitions
   const goldenDirectory = path.join(pluginDirectory, 'golden');
   assert.ok(await directoryBytes(goldenDirectory) <= DEFAULT_GOLDEN_BUDGET_BYTES);
   const goldens = await readGoldenSet(goldenDirectory);
-  assert.equal(goldens.length, 11);
+  assert.equal(goldens.length, 15);
   assert.deepEqual(
     new Set(goldens.map(item => item.metadata.id)),
     new Set([
@@ -117,14 +118,18 @@ test('Multiband Saturation goldens preserve crossover fades and band transitions
       'crossover-events-reset-and-fade',
       'band-events-preserve-filter-state',
       'one-frame-blocks-96k',
-      'fade-longer-than-5ms'
+      'fade-longer-than-5ms',
+      'oversampling-2x',
+      'oversampling-4x',
+      'oversampling-8x',
+      'oversampling-transitions'
     ])
   );
   for (const golden of goldens) {
     assert.equal(golden.metadata.type, 'MultibandSaturationPlugin');
     assert.equal(
       golden.metadata.jsEngineHash,
-      'd3d3d42bb61c10b5d4e98689757df030a88aec70a79d46b58ff8fc350ac58585'
+      '8823e1afcdeb694ea0bc56885a0a684e8d234330e00a4231b0888e6ec5d8db37'
     );
     assert.ok(golden.expected.every(Number.isFinite));
   }

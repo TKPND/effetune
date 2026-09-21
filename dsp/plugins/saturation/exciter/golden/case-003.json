@@ -16,14 +16,15 @@
     "hs": 0,
     "dr": 10,
     "bs": 0.3,
-    "mx": 100
+    "mx": 100,
+    "os": 1
   },
   "events": [],
   "tolerance": {
     "abs": 0.00001,
     "policy": "per-sample"
   },
-  "jsEngineHash": "b5db744b676bc8819ee65b46b19cf1d83287fd60ae197b387e9e8baf08d1cf31",
+  "jsEngineHash": "75526fdf864920aee369868facb22dc41ee4a4e14417849224ac2cd3064f2ee7",
   "outputFloats": 1052,
   "byteLength": 4208,
   "binary": "case-003.f32"

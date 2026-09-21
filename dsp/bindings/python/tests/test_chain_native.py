@@ -1177,7 +1177,7 @@ class NativeChainTests(unittest.TestCase):
             topology="automatic",
         )
         source_four_channels = np.vstack((source, source))
-        self.assertEqual(len(EFFECT_METADATA["effects"]), 103)
+        self.assertEqual(len(EFFECT_METADATA["effects"]), 106)
         for metadata in EFFECT_METADATA["effects"]:
             effect_type = metadata["type"]
             definition = metadata["parameters"][0] if metadata["parameters"] else None
@@ -1188,7 +1188,7 @@ class NativeChainTests(unittest.TestCase):
             }:
                 argument = _snake_case(definition["name"])
                 options[argument] = _nondefault_value(definition)
-            if metadata["assets"]:
+            if any(asset["required"] for asset in metadata["assets"]):
                 options["assets"] = {"impulseResponse": "smoke-ir"}
             with self.subTest(effect=effect_type):
                 effect = EFFECT_CLASSES[effect_type](**options)

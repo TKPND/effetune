@@ -154,8 +154,10 @@ test('generated effects import and the public catalog stays semantic', async () 
   const compressor = new generated.Compressor({ threshold: -18 });
   assert.equal(compressor.type, 'Compressor');
   assert.equal(compressor.parameters.threshold, -18);
-  assert.equal(EFFECT_TYPES.length, 103);
-  assert.equal(EFFECT_CATALOG.effects.length, 103);
+  const bassExtender = new generated.BassExtender({ amount: 100, outputGain: -6 });
+  assert.deepEqual(bassExtender.parameters, { amount: 100, outputGain: -6 });
+  assert.equal(EFFECT_TYPES.length, EFFECT_CATALOG.effects.length);
+  assert.ok(EFFECT_TYPES.includes('BassExtender'));
   assert.deepEqual(EFFECT_CATALOG.channels, [
     'all', 'stereo', 'left', 'right',
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16',
@@ -1412,13 +1414,13 @@ test('disabled IR Reverb remains schema-valid without resolving or processing it
 });
 
 
-test('newly cataloged pitch, restoration, and spatial effects process with declared latency', async () => {
-  for (const type of ['PitchShifterHQ', 'BandwidthExtender', 'ClickRemover', 'ClipRestorer', 'HumRemover', 'NoiseReduction', 'SpatialMapper']) {
+test('newly cataloged pitch, saturation, restoration, and spatial effects process with declared latency', async () => {
+  for (const type of ['PitchShifterHQ', 'BandwidthExtender', 'BassExtender', 'ClickRemover', 'ClipRestorer', 'HumRemover', 'NoiseReduction', 'SpatialMapper']) {
     const chain = await createChain([createEffect(type)], { variant: 'baseline' });
     try {
       const stream = await chain.stream({ sampleRate: 48000, channels: 2, seed: 42 });
       try {
-        assert.equal(stream.latencySamples > 0, type !== 'HumRemover', type);
+        assert.equal(stream.latencySamples > 0, !['BassExtender', 'HumRemover'].includes(type), type);
         const input = Array.from({ length: 2 }, () => Float32Array.from({ length: 8192 }, (_, i) => Math.sin(i * 0.08) * 0.2));
         const output = await stream.process(input);
         assert.ok(output.every(channel => channel.every(Number.isFinite)), type);

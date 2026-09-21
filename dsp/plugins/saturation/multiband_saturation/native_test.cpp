@@ -93,7 +93,8 @@ Params defaultParams(float frequency1 = 200.0F, float frequency2 = 4000.0F) noex
           {1.5F, 1.5F, 1.5F},
           {0.1F, 0.1F, 0.1F},
           {100.0F, 100.0F, 100.0F},
-          {0.0F, 0.0F, 0.0F}};
+          {0.0F, 0.0F, 0.0F},
+          1.0F};
 }
 
 Params changedBandParams() noexcept {
@@ -102,7 +103,8 @@ Params changedBandParams() noexcept {
           {10.0F, 0.0F, 6.5F},
           {-0.3F, 0.0F, 0.25F},
           {100.0F, 0.0F, 37.5F},
-          {18.0F, -18.0F, 6.0F}};
+          {18.0F, -18.0F, 6.0F},
+          1.0F};
 }
 
 std::vector<float> signal(std::uint32_t frames, std::uint32_t channels, std::uint32_t phase) {

@@ -223,7 +223,8 @@ test('Web playback builds a TEMP sequence directly and tracks the operation in s
     [[0, 'track-1'], [1, 'track-3']]
   );
   assert.deepEqual(calls.slice(-2).map(call => call[0]), ['sealSequence', 'releaseRetainedContext']);
-  assert.ok(events.some(event => event.kind === 'terminal'));
+  assert.deepEqual(events.slice(-2).map(event => event.kind), ['progress', 'terminal']);
+  assert.equal(events.at(-2).progress.phase, 'ready');
   coordinator.close();
 });
 

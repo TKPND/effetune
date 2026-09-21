@@ -11,31 +11,51 @@
     }
   },
   "cases": [
-    { "id": "default-impulse", "stimulus": "imp", "frames": 257 },
-    { "id": "default-noise", "stimulus": "noise", "frames": 257 },
+    {
+      "id": "default-impulse",
+      "stimulus": "imp",
+      "frames": 257
+    },
+    {
+      "id": "default-noise",
+      "stimulus": "noise",
+      "frames": 257
+    },
     {
       "id": "threshold-zero-full-scale",
       "stimulus": "fs",
       "frames": 257,
-      "params": { "th": 0, "md": "both" }
+      "params": {
+        "th": 0,
+        "md": "both"
+      }
     },
     {
       "id": "minimum-threshold-both",
       "stimulus": "fs",
       "frames": 257,
-      "params": { "th": -60, "md": "both" }
+      "params": {
+        "th": -60,
+        "md": "both"
+      }
     },
     {
       "id": "positive-only",
       "stimulus": "fs",
       "frames": 257,
-      "params": { "th": -12, "md": "positive" }
+      "params": {
+        "th": -12,
+        "md": "positive"
+      }
     },
     {
       "id": "negative-only",
       "stimulus": "fs",
       "frames": 257,
-      "params": { "th": -12, "md": "negative" }
+      "params": {
+        "th": -12,
+        "md": "negative"
+      }
     },
     {
       "id": "mono-odd-tail",
@@ -43,7 +63,10 @@
       "channels": 1,
       "channelMode": "mono",
       "frames": 257,
-      "params": { "th": -6, "md": "both" }
+      "params": {
+        "th": -6,
+        "md": "both"
+      }
     },
     {
       "id": "all-channels-odd-tail",
@@ -53,31 +76,121 @@
       "channel": "A",
       "frames": 131,
       "blockSize": 32,
-      "params": { "th": -24, "md": "both" }
+      "params": {
+        "th": -24,
+        "md": "both"
+      }
     },
     {
       "id": "odd-full-slice",
       "stimulus": "sq50",
       "frames": 63,
       "blockSize": 128,
-      "params": { "th": -9, "md": "positive" }
+      "params": {
+        "th": -9,
+        "md": "positive"
+      }
     },
     {
       "id": "one-frame-blocks",
       "stimulus": "noise",
       "frames": 17,
       "blockSize": 1,
-      "params": { "th": -18, "md": "negative" }
+      "params": {
+        "th": -18,
+        "md": "negative"
+      }
     },
     {
       "id": "parameter-transitions",
       "stimulus": "fs",
       "frames": 259,
       "events": [
-        { "frame": 31, "params": { "th": -6, "md": "positive" } },
-        { "frame": 96, "params": { "th": -30, "md": "negative" } },
-        { "frame": 130, "params": { "th": 0, "md": "both" } },
-        { "frame": 193, "params": { "th": -18, "md": "both" } }
+        {
+          "frame": 31,
+          "params": {
+            "th": -6,
+            "md": "positive"
+          }
+        },
+        {
+          "frame": 96,
+          "params": {
+            "th": -30,
+            "md": "negative"
+          }
+        },
+        {
+          "frame": 130,
+          "params": {
+            "th": 0,
+            "md": "both"
+          }
+        },
+        {
+          "frame": 193,
+          "params": {
+            "th": -18,
+            "md": "both"
+          }
+        }
+      ]
+    },
+    {
+      "id": "oversampling-2x",
+      "stimulus": "noise",
+      "frames": 257,
+      "params": {
+        "os": 2
+      }
+    },
+    {
+      "id": "oversampling-4x",
+      "stimulus": "noise",
+      "frames": 257,
+      "params": {
+        "os": 4
+      }
+    },
+    {
+      "id": "oversampling-8x",
+      "stimulus": "noise",
+      "frames": 257,
+      "params": {
+        "os": 8
+      }
+    },
+    {
+      "id": "oversampling-16x",
+      "stimulus": "noise",
+      "frames": 257,
+      "params": {
+        "os": 16
+      }
+    },
+    {
+      "id": "oversampling-transitions",
+      "stimulus": "noise",
+      "frames": 259,
+      "events": [
+        {
+          "frame": 17,
+          "params": {
+            "os": 4
+          }
+        },
+        {
+          "frame": 130,
+          "params": {
+            "os": 1
+          }
+        },
+        {
+          "frame": 193,
+          "params": {
+            "os": 8
+          }
+        }
       ]
     }
   ]

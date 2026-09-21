@@ -151,10 +151,10 @@ public:
   }
 
 private:
-  static constexpr std::uint32_t kFilterLength = 63u;
+  static constexpr std::uint32_t kFilterLength = 513u;
   static constexpr std::uint32_t kMaximumOversampling = 8u;
-  static constexpr std::uint32_t kMaximumUpsampleState = 31u;
-  static constexpr std::uint32_t kMaximumDownsampleState = 62u;
+  static constexpr std::uint32_t kMaximumUpsampleState = 64u;
+  static constexpr std::uint32_t kMaximumDownsampleState = 512u;
   static constexpr std::uint32_t kLookupSize = 1024u;
   static constexpr double kLookupMaximum = 10.0;
   static constexpr double kLookupScale = 1024.0 / kLookupMaximum;
@@ -224,7 +224,7 @@ private:
     if (factor == 1u) {
       return lookahead;
     }
-    return lookahead + (62u + factor - 1u) / factor;
+    return lookahead + 64u;
   }
 
   void initializeTopology(std::uint32_t channel_count, std::uint32_t oversampling) noexcept {
@@ -362,16 +362,15 @@ private:
         delay_line_.push(channel, oversampled_[offset + frame]);
         const double delayed_value = static_cast<double>(delayed);
         const double magnitude = delayed_value >= 0.0 ? delayed_value : -delayed_value;
-        const double target = thresholdGain(magnitude, threshold_ramp_.value(frame));
+        const double threshold = threshold_ramp_.value(frame);
+        const double target = magnitude > threshold ? threshold / magnitude : 1.0;
         gain = target < gain ? target : release * gain + release_inverse * target;
         processed_oversampled_[offset + frame] = static_cast<float>(delayed_value * gain);
       }
       gain_states_[channel] = static_cast<float>(gain);
     }
-    threshold_ramp_.advance(oversampled_frames);
 
-    const std::uint32_t phase_span = (kFilterLength + factor - 1u) / factor;
-    const std::uint32_t downsample_state_length = factor * (phase_span - 1u);
+    const std::uint32_t downsample_state_length = filter_length_ - 1u;
     for (std::uint32_t channel = 0u; channel < channel_count; ++channel) {
       float *state =
           downsample_states_.data() + static_cast<std::size_t>(channel) * kMaximumDownsampleState;
@@ -387,23 +386,24 @@ private:
       const std::size_t output_offset = static_cast<std::size_t>(channel) * frame_count;
       for (std::uint32_t frame = 0u; frame < frame_count; ++frame) {
         const std::uint32_t input_index = frame * factor + downsample_state_length;
-        const std::uint32_t phase = input_index % factor;
         double accumulator = 0.0;
-        for (std::uint32_t tap = 0u; tap < phase_lengths_[phase]; ++tap) {
-          const std::uint32_t distance = factor * tap;
-          if (distance > input_index) {
-            break;
-          }
-          accumulator += static_cast<double>(polyphase_[phase][tap]) *
-                         static_cast<double>(z_buffer_[input_index - distance]);
+        for (std::uint32_t tap = 0u; tap < filter_length_; ++tap) {
+          accumulator += static_cast<double>(prototype_[tap]) *
+                         static_cast<double>(z_buffer_[input_index - tap]);
         }
-        audio[output_offset + frame] = static_cast<float>(accumulator);
+        // Reconstruction can overshoot even when oversampled peaks were limited.
+        const double output = accumulator / static_cast<double>(factor);
+        const double ceiling = threshold_ramp_.value(frame * factor);
+        audio[output_offset + frame] = static_cast<float>(output > ceiling    ? ceiling
+                                                          : output < -ceiling ? -ceiling
+                                                                              : output);
       }
       const std::uint32_t combined = downsample_state_length + oversampled_frames;
       for (std::uint32_t index = 0u; index < downsample_state_length; ++index) {
         state[index] = z_buffer_[combined - downsample_state_length + index];
       }
     }
+    threshold_ramp_.advance(oversampled_frames);
   }
 
   void updateMeasurement(std::uint32_t channel_count) noexcept {
@@ -445,12 +445,14 @@ private:
   }
 
   void buildPolyphaseFilter(std::uint32_t factor) noexcept {
-    constexpr double kBeta = 5.0;
+    filter_length_ = 64u * factor + 1u;
+    constexpr double kBeta = 8.6;
     const double inverse_i0 = 1.0 / calculateI0(kBeta);
-    const double center = static_cast<double>(kFilterLength - 1u) * 0.5;
+    const double center = static_cast<double>(filter_length_ - 1u) * 0.5;
     double sum = 0.0;
-    for (std::uint32_t index = 0u; index < kFilterLength; ++index) {
-      const double centered = (static_cast<double>(index) - center) / static_cast<double>(factor);
+    for (std::uint32_t index = 0u; index < filter_length_; ++index) {
+      const double centered =
+          0.95 * (static_cast<double>(index) - center) / static_cast<double>(factor);
       double sinc = 1.0;
       const double magnitude = centered >= 0.0 ? centered : -centered;
       if (magnitude >= 1.0e-6) {
@@ -458,7 +460,7 @@ private:
         sinc = std::sin(angle) / angle;
       }
       const double scaled =
-          2.0 * (static_cast<double>(index) - center) / static_cast<double>(kFilterLength - 1u);
+          2.0 * (static_cast<double>(index) - center) / static_cast<double>(filter_length_ - 1u);
       const double inside = 1.0 - scaled * scaled;
       const double window =
           inside < 0.0 ? 0.0 : calculateI0(kBeta * std::sqrt(inside)) * inverse_i0;
@@ -467,14 +469,15 @@ private:
       sum += coefficient;
     }
     const double normalization = static_cast<double>(factor) / sum;
-    for (float &coefficient : prototype_) {
-      coefficient = static_cast<float>(static_cast<double>(coefficient) * normalization);
+    for (std::uint32_t index = 0u; index < filter_length_; ++index) {
+      prototype_[index] =
+          static_cast<float>(static_cast<double>(prototype_[index]) * normalization);
     }
 
     maximum_phase_length_ = 0u;
     phase_lengths_.fill(0u);
     for (std::uint32_t phase = 0u; phase < factor; ++phase) {
-      const std::uint32_t length = (kFilterLength - phase + factor - 1u) / factor;
+      const std::uint32_t length = (filter_length_ - phase + factor - 1u) / factor;
       phase_lengths_[phase] = length;
       if (length > maximum_phase_length_) {
         maximum_phase_length_ = length;
@@ -498,7 +501,7 @@ private:
   Params staged_params_{};
   dsp::DelayLine delay_line_;
   std::array<float, kFilterLength> prototype_{};
-  std::array<std::array<float, kFilterLength>, kMaximumOversampling> polyphase_{};
+  std::array<std::array<float, kMaximumUpsampleState + 1u>, kMaximumOversampling> polyphase_{};
   std::array<std::uint32_t, kMaximumOversampling> phase_lengths_{};
   double sample_rate_ = 0.0;
   double active_lookahead_ = 0.0;
@@ -509,6 +512,7 @@ private:
   std::uint32_t active_channels_ = 0u;
   std::uint32_t active_oversampling_ = 0u;
   std::uint32_t active_delay_samples_ = 0u;
+  std::uint32_t filter_length_ = 0u;
   std::uint32_t maximum_phase_length_ = 0u;
   std::uint32_t reported_latency_samples_ = 0u;
   float latest_reduction_db_ = 0.0F;

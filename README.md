@@ -340,6 +340,7 @@ If the problem persists, report it through [GitHub Issues](https://github.com/Fr
 | Basics    | Volume | Basic volume control | [Details](docs/plugins/basics.md#volume) |
 | Delay     | Delay          | Standard delay effect                                   | [Details](docs/plugins/delay.md#delay) |
 | Delay     | Time Alignment | Fine-tunes playback timing for speaker and listening-position alignment | [Details](docs/plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | Balances short attacks and sustained tonal structure | [Details](docs/plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | Automatic volume adjustment based on LUFS measurement for consistent listening experience | [Details](docs/plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | Limits signal peaks to prevent digital clipping | [Details](docs/plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | Smooths sudden loud passages for more comfortable listening | [Details](docs/plugins/dynamics.md#compressor) |
@@ -409,6 +410,7 @@ If the problem persists, report it through [GitHub Issues](https://github.com/Fr
 | Reverb    | IR Reverb | Convolution reverb using imported room and equipment impulse responses | [Details](docs/plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | Random scattering reverb with natural diffusion | [Details](docs/plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | Generates high-frequency content above a detected or specified cutoff | [Details](docs/plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | Generates low bass one octave below suitable bass content | [Details](docs/plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | Simulates the nonlinear displacement of speaker cones | [Details](docs/plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | Add harmonic content to enhance clarity and presence | [Details](docs/plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | Digital hard clipping effect | [Details](docs/plugins/saturation.md#hard-clipping) |

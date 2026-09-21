@@ -56,6 +56,10 @@ function loadDynamicSaturationProcessor() {
     }
   }
   const context = vm.createContext({ PluginBase, window: {} });
+  const baseSource = fs.readFileSync(new URL('../../plugins/plugin-base.js', import.meta.url), 'utf8');
+  PluginBase.oversamplingProcessorSource = vm.runInNewContext(
+    `${baseSource}; PluginBase.oversamplingProcessorSource`, { window: {} }
+  );
   vm.runInContext(source, context, { filename: 'dynamic_saturation.js' });
   const Plugin = context.window.DynamicSaturationPlugin;
   assert.equal(typeof Plugin, 'function');

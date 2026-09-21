@@ -1,6 +1,6 @@
 ---
 title: "डायनामिक्स प्लगइन - EffeTune"
-description: "Compressor, Limiter, Gate, Multiband Compressor और Transient Shaper सहित dynamics processing प्लगइन।"
+description: "Attack Tonal Balance, Compressor, Limiter, Gate, Multiband Compressor और Transient Shaper सहित dynamics processing प्लगइन।"
 lang: hi
 ---
 
@@ -10,6 +10,7 @@ lang: hi
 
 ## प्लगइन सूची
 
+- [Attack Tonal Balance](#attack-tonal-balance) - छोटे attacks और टिके रहने वाले tonal ढाँचे का संतुलन करता है
 - [Auto Leveler](#auto-leveler) - लगातार सुनने के अनुभव के लिए स्वचालित वॉल्यूम समायोजन
 - [Brickwall Limiter](#brickwall-limiter) - डिजिटल क्लिपिंग रोकने वाला पारदर्शी पीक नियंत्रण
 - [Compressor](#compressor) - अधिक आरामदायक श्रवण के लिए स्वचालित रूप से वॉल्यूम स्तर को संतुलित करता है (ऊपरी विस्तार सहित)
@@ -20,6 +21,38 @@ lang: hi
 - [Multiband Transient](#multiband-transient) - bass, mids और highs के punch और sustain को अलग-अलग समायोजित करता है
 - [Power Amp Sag](#power-amp-sag) - loud passages को हल्का नरम करने वाली amplifier-like compression जोड़ता है
 - [Transient Shaper](#transient-shaper) - सिग्नल के ट्रांजिएंट और सस्टेन भागों को नियंत्रित करता है
+
+## Attack Tonal Balance
+
+एक ही frequency range में छोटे, broadband attacks और टिके रहने वाले tonal ढाँचे का संतुलन करता है। इसका उपयोग percussion और notes की शुरुआत को उभारने या नरम करने के लिए करें, बिना sustained sounds पर वही बदलाव लगाए। Transient Shaper के विपरीत, यह fast और slow level envelopes के बजाय time-frequency patterns से दोनों हिस्सों को अलग करता है; Multiband Transient के विपरीत, यह sound को fixed bass, midrange और treble bands में नहीं बाँटता।
+
+### श्रवण सुधार गाइड
+
+- Attack Enabled और Tonal Enabled को checked रखें, दोनों gain controls को 0 dB से शुरू करें, फिर एक समय में एक control को 1 से 3 dB बदलें।
+- drum hits, plucked strings और notes की शुरुआत अधिक साफ करने के लिए Attack बढ़ाएँ। तीखे या थकाने वाले attacks को नरम करने के लिए इसे घटाएँ।
+- sustained notes, chords और vocal tones को आगे लाने के लिए Tonal बढ़ाएँ। जब sustained tonal content mix पर हावी हो, तो इसे घटाएँ।
+- किसी एक Enabled checkbox को हटाकर उस अलग किए गए component को cut करें और दूसरे component की तुलना या adjustment करें। उसका gain setting सुरक्षित रहता है, लेकिन दोबारा on करने तक उससे जुड़ा slider और number field उपलब्ध नहीं रहता।
+- positive settings peaks या सुनाई देने वाला volume बढ़ा सकती हैं। लगभग समान listening level पर तुलना करें और जरूरत हो तो output level घटाएँ।
+
+### पैरामीटर
+
+- **Attack Enabled** (default: on)
+  - अलग किए गए Attack component को output में शामिल करता है। इस component को cut करने के लिए checkbox हटाएँ।
+
+- **Attack** (-12 dB से +12 dB, default: 0 dB, 0.5 dB steps)
+  - पास की frequencies में थोड़े समय के लिए फैलने वाली structures को समायोजित करता है।
+  - positive values attacks को उभारती हैं; negative values उन्हें नरम करती हैं।
+
+- **Tonal Enabled** (default: on)
+  - अलग किए गए Tonal component को output में शामिल करता है। इस component को cut करने के लिए checkbox हटाएँ।
+
+- **Tonal** (-12 dB से +12 dB, default: 0 dB, 0.5 dB steps)
+  - समय के साथ स्थिर रहने वाली structures को समायोजित करता है।
+  - positive values sustained tonal content को उभारती हैं; negative values उसे कम करती हैं।
+
+### देरी और separation की सीमाएँ
+
+यह effect 48 kHz पर 5,120 samples (लगभग 107 ms) की fixed processing delay जोड़ता है। यह spectral patterns पहचानता है, instruments या sources नहीं, और यह तय नहीं करता कि sound की pitch संगीत की दृष्टि से सही है या नहीं। तेज pitch changes, लगातार noise, dense percussion और बहुत अधिक modulated sounds कम स्पष्ट रूप से अलग हो सकते हैं। जो content स्पष्ट रूप से Attack या Tonal नहीं है, वह अपने मूल level पर रहता है, इसलिए दोनों Enabled checkboxes हटाने पर भी output silent नहीं होता।
 
 ## Auto Leveler
 
@@ -164,6 +197,7 @@ lang: hi
   - precise peak control के लिए adjust करें
 
 - **Oversampling** (1x, 2x, 4x, 8x)
+  - 1x (डिफ़ॉल्ट) मूल प्रोसेसिंग को बनाए रखता है। 1x से ऊपर, फ़िल्टरिंग Lookahead के अतिरिक्त 64 सैंपल का विलंब जोड़ती है (48 kHz पर लगभग 1.33 ms)।
   - उच्च मान स्वच्छ लिमिटिंग के लिए
   - निम्न मान कम CPU उपयोग के लिए
   - 4x गुणवत्ता और प्रदर्शन का अच्छा संतुलन है

@@ -9,6 +9,7 @@ export const EFFECT_CHANNELS = Object.freeze([
 const COMMON_KEYS = new Set(['id', 'enabled', 'channel', 'assets', 'parameters']);
 const CHANNEL_SET = new Set(EFFECT_CHANNELS);
 const ASSET_NAMES_BY_EFFECT = new Map([
+  ['BassManagement', ['impulseResponse']],
   ['CrosstalkCancellation', ['impulseResponse']],
   ['FIRCrossover', ['impulseResponse']],
   ['FiveBandFIRPEQ', ['impulseResponse']],
@@ -118,6 +119,8 @@ export function canonicalizeProcessingParameters(effectType, parameters) {
 }
 
 function normalizeBaseAssets(effectType, assets) {
+  if (effectType === 'BassManagement' && (assets === undefined ||
+      (isRecord(assets) && Object.keys(assets).length === 0))) return undefined;
   const assetNames = ASSET_NAMES_BY_EFFECT.get(effectType);
   if (!assetNames) {
     if (assets !== undefined) throw new AssetError(`${effectType} does not accept external assets.`);

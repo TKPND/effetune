@@ -16,10 +16,11 @@ struct DynamicSaturationPluginParams {
   float distortionMix;
   float coneMotionMix;
   float outputGain;
-  static constexpr std::uint32_t kHash = 0xc8929bf3u;
-  static constexpr std::uint32_t kFloatCount = 9u;
+  float oversampling;
+  static constexpr std::uint32_t kHash = 0x022a0917u;
+  static constexpr std::uint32_t kFloatCount = 10u;
 };
-static_assert(9u == 0u || sizeof(DynamicSaturationPluginParams) == sizeof(float) * 9u);
+static_assert(10u == 0u || sizeof(DynamicSaturationPluginParams) == sizeof(float) * 10u);
 
 } // namespace effetune::generated
 

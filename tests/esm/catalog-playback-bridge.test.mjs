@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { CatalogPlaybackBridge } from '../../js/ui/audio-player/catalog-playback-bridge.js';
 import { StateManager } from '../../js/ui/audio-player/state-manager.js';
+import { DurableActionController } from '../../js/ui/library/durable-action-controller.js';
 
 const selectionDescriptor = Object.freeze({
   mode: 'all',
@@ -46,6 +47,197 @@ function sequenceClient(overrides = {}) {
     }
   };
 }
+
+function stalledPlaybackBridge({ install, commit, status, requestFolderAccess, client } = {}) {
+  let workerListener;
+  let finishProvisional;
+  const events = [];
+  const messages = [];
+  const firstEntry = { entryInstanceId: 'entry-stall', trackUid: 'track-stall' };
+  const terminal = { state: 'succeeded', result: successfulTerminal({ firstEntry, firstOrdinal: 0 }) };
+  const stateManager = new StateManager({});
+  const player = {
+    stateManager,
+    ui: { container: {} },
+    playbackManager: {
+      installBulkPlayProvisional: install ?? (() => new Promise(resolve => { finishProvisional = resolve; })),
+      commitCatalogDestination: commit ?? (async () => ({ accepted: true })),
+      async cancelBulkPlay() {},
+      async finishBulkPlayTerminal() {},
+      canUndoSessionTransport: () => true
+    }
+  };
+  const bridge = new CatalogPlaybackBridge({
+    uiManager: { audioPlayer: player, showTransientMessage: key => messages.push(key) },
+    service: {
+      async start() { return { kind: 'started', operationId: 'operation-stall', provisionalEntry: firstEntry }; },
+      status: status ?? (async () => ({ terminalKind: 'succeeded', result: terminal, finishedAt: 1 })),
+      async cancel() { return { kind: 'tooLate' }; },
+      subscribeOperation(_id, listener) { workerListener = listener; return () => {}; }
+    },
+    sequenceClient: client ?? sequenceClient(),
+    requestFolderAccess
+  });
+  return {
+    bridge, player, events, messages, terminal,
+    finish: value => finishProvisional(value),
+    emit: () => workerListener({ kind: 'terminal', operationId: 'operation-stall', result: terminal })
+  };
+}
+
+test('pending playback exposes a cancellable waiting phase after worker completion and never forwards late success', async () => {
+  const scenario = stalledPlaybackBridge();
+  let clock = 0;
+  let tick;
+  const controller = new DurableActionController({
+    service: {
+      startLibraryOperation: request => scenario.bridge.start(request),
+      getLibraryOperationStatus: id => scenario.bridge.status(id),
+      subscribeLibraryOperation: (id, listener) => scenario.bridge.subscribeOperation(id, listener),
+      cancelLibraryOperation: id => scenario.bridge.cancel(id),
+      canUndoPlaybackSession: () => scenario.bridge.canUndoPlaybackSession()
+    },
+    now: () => clock,
+    setIntervalFn: fn => { tick = fn; return 1; },
+    clearIntervalFn() {}
+  });
+  await controller.track({
+    ...playbackRequest(),
+    start: () => scenario.bridge.start(playbackRequest())
+  });
+  scenario.bridge.subscribeOperation('operation-stall', event => scenario.events.push(event));
+  scenario.emit();
+  assert.equal((await scenario.bridge.status('operation-stall')).phase, 'STARTING_PLAYBACK');
+  clock = 30_000;
+  tick();
+  assert.equal(controller.state.status, 'waiting');
+  await controller.cancel();
+  assert.equal(controller.state.status, 'terminal');
+  assert.equal(controller.state.terminalKind, 'cancelled');
+  assert.equal(scenario.player.stateManager.state.isPlaybackPending, false);
+  scenario.finish({ accepted: true });
+  scenario.emit();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(scenario.events.filter(event => event.kind === 'terminal').length, 1);
+  assert.equal((await scenario.bridge.status('operation-stall')).terminalKind, 'cancelled');
+  controller.close();
+  scenario.bridge.close();
+});
+
+test('playback deadline terminates an unresponsive source/status request with its stage', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  t.mock.method(console, 'error', () => {});
+  const scenario = stalledPlaybackBridge({
+    status: () => new Promise(() => {}),
+    install: options => {
+      options.onStage('sourceResolve');
+      return new Promise(() => {});
+    }
+  });
+  await scenario.bridge.start(playbackRequest());
+  scenario.bridge.subscribeOperation('operation-stall', event => scenario.events.push(event));
+  t.mock.timers.tick(45_000);
+  await new Promise(resolve => setImmediate(resolve));
+  const status = await scenario.bridge.status('operation-stall');
+  assert.equal(status.terminalKind, 'failed');
+  assert.equal(status.result.code, 'playbackStartTimeout:sourceResolve');
+  assert.equal(scenario.events.filter(event => event.kind === 'terminal').length, 1);
+  assert.deepEqual(scenario.messages, ['library.error.playbackStartTimeout']);
+  assert.equal(scenario.player.stateManager.state.isPlaybackPending, false);
+  scenario.bridge.close();
+});
+
+test('permission UI pauses the playback deadline and cancellation blocks a late source retry', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  let resolvePermission;
+  let changeInteraction;
+  let resolutions = 0;
+  const scenario = stalledPlaybackBridge({
+    install: options => options.resolveSource(options.receipt.provisionalEntry, options.resolutionScope, options.signal),
+    client: sequenceClient({ resolveSequenceEntrySource() {
+      resolutions += 1;
+      throw Object.assign(new Error('permission'), {
+        code: 'folderPermissionRequired', details: { folderId: 'folder-1', lifecycleVersion: 1 }
+      });
+    } }),
+    requestFolderAccess(_id, { onUserInteractionChange }) {
+      changeInteraction = onUserInteractionChange;
+      onUserInteractionChange(true);
+      return new Promise(resolve => { resolvePermission = resolve; });
+    }
+  });
+  await scenario.bridge.start(playbackRequest());
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(120_000);
+  assert.equal((await scenario.bridge.status('operation-stall')).terminalKind, undefined);
+  await scenario.bridge.cancel('operation-stall');
+  changeInteraction(false);
+  resolvePermission({ folder: { id: 'folder-1', lifecycleVersion: 1, status: 'active' } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(resolutions, 1);
+  assert.equal((await scenario.bridge.status('operation-stall')).terminalKind, 'cancelled');
+  scenario.bridge.close();
+});
+
+test('commit waiting is bounded and close aborts an unresolved provisional', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  t.mock.method(console, 'error', () => {});
+  let commits = 0;
+  let releaseCommit;
+  const scenario = stalledPlaybackBridge({
+    install: async () => ({ accepted: true }),
+    commit: () => { commits += 1; return new Promise(resolve => { releaseCommit = resolve; }); }
+  });
+  await scenario.bridge.start(playbackRequest());
+  scenario.bridge.subscribeOperation('operation-stall', event => scenario.events.push(event));
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(45_000);
+  releaseCommit({ accepted: true });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(commits, 1);
+  assert.equal((await scenario.bridge.status('operation-stall')).terminalKind, 'failed');
+  assert.equal(scenario.events.filter(event => event.kind === 'terminal').length, 1);
+  scenario.bridge.close();
+  const closed = stalledPlaybackBridge();
+  await closed.bridge.start(playbackRequest());
+  closed.bridge.close();
+  assert.equal(closed.player.stateManager.state.isPlaybackPending, false);
+  closed.finish({ accepted: true });
+});
+
+test('permission completion resumes the paused playback deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  t.mock.method(console, 'error', () => {});
+  let finishPermission;
+  let resolutions = 0;
+  const scenario = stalledPlaybackBridge({
+    install: options => options.resolveSource(options.receipt.provisionalEntry, options.resolutionScope, options.signal),
+    client: sequenceClient({ resolveSequenceEntrySource() {
+      resolutions += 1;
+      if (resolutions > 1) return new Promise(() => {});
+      throw Object.assign(new Error('permission'), {
+        code: 'folderPermissionRequired', details: { folderId: 'folder-1', lifecycleVersion: 1 }
+      });
+    } }),
+    requestFolderAccess(_id, { onUserInteractionChange }) {
+      onUserInteractionChange(true);
+      return new Promise(resolve => { finishPermission = () => {
+        onUserInteractionChange(false);
+        resolve({ folder: { id: 'folder-1', lifecycleVersion: 1, status: 'active' } });
+      }; });
+    }
+  });
+  await scenario.bridge.start(playbackRequest());
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(120_000);
+  finishPermission();
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(44_999);
+  assert.equal((await scenario.bridge.status('operation-stall')).terminalKind, undefined);
+  t.mock.timers.tick(1);
+  assert.equal((await scenario.bridge.status('operation-stall')).result.code, 'playbackStartTimeout:sourceResolve');
+  scenario.bridge.close();
+});
 
 test('Library Play begins audio recovery before restored state and service work', async () => {
   const calls = [];
@@ -562,13 +754,13 @@ test('failed provisional activation ends the session operation without transport
   });
 
   await bridge.start(playbackRequest());
+  const lateListener = listener;
   await new Promise(resolve => setImmediate(resolve));
-  listener({ kind: 'terminal', operationId: 'failed-operation', result: { state: 'failed' } });
+  lateListener({ kind: 'terminal', operationId: 'failed-operation', result: { state: 'failed' } });
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(calls, [
-    ['cancel', 'failed-operation'],
-    ['finish', 'failed-operation', { succeeded: false }]
-  ]);
+  assert.equal(calls.filter(call => call[0] === 'cancel').length, 1);
+  assert.deepEqual(calls.find(call => call[0] === 'finish'), ['finish', 'failed-operation', { succeeded: false }]);
+  assert.equal((await bridge.status('failed-operation')).result.state, 'failed');
   assert.equal(bridge.restoreTransport, undefined);
 });
 

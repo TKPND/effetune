@@ -106,6 +106,7 @@ export const PUBLIC_EFFECT_TYPES = Object.freeze([
   'Spectrogram',
   'SpectrumAnalyzer',
   'StereoMeter',
+  'BassManagement',
   'ChannelDivider',
   'DCOffset',
   'FIRCrossover',
@@ -117,6 +118,7 @@ export const PUBLIC_EFFECT_TYPES = Object.freeze([
   'Volume',
   'Delay',
   'TimeAlignment',
+  'AttackTonalBalance',
   'AutoLeveler',
   'BrickwallLimiter',
   'Compressor',
@@ -187,6 +189,7 @@ export const PUBLIC_EFFECT_TYPES = Object.freeze([
   'IRReverb',
   'RSReverb',
   'BandwidthExtender',
+  'BassExtender',
   'DynamicSaturation',
   'Exciter',
   'HardClipping',
@@ -211,6 +214,7 @@ export const FROZEN_PARAM_DIRECTORIES = Object.freeze({
   SpectrogramPlugin: 'dsp/plugins/analyzer/spectrogram',
   SpectrumAnalyzerPlugin: 'dsp/plugins/analyzer/spectrum_analyzer',
   StereoMeterPlugin: 'dsp/plugins/analyzer/stereo_meter',
+  BassManagementPlugin: 'dsp/plugins/basics/bass_management',
   ChannelDividerPlugin: 'dsp/plugins/basics/channel_divider',
   DCOffsetPlugin: 'dsp/plugins/basics/dc_offset',
   FIRCrossoverPlugin: 'dsp/plugins/basics/fir_crossover',
@@ -222,6 +226,7 @@ export const FROZEN_PARAM_DIRECTORIES = Object.freeze({
   VolumePlugin: 'dsp/plugins/basics/volume',
   DelayPlugin: 'dsp/plugins/delay/delay',
   TimeAlignmentPlugin: 'dsp/plugins/delay/time_alignment',
+  AttackTonalBalancePlugin: 'dsp/plugins/dynamics/attack_tonal_balance',
   AutoLevelerPlugin: 'dsp/plugins/dynamics/auto_leveler',
   BrickwallLimiterPlugin: 'dsp/plugins/dynamics/brickwall_limiter',
   CompressorPlugin: 'dsp/plugins/dynamics/compressor',
@@ -292,6 +297,7 @@ export const FROZEN_PARAM_DIRECTORIES = Object.freeze({
   IRReverbPlugin: 'dsp/plugins/reverb/ir_reverb',
   RSReverbPlugin: 'dsp/plugins/reverb/rs_reverb',
   BandwidthExtenderPlugin: 'dsp/plugins/saturation/bandwidth_extender',
+  BassExtenderPlugin: 'dsp/plugins/saturation/bass_extender',
   DynamicSaturationPlugin: 'dsp/plugins/saturation/dynamic_saturation',
   ExciterPlugin: 'dsp/plugins/saturation/exciter',
   HardClippingPlugin: 'dsp/plugins/saturation/hard_clipping',
@@ -746,8 +752,8 @@ export function validateEffectOverlay(effectOverlay, spec, source) {
       );
       requireIdentifier(asset.name, `${label}.assets[${index}].name`, source);
       requireIdentifier(asset.kind, `${label}.assets[${index}].kind`, source);
-      if (!Number.isSafeInteger(asset.slot) || asset.slot < 0 || asset.required !== true) {
-        fail(`${label}.assets[${index}] must declare a non-negative slot and required true`, source);
+      if (!Number.isSafeInteger(asset.slot) || asset.slot < 0 || typeof asset.required !== 'boolean') {
+        fail(`${label}.assets[${index}] must declare a non-negative slot and boolean required flag`, source);
       }
       if (!spec.assets.some(sourceAsset => sourceAsset.slot === asset.slot)) {
         fail(`${label}.assets[${index}] references an undeclared params.json slot`, source);
@@ -911,7 +917,7 @@ export function buildCatalog({
       return {
         name: asset.name,
         kind: asset.kind,
-        required: true,
+        required: asset.required,
         implementation: {
           slot: sourceAsset.slot,
           format: sourceAsset.format,
@@ -1031,7 +1037,7 @@ function effectSchema(effect) {
       required,
       properties: assetProperties
     };
-    definition.required.push('assets');
+    if (required.length !== 0) definition.required.push('assets');
   }
   return definition;
 }
@@ -1609,6 +1615,10 @@ function pythonLiteral(value) {
   return String(value);
 }
 
+function hasRequiredAssets(effect) {
+  return effect.assets.some(asset => asset.required);
+}
+
 function pythonForCatalog(catalog) {
   const metadataLiteral = JSON.stringify(JSON.stringify(publicCatalog(catalog)));
   const implementationLiteral = JSON.stringify(JSON.stringify(privateCatalog(catalog).effects));
@@ -1726,7 +1736,9 @@ function pythonStubForCatalog(catalog) {
     chunks.push('        enabled: bool = ...,\n');
     chunks.push('        channel: EffectChannel = ...,\n');
     if (effect.assets.length !== 0) {
-      chunks.push('        assets: IRReverbAssets,\n');
+      chunks.push(hasRequiredAssets(effect)
+        ? '        assets: IRReverbAssets,\n'
+        : '        assets: IRReverbAssets | None = ...,\n');
     }
     chunks.push('    ) -> None: ...\n\n');
   }
@@ -1801,7 +1813,7 @@ function tsParameterType(parameter) {
 
 function tsForCatalog(catalog) {
   const requiredAssetTypes = catalog.effects
-    .filter(effect => effect.assets.length !== 0)
+    .filter(hasRequiredAssets)
     .map(effect => jsLiteral(effect.type))
     .join(' | ');
   const chunks = [
@@ -1826,17 +1838,19 @@ function tsForCatalog(catalog) {
     }
     chunks.push(effect.assets.length === 0
       ? '  readonly assets?: never;\n'
-      : '  readonly assets: IRReverbAssets;\n');
+      : hasRequiredAssets(effect)
+        ? '  readonly assets: IRReverbAssets;\n'
+        : '  readonly assets?: IRReverbAssets;\n');
     chunks.push('}\n\n');
     chunks.push(`export declare class ${effect.type} extends Effect {\n`);
     chunks.push(`  static readonly effectType: ${jsLiteral(effect.type)};\n`);
-    chunks.push(effect.assets.length === 0
-      ? `  constructor(options?: ${effect.type}Options);\n`
-      : `  constructor(options: ${effect.type}Options);\n`);
+    chunks.push(hasRequiredAssets(effect)
+      ? `  constructor(options: ${effect.type}Options);\n`
+      : `  constructor(options?: ${effect.type}Options);\n`);
     chunks.push('}\n\n');
-    chunks.push(effect.assets.length === 0
-      ? `export declare function create${effect.type}(options?: ${effect.type}Options): ${effect.type};\n\n`
-      : `export declare function create${effect.type}(options: ${effect.type}Options): ${effect.type};\n\n`);
+    chunks.push(hasRequiredAssets(effect)
+      ? `export declare function create${effect.type}(options: ${effect.type}Options): ${effect.type};\n\n`
+      : `export declare function create${effect.type}(options?: ${effect.type}Options): ${effect.type};\n\n`);
   }
   chunks.push('export interface EffectOptionsByType {\n');
   for (const effect of catalog.effects) {

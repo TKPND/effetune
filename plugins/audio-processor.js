@@ -1168,6 +1168,7 @@ function pluginExecutionUnsupportedReason(plugin, sampleRate, outputChannelCount
     return null;
 }
 const FIR_CONVOLVER_PLUGIN_TYPES = new Set([
+    'BassManagementPlugin',
     'FIRCrossoverPlugin',
     'FiveBandFIRPEQPlugin',
     'GroupDelayEqPlugin',

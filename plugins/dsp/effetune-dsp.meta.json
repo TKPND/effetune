@@ -1,11 +1,11 @@
 {
   "abiVersion": 1,
-  "sourceDigest": "sha256:e8794c54598d3d7bf9786349e6e9067c2d914b59db6aa10f4d29ce3760ba5cb5",
+  "sourceDigest": "sha256:3590cb5048bf74ba4901d3bfb691ada46c9d8e6a1c38a65b8328a128dee61c3a",
   "emsdkVersion": "6.0.2",
   "g726PerformanceInput": {
     "contract": "g726-production-performance-input-sha256-v2",
     "hashAlgorithm": "SHA-256 over the contract and ordered UTF-8 components as id\\0content\\0; CRLF and CR normalize to LF",
-    "digest": "sha256:0a3e7c36d1e8bf8b6b28ea2716b25b23e322575b214ef720236488aa627f8514",
+    "digest": "sha256:e8e2167cf78fbbee6ad0c52e495fa90970ae2b4ae087e4114a63c0f141e8e217",
     "inputs": [
       {
         "id": "dsp/core/abi.cpp",
@@ -160,7 +160,7 @@
       {
         "id": "tools/dsp-parity/runners.mjs",
         "kind": "file",
-        "sha256": "sha256:cd67baecc50e260dddedb992f50de963caecf9ec7c6fc76bbf415b3fd4b478ec"
+        "sha256": "sha256:616c0542427197899f741ed98255eb8a7412baf5a403a4ea2f7bc7c024358d56"
       },
       {
         "id": "tools/dsp-parity/stimuli.mjs",
@@ -434,6 +434,19 @@
       "assets": []
     },
     {
+      "name": "BassManagementPlugin",
+      "hash": 3385775306,
+      "byteCapacity": 0,
+      "assets": [
+        {
+          "slot": 0,
+          "format": "ET_ASSET_F32_MULTICH",
+          "capacity": "32 MiB convolution cap",
+          "byteCapacity": 33554432
+        }
+      ]
+    },
+    {
       "name": "ChannelDividerPlugin",
       "hash": 3926343008,
       "byteCapacity": 0,
@@ -503,6 +516,12 @@
     {
       "name": "TimeAlignmentPlugin",
       "hash": 669252438,
+      "byteCapacity": 0,
+      "assets": []
+    },
+    {
+      "name": "AttackTonalBalancePlugin",
+      "hash": 559813305,
       "byteCapacity": 0,
       "assets": []
     },
@@ -962,38 +981,44 @@
       "assets": []
     },
     {
+      "name": "BassExtenderPlugin",
+      "hash": 3177572667,
+      "byteCapacity": 0,
+      "assets": []
+    },
+    {
       "name": "DynamicSaturationPlugin",
-      "hash": 3365051379,
+      "hash": 36309271,
       "byteCapacity": 0,
       "assets": []
     },
     {
       "name": "ExciterPlugin",
-      "hash": 4235094650,
+      "hash": 660771092,
       "byteCapacity": 0,
       "assets": []
     },
     {
       "name": "HardClippingPlugin",
-      "hash": 837158957,
+      "hash": 969627901,
       "byteCapacity": 0,
       "assets": []
     },
     {
       "name": "HarmonicDistortionPlugin",
-      "hash": 83146208,
+      "hash": 211299558,
       "byteCapacity": 0,
       "assets": []
     },
     {
       "name": "MultibandSaturationPlugin",
-      "hash": 698810406,
+      "hash": 2760830064,
       "byteCapacity": 0,
       "assets": []
     },
     {
       "name": "SaturationPlugin",
-      "hash": 1115003603,
+      "hash": 2929709815,
       "byteCapacity": 0,
       "assets": []
     },
@@ -1060,7 +1085,7 @@
     }
   ],
   "sizes": {
-    "baseline": 7077241,
-    "simd": 7210666
+    "baseline": 7131398,
+    "simd": 7267412
   }
 }

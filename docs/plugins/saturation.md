@@ -16,6 +16,7 @@ Press the spectrum icon on a compatible graph to cycle through After, Before + A
 ## Plugin List
 
 - [Bandwidth Extender](#bandwidth-extender) - Generates high-frequency content above a detected or specified cutoff
+- [Bass Extender](#bass-extender) - Generates restrained low bass one octave below suitable input content
 - [Dynamic Saturation](#dynamic-saturation) - Simulates the nonlinear displacement of speaker cones
 - [Exciter](#exciter) - Add harmonic content to enhance clarity and presence
 - [Hard Clipping](#hard-clipping) - Adds intensity and edge to the sound
@@ -50,9 +51,28 @@ The generated band has two independently adjustable parts: input-related harmoni
 
 Bandwidth Extender adds about 26.7–29.0 ms of delay, including one extra processing hop: 1,280 samples at 48 kHz, 2,560 samples at 96 kHz, or 5,120 samples at 192 kHz. If it cannot run with the current sample rate, channel setting, or device, the plugin reports that it is bypassed and the audio remains unchanged. Use a supported setting or disable the plugin.
 
+## Bass Extender
+
+Bass Extender reinforces bass-light recordings by generating content about one octave below bass that is already present. It analyzes input from roughly 60–200 Hz and adds generated bass around 30–100 Hz while leaving the original signal in place. It does not recover the original missing fundamental, level, or phase.
+
+### Listening Enhancement Guide
+
+- Start with **Amount** at its 25% default and raise it gradually.
+- Compare with bypass at a similar loudness. Use **Output** to compensate if the added bass makes the processed signal louder.
+- Reduce **Amount** if bass notes, kick drums, or their overlap sound muddy or uneven.
+- Use Spectrum Analyzer and Level Meter when you want to compare the added low-frequency range and output level.
+- The effect will be small if your headphones or speakers cannot reproduce the generated 30–100 Hz range.
+
+### Parameters
+
+- **Amount** (0–100%, default 25%) - Controls the level of the generated low bass. 0% removes the generated contribution; higher values make it more prominent without changing the original signal directly.
+- **Output** (-24 to 0 dB, default 0 dB) - Adjusts the final level after the generated bass is added. Lower it to match the bypassed level or to create more output headroom.
+
 ## Dynamic Saturation
 
 A physics-based effect that simulates the nonlinear displacement of speaker cones under different conditions. By modeling the mechanical behavior of a speaker and then applying saturation to that displacement, it creates a unique form of distortion that responds dynamically to your music.
+
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
 
 ### Listening Enhancement Guide
 - **Subtle Enhancement:**
@@ -146,6 +166,8 @@ Click **Effect Presets** in the effect header to compare complete cone-motion se
 
 An effect that adds harmonic content to enhance clarity and presence. By filtering the high-frequency content and applying saturation, it creates additional harmonics that brighten and enhance your music.
 
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
+
 ### Listening Enhancement Guide
 - **Subtle Enhancement:**
   - Adds clarity and air to voices and high-frequency details
@@ -220,6 +242,8 @@ An effect that adds harmonic content to enhance clarity and presence. By filteri
 
 A digital clipping effect that limits peaks above a set threshold. Use it when you want extra edge, density, or creative distortion; keep the threshold high for light peak control and lower it gradually for stronger character.
 
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x, 16x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 16x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
+
 ### Listening Enhancement Guide
 - Subtle Enhancement:
   - Adds a little edge and density when Threshold stays high
@@ -263,6 +287,8 @@ A digital clipping effect that limits peaks above a set threshold. Use it when y
 
 The Harmonic Distortion plugin shapes the waveform with adjustable 2nd- to 5th-order nonlinear terms. It lets you tune even- and odd-order distortion character from subtle warmth to stronger coloration, which can help music that sounds too clean, thin, or flat feel more vivid.
 
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
+
 ### Listening Enhancement Guide
 - **Subtle Effect:**
   - Adds a gentle layer of harmonic warmth
@@ -304,6 +330,8 @@ The Harmonic Distortion plugin shapes the waveform with adjustable 2nd- to 5th-o
 ## Multiband Saturation
 
 A versatile effect that lets you add warmth and character to specific frequency ranges of the whole playback signal. By splitting the sound into low, mid, and high bands, you can shape each range independently for precise sound enhancement.
+
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
 
 ### Listening Enhancement Guide
 - Low-Frequency Warmth:
@@ -383,6 +411,8 @@ Because this processes frequency bands, it affects all sounds in the selected ra
 ## Saturation
 
 An effect that simulates the warm, pleasant sound of vintage tube equipment. It can add richness and character to your music, making it sound more "analog" and less "digital."
+
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
 
 ### Listening Enhancement Guide
 - Adding Warmth:

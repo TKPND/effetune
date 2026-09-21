@@ -128,7 +128,7 @@ Ajuste le timing de lecture par petites quantités, utile pour compenser les dif
 - Vérifier si un léger delay rend l'image stéréo plus stable ou plus naturelle
 
 ### Paramètres
-- **Delay** - Contrôle le temps de delay appliqué aux canaux routés dans ce plugin (0 à 100 ms)
+- **Delay** - Contrôle le temps de delay appliqué aux canaux routés dans ce plugin (0 à 500 ms)
   - 0 ms : Pas de delay
   - Petites valeurs : Utiles pour compenser de très faibles différences de temps d'arrivée entre haut-parleurs
   - Valeurs plus hautes : Créent un décalage temporel plus perceptible

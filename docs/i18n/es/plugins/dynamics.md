@@ -1,6 +1,6 @@
 ---
 title: "Plugins de dinámica - EffeTune"
-description: "Plugins de procesamiento dinámico, incluidos Compressor, Limiter, Gate, Multiband Compressor y Transient Shaper."
+description: "Plugins de procesamiento dinámico, incluidos Attack Tonal Balance, Compressor, Limiter, Gate, Multiband Compressor y Transient Shaper."
 lang: es
 ---
 
@@ -10,6 +10,7 @@ Una colección de plugins que ayudan a equilibrar las partes fuertes y suaves de
 
 ## Lista de Plugins
 
+- [Attack Tonal Balance](#attack-tonal-balance) - Equilibra ataques breves y estructura tonal sostenida
 - [Auto Leveler](#auto-leveler) - Ajuste automático de volumen para una experiencia de escucha consistente
 - [Brickwall Limiter](#brickwall-limiter) - Control transparente de picos que evita el recorte digital
 - [Compressor](#compressor) - Equilibra automáticamente los niveles de volumen para una escucha más cómoda (incluye expansión hacia arriba)
@@ -20,6 +21,38 @@ Una colección de plugins que ayudan a equilibrar las partes fuertes y suaves de
 - [Multiband Transient](#multiband-transient) - Ajusta golpe y sustain por separado en graves, medios y agudos
 - [Power Amp Sag](#power-amp-sag) - Añade compresión tipo amplificador que suaviza ligeramente los pasajes fuertes
 - [Transient Shaper](#transient-shaper) - Controla las partes de ataque y sostenimiento de la señal
+
+## Attack Tonal Balance
+
+Equilibra los ataques breves y de banda ancha con la estructura tonal sostenida dentro del mismo intervalo de frecuencias. Úsalo para resaltar o suavizar la percusión y el inicio de las notas sin aplicar el mismo cambio a los sonidos sostenidos. A diferencia de Transient Shaper, separa ambas partes por sus patrones de tiempo y frecuencia, no mediante envolventes de nivel rápidas y lentas; a diferencia de Multiband Transient, no divide el sonido en bandas fijas de graves, medios y agudos.
+
+### Guía de Mejora Auditiva
+
+- Deja marcados Attack Enabled y Tonal Enabled, empieza con ambos controles de ganancia en 0 dB y ajusta uno cada vez en pasos de 1 a 3 dB.
+- Sube Attack para dar más claridad a golpes de batería, cuerdas pulsadas e inicios de notas. Bájalo para suavizar ataques incisivos o fatigantes.
+- Sube Tonal para destacar notas sostenidas, acordes y tonos vocales. Bájalo cuando el contenido tonal sostenido domine la mezcla.
+- Desmarca cualquiera de las casillas Enabled para eliminar ese componente separado mientras comparas o ajustas el otro. El ajuste de ganancia se conserva, pero el control deslizante y el campo numérico correspondientes no estarán disponibles hasta que vuelvas a activarlo.
+- Los valores positivos pueden elevar los picos o el volumen percibido. Compara a un nivel de escucha parecido y reduce la salida si hace falta.
+
+### Parámetros
+
+- **Attack Enabled** (valor predeterminado: activado)
+  - Incluye en la salida el componente Attack separado. Desmárcalo para eliminar ese componente.
+
+- **Attack** (de -12 dB a +12 dB, valor predeterminado: 0 dB, pasos de 0,5 dB)
+  - Ajusta estructuras breves que se extienden por frecuencias cercanas.
+  - Los valores positivos realzan los ataques; los negativos los suavizan.
+
+- **Tonal Enabled** (valor predeterminado: activado)
+  - Incluye en la salida el componente Tonal separado. Desmárcalo para eliminar ese componente.
+
+- **Tonal** (de -12 dB a +12 dB, valor predeterminado: 0 dB, pasos de 0,5 dB)
+  - Ajusta estructuras que se mantienen estables en el tiempo.
+  - Los valores positivos realzan el contenido tonal sostenido; los negativos lo reducen.
+
+### Retardo y límites de separación
+
+El efecto añade un retardo de procesamiento fijo de 5.120 muestras a 48 kHz (unos 107 ms). Identifica patrones espectrales, no instrumentos ni fuentes, y no determina si un sonido tiene una afinación musical correcta. Los cambios rápidos de tono, el ruido sostenido, la percusión densa y los sonidos con mucha modulación pueden separarse con menor claridad. El contenido que no se identifica claramente como Attack o Tonal conserva su nivel original, por lo que desmarcar ambas casillas Enabled no silencia la salida.
 
 ## Auto Leveler
 
@@ -164,6 +197,7 @@ Un limitador de picos que mantiene la señal digital de la cadena por debajo de 
   - Ajusta para control preciso de picos
 
 - **Oversampling** (1x, 2x, 4x, 8x)
+  - 1x (predeterminado) conserva el procesamiento original. Por encima de 1x, el filtrado añade 64 muestras de retardo a Lookahead (unos 1,33 ms a 48 kHz).
   - Valores más altos para limitación más limpia
   - Valores más bajos para menos uso de CPU
   - 4x es un buen equilibrio entre calidad y rendimiento

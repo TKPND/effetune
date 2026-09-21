@@ -54,7 +54,7 @@ public:
     kernel->applyPendingParameters();
     kernel->process(data, channels, frames, {0.0});
   }
-  std::array<float, 5> telemetry() {
+  std::array<float, 5> telemetry(std::array<float, 48> *spectrum = nullptr) {
     std::array<std::uint8_t, 1024> ring_storage{}, output{};
     effetune::TelemetryRing ring;
     ring.adopt(ring_storage.data(), 1024u);
@@ -65,6 +65,9 @@ public:
     check(size == 232u && dropped == 0u && output[0] == 25u, "independent TV telemetry frame");
     std::array<float, 5> values{};
     std::memcpy(values.data(), output.data() + 16u, 20u);
+    if (spectrum != nullptr) {
+      std::memcpy(spectrum->data(), output.data() + 40u, sizeof(*spectrum));
+    }
     for (float value : values)
       check(std::isfinite(value), "finite telemetry");
     return values;
@@ -326,9 +329,52 @@ void testIneffectiveReceiveChanges() {
     check(identical, "inaudible receive choices leave the running audio bit-exact");
   }
 }
+void testSpectrumLifecycleAndAudioIsolation() {
+  Harness reference(48000.0F), observed(48000.0F);
+  constexpr std::array<std::uint32_t, 7> quanta{8u, 16u, 32u, 64u, 128u, 13u, 1u};
+  std::uint32_t absolute = 0u;
+  std::array<float, 48> spectrum{};
+  for (int standard : {0, 4, 7, 1}) {
+    reference.stage(defaults(standard));
+    observed.stage(defaults(standard));
+    bool completed = false;
+    for (std::uint32_t block = 0u; block < 100u; ++block) {
+      const std::uint32_t frames = quanta[block % quanta.size()];
+      std::array<float, 256> original{};
+      for (std::uint32_t frame = 0u; frame < frames; ++frame) {
+        original[frame] = original[frames + frame] =
+            static_cast<float>(0.2 * std::sin(kTwoPi * 1000.0 * (absolute + frame) / 48000.0));
+      }
+      auto actual = original;
+      reference.process(original.data(), frames);
+      observed.process(actual.data(), frames);
+      observed.telemetry(&spectrum);
+      check(actual == original, "spectrum capture and analysis leave TV audio bit-exact");
+      bool empty = true;
+      for (float value : spectrum) {
+        check(std::isfinite(value), "distributed spectrum is finite");
+        empty = empty && value == -140.0F;
+      }
+      if (block == 0u) {
+        check(empty, "standard change discards previous spectrum and pending work");
+      }
+      completed = completed || !empty;
+      absolute += frames;
+    }
+    check(completed, "spectrum completes at MPX and NICAM host capture rates");
+  }
+  observed.kernel->reset();
+  std::array<float, 256> silent{};
+  observed.process(silent.data(), 8u);
+  observed.telemetry(&spectrum);
+  for (float value : spectrum) {
+    check(value == -140.0F, "kernel reset discards the old completed spectrum");
+  }
+}
 } // namespace
 
 int main() {
+  testSpectrumLifecycleAndAudioIsolation();
   testStandards();
   testRatesAndLifecycle();
   testDigitalFallbackAndBuzz();

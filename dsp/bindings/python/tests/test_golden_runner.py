@@ -22,8 +22,20 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 class GoldenComparatorTests(unittest.TestCase):
     def test_frozen_inventory_uses_all_generated_indexes(self) -> None:
         cases = _RUNNER.discover_cases(_REPOSITORY_ROOT)
-        self.assertEqual(len(cases), 960)
-        self.assertEqual(len({case["publicType"] for case in cases}), 103)
+        private = _RUNNER.read_json(
+            _REPOSITORY_ROOT / "dsp" / "bindings" / "generated" / "effects-v1.private.json"
+        )
+        public = _RUNNER.read_json(
+            _REPOSITORY_ROOT / "dsp" / "bindings" / "generated" / "effects-v1.json"
+        )
+        expected_case_count = sum(
+            len(_RUNNER.read_json(_REPOSITORY_ROOT / index)["cases"])
+            for index in private["frozenGoldenIndexes"].values()
+        )
+        self.assertEqual(len(cases), expected_case_count)
+        self.assertEqual(
+            len({case["publicType"] for case in cases}), len(public["effects"])
+        )
 
     def test_public_pattern_metadata_identifies_only_binding_invalid_case(
         self,

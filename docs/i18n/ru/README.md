@@ -328,6 +328,7 @@ EffeTune создан для аудиоэнтузиастов, которые х
 | Basics    | Volume | Базовое управление громкостью | [Подробнее](plugins/basics.md#volume) |
 | Delay     | Delay | Стандартный эффект задержки | [Подробнее](plugins/delay.md#delay) |
 | Delay     | Time Alignment | Точно настраивает время воспроизведения для согласования колонок и позиции слушателя | [Подробнее](plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | Балансирует короткие атаки и устойчивую тональную структуру | [Подробнее](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | Автоматически выравнивает громкость для стабильного прослушивания | [Подробнее](plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | Контроль цифровых пиков с сохранением динамики | [Подробнее](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | Сглаживает внезапно громкие места, делая прослушивание комфортнее | [Подробнее](plugins/dynamics.md#compressor) |
@@ -397,6 +398,7 @@ EffeTune создан для аудиоэнтузиастов, которые х
 | Reverb    | IR Reverb | Свёрточная реверберация с импортированными импульсными характеристиками помещений и оборудования | [Подробнее](plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | Реверберация с случайным рассеянием и естественной диффузией | [Подробнее](plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | Генерирует высокочастотный контент выше обнаруженной или заданной частоты среза | [Подробнее](plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | Генерирует бас на октаву ниже подходящего низкочастотного материала | [Подробнее](plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | Имитирует нелинейное смещение диффузоров динамиков | [Подробнее](plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | Добавляет гармоники для ясности и присутствия | [Подробнее](plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | Цифровой эффект жесткого клиппирования | [Подробнее](plugins/saturation.md#hard-clipping) |

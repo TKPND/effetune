@@ -1044,6 +1044,9 @@ export class WebLibraryServiceCoordinator {
     this.#resolveProvisional(operationId, null);
     const relay = this.progressRelays.get(operationId);
     if (relay?.timer) clearTimeout(relay.timer);
+    if (relay?.pending) {
+      this.onEvent({ kind: 'progress', progress: relay.pending });
+    }
     this.progressRelays.delete(operationId);
     this.onEvent({ kind: 'terminal', operationId, result });
   }

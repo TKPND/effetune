@@ -254,13 +254,6 @@ function validatePaths(paths, channels) {
     }
     return { inputSlot, outputSlot, irChannel };
   });
-  const inputSlots = [...new Set(normalized.map(path => path.inputSlot))]
-    .sort((left, right) => left - right);
-  if (inputSlots.some((value, index) => value !== index)) {
-    throw new AssetError(
-      'Matrix impulse-response inputSlot values must form a contiguous range starting at 0.'
-    );
-  }
   return normalized;
 }
 
@@ -592,7 +585,7 @@ export function prepareIrAsset(effect, resolvedAssets, {
     ? (asset.format.paths.length > 0 ? asset.format.paths : config.paths)
     : [];
   const inputCount = topology === IR_ASSET_TOPOLOGY.matrix
-    ? new Set(paths.map(path => path.inputSlot)).size
+    ? Math.max(...paths.map(path => path.inputSlot)) + 1
     : 0;
   if (inputCount > config.processingChannels) {
     throw new AssetError(
@@ -667,7 +660,7 @@ function prepareFirFilterAsset(effect, resolvedAssets, {
   }
 
   const processingChannels = channelRange(effect.channel, engineChannels).count;
-  const headBlock = Number(effect.parameters.latencyMode);
+  const headBlock = effect.type === 'BassManagement' ? 128 : Number(effect.parameters.latencyMode);
   const supportedHeadBlocks = new Set([0, 128, 256, 512, 1024]);
   if (!supportedHeadBlocks.has(headBlock)) {
     throw new AssetError(`${effect.id} has an unsupported latencyMode.`);
@@ -677,7 +670,23 @@ function prepareFirFilterAsset(effect, resolvedAssets, {
   let topology;
   let paths;
   let inputCount;
-  if (effect.type === 'FIRCrossover') {
+  if (effect.type === 'BassManagement') {
+    const p = effect.parameters;
+    const inputs = p.roles.flatMap((role, ch) =>
+      role === 1 || (role === 2 && p.lfeLowpass) ? [ch] : []);
+    paths = inputs.map((ch, index) => ({ inputSlot: ch, outputSlot: ch, irChannel: index }));
+    assetChannels = inputs.length;
+    inputCount = processingChannels;
+    topology = IR_ASSET_TOPOLOGY.matrix;
+    if (effect.channel !== 'all' || p.phase !== 'Linear' || asset.format.frames !== Number(p.taps) ||
+        asset.format.channels !== assetChannels ||
+        (asset.format.topology !== IR_ASSET_TOPOLOGY.unspecified && asset.format.topology !== topology) ||
+        (asset.format.topology === topology && (asset.format.paths.length !== paths.length ||
+          asset.format.paths.some((path, index) => path.inputSlot !== paths[index].inputSlot ||
+            path.outputSlot !== paths[index].outputSlot || path.irChannel !== paths[index].irChannel)))) {
+      throw new AssetError(`${effect.id} requires one diagonal low-pass filter per Managed or filtered LFE input, matching the selected tap count.`);
+    }
+  } else if (effect.type === 'FIRCrossover') {
     const bandCount = effect.parameters.bandCount;
     if ((processingChannels < 4 || processingChannels > 16 || processingChannels % 2 !== 0) ||
         bandCount * 2 > processingChannels ||

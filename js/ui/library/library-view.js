@@ -143,7 +143,8 @@ const PAGED_ACTION_PHASE_KEYS = Object.freeze({
   MATERIALIZING: 'library.job.phase.materializing',
   READY: 'library.job.phase.ready',
   CANCEL_REQUESTED: 'library.job.phase.cancel_requested',
-  COMMITTING: 'library.job.phase.committing'
+  COMMITTING: 'library.job.phase.committing',
+  STARTING_PLAYBACK: 'library.job.phase.starting_playback'
 });
 const CUE_SCAN_WARNING_KEYS = Object.freeze({
   'cue-invalid': 'library.paged.cueScanWarningInvalid',
@@ -5969,6 +5970,7 @@ function fallbackText(key, params = {}) {
     'library.job.phase.ready': 'Ready to commit',
     'library.job.phase.cancel_requested': 'Cancellation requested',
     'library.job.phase.committing': 'Committing',
+    'library.job.phase.starting_playback': 'Starting playback',
     'library.job.terminal.succeeded': 'Completed',
     'library.job.terminal.failed': 'Failed',
     'library.job.terminal.cancelled': 'Cancelled',
@@ -6008,6 +6010,8 @@ function fallbackText(key, params = {}) {
     'library.confirm.removeFolder': 'Remove this folder from the catalog? Files on disk will not be deleted.',
     'library.confirm.deletePlaylist': 'Delete this playlist?',
     'library.error.actionFailed': 'The Music Library could not complete this action. Please try again.',
+    'library.error.playbackStartTimeout': 'Playback could not start because loading the track stopped. Please try again.',
+    'library.error.playbackStartFailed': 'Playback could not start. Please try again.',
     'library.error.folderAlreadyAdded': `${params.name || 'This folder'} is already in your library.`,
     'library.error.folderInsideExisting': `${params.name || 'This folder'} is already included in ${params.existing || 'an existing folder'}.`
   };

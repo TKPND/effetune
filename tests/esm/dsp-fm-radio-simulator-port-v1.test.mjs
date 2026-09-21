@@ -526,9 +526,10 @@ for (const artifact of ['effetune-dsp.wasm', 'effetune-dsp.simd.wasm']) {
 }
 
 test('FM Radio Simulator telemetry integration wiring is registered end to end', async () => {
-    const [plugin, kernel, registry, cmake, rollout, telemetry, readme] = await Promise.all([
+    const [plugin, kernel, spectrumHeader, registry, cmake, rollout, telemetry, readme] = await Promise.all([
         fs.readFile(path.join(repoRoot, 'plugins', 'lofi', 'fm_radio_simulator.js'), 'utf8'),
         fs.readFile(path.join(pluginRoot, 'kernel.cpp'), 'utf8'),
+        fs.readFile(path.join(repoRoot, 'dsp', 'include', 'effetune', 'dsp', 'telemetry_spectrum.h'), 'utf8'),
         fs.readFile(path.join(repoRoot, 'dsp', 'registry.inc'), 'utf8'),
         fs.readFile(path.join(repoRoot, 'dsp', 'CMakeLists.txt'), 'utf8'),
         fs.readFile(path.join(repoRoot, 'js', 'audio', 'dsp-rollout.js'), 'utf8'),
@@ -543,7 +544,8 @@ test('FM Radio Simulator telemetry integration wiring is registered end to end',
     assert.match(plugin, /WASM is required/);
     assert.match(kernel, /kTelemetryFrameType\s*=\s*16u/);
     assert.match(kernel, /kTelemetryVersion\s*=\s*1u/);
-    assert.match(kernel, /kSpectrumBins\s*=\s*48u/);
+    assert.match(spectrumHeader, /kBins\s*=\s*48u/);
+    assert.match(kernel, /kSpectrumBins\s*=\s*dsp::TelemetrySpectrum::kBins/);
     assert.match(kernel, /void writeTelemetry\(TelemetryWriter &writer\)/);
     assert.match(registry, /EFFETUNE_PLUGIN\(FMRadioSimulatorPlugin, lofi\/fm_radio_simulator\)/);
     assert.match(cmake, /effetune_dsp_fm_radio_simulator_tests/);

@@ -1,6 +1,7 @@
 class MultibandSaturationPlugin extends PluginBase {
     constructor() {
         super('Multiband Saturation', '3-band saturation effect');
+        this.os = 1;
 
         // Crossover frequencies
         this.f1 = 200;  // Low-Mid crossover
@@ -28,6 +29,7 @@ class MultibandSaturationPlugin extends PluginBase {
             // Cache frequently used parameters for faster access
             const pEnabled = parameters.enabled;
             if (!pEnabled) return data; // Early exit if disabled
+            ${PluginBase.oversamplingProcessorSource(8, 3)}
     
             // Create a result buffer. It starts as a copy of the input data.
             let result = data; // Use input data directly
@@ -326,8 +328,9 @@ class MultibandSaturationPlugin extends PluginBase {
                         const gainLinear = 10.0**(gainDb / 20.0);
                         const biasOffset = Math.tanh(dr * bs);
                         const dry = bandSignalBuffer[i];
-                        const wet = Math.tanh(dr * (dry + bs)) - biasOffset;
-                        bandSignalBuffer[i] = (dry * (1 - mixRatio) + wet * mixRatio) * gainLinear;
+                        const wet = shapeSample(ch * 3 + band, dry, sample => Math.tanh(dr * (sample + bs)) - biasOffset);
+                        const delayedDry = delaySample(ch * 3 + band, dry);
+                        bandSignalBuffer[i] = (delayedDry * (1 - mixRatio) + wet * mixRatio) * gainLinear;
                     }
                 } // End band saturation loop
                 
@@ -428,6 +431,9 @@ class MultibandSaturationPlugin extends PluginBase {
     }
 
     setParameters(params) {
+        if (params.os !== undefined) {
+            this.os = this.isAllowedEnum(Number(params.os), [1, 2, 4, 8], this.os);
+        }
         let graphNeedsUpdate = false;
         let crossoverChanged = false;
 
@@ -522,6 +528,7 @@ class MultibandSaturationPlugin extends PluginBase {
                 mx: b.mx,
                 gn: b.gn
             })),
+            os: this.os,
             enabled: this.enabled
         };
     }
@@ -633,6 +640,10 @@ class MultibandSaturationPlugin extends PluginBase {
         const container = document.createElement('div');
         this.instanceId = `mbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         container.className = 'mbs-container plugin-parameter-ui';
+        container.appendChild(this.createSelectControl(
+            'Oversampling', [1, 2, 4, 8].map(value => ({ value, label: value + 'x' })),
+            this.os, value => this.setParameters({ os: Number(value) }), 'os'
+        ));
         container.setAttribute('data-instance-id', this.instanceId);
         this.graphDisposers?.forEach(dispose => dispose());
         this.graphDisposers = [];

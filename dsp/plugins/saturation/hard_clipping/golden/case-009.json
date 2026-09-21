@@ -13,14 +13,15 @@
   "seed": "0xeffe7a56",
   "params": {
     "th": -9,
-    "md": "positive"
+    "md": "positive",
+    "os": 1
   },
   "events": [],
   "tolerance": {
     "abs": 0.000001,
     "policy": "per-sample"
   },
-  "jsEngineHash": "c1e78d2fc125302093155e68fa0c817203d7b51ee095ccc42574dcdf3b0febd8",
+  "jsEngineHash": "2a2b73550f3fb4bf7d77e2c5790774fad9f739ead89bd3654610b7cc3b4d1e4c",
   "outputFloats": 126,
   "byteLength": 504,
   "binary": "case-009.f32"

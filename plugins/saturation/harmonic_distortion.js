@@ -1,6 +1,7 @@
 class HarmonicDistortionPlugin extends PluginBase {
     constructor() {
         super('Harmonic Distortion', 'Harmonic distortion effect with independent harmonic control');
+        this.os = 1;
         
         // Initialize parameters with defaults
         this.h2 = 2.0;   // h2: 2nd Harm (%) - -30~30%, default 2%
@@ -13,6 +14,7 @@ class HarmonicDistortionPlugin extends PluginBase {
         this.registerProcessor(`
             // Skip processing if the plugin is disabled
             if (!parameters.enabled) return data;
+            ${PluginBase.oversamplingProcessorSource(8, 1)}
 
             // --- Extract and Prepare Parameters ---
             // Destructure parameters for quick access
@@ -59,25 +61,13 @@ class HarmonicDistortionPlugin extends PluginBase {
             // --- Main Processing Loop ---
             // Process samples block by block, channel by channel
             const harmonicCurrent = context.harmonicCurrent;
-            for (let i = 0; i < blockSize; ++i) {
-                if (context.harmonicRemaining > 0) {
-                    for (let parameter = 0; parameter < 5; ++parameter) {
-                        context.harmonicCurrent[parameter] += context.harmonicStep[parameter];
-                    }
-                    if (--context.harmonicRemaining === 0) {
-                        context.harmonicCurrent.set(context.harmonicTarget);
-                    }
-                }
+            const shapeHarmonics = x => {
                 const a2 = harmonicCurrent[0];
                 const a3 = harmonicCurrent[1];
                 const a4 = harmonicCurrent[2];
                 const a5 = harmonicCurrent[3];
                 const currentSensitivity = harmonicCurrent[4];
                 const invSensitivity = 1.0 / (currentSensitivity + 1e-9);
-                for (let ch = 0; ch < channelCount; ++ch) {
-                    const index = ch * blockSize + i;
-                    const x = data[index];       // Get the original input sample
-
                     // Apply sensitivity scaling to the input signal before distortion
                     const x_scaled = x * currentSensitivity;
 
@@ -100,7 +90,20 @@ class HarmonicDistortionPlugin extends PluginBase {
                     // --- Level Compensation & Output ---
                     // Compensate output level by multiplying with the pre-calculated inverse sensitivity.
                     // This replaces division (y_nl / sensitivity) with multiplication for potential speed gain.
-                    data[index] = y_nl * invSensitivity;
+                    return y_nl * invSensitivity;
+            };
+            for (let i = 0; i < blockSize; ++i) {
+                if (context.harmonicRemaining > 0) {
+                    for (let parameter = 0; parameter < 5; ++parameter) {
+                        context.harmonicCurrent[parameter] += context.harmonicStep[parameter];
+                    }
+                    if (--context.harmonicRemaining === 0) {
+                        context.harmonicCurrent.set(context.harmonicTarget);
+                    }
+                }
+                for (let ch = 0; ch < channelCount; ++ch) {
+                    const index = ch * blockSize + i;
+                    data[index] = shapeSample(ch, data[index], shapeHarmonics);
                 }
             }
 
@@ -118,12 +121,16 @@ class HarmonicDistortionPlugin extends PluginBase {
             h4: this.h4,     // 4th Harm (%)
             h5: this.h5,     // 5th Harm (%)
             sn: this.sn,     // Sensitivity (x)
+            os: this.os,
             enabled: this.enabled
         };
     }
 
     // Set parameters with validation
     setParameters(params) {
+        if (params.os !== undefined) {
+            this.os = this.isAllowedEnum(Number(params.os), [1, 2, 4, 8], this.os);
+        }
         let graphNeedsUpdate = false;
         
         if (params.h2 !== undefined) {
@@ -266,6 +273,10 @@ class HarmonicDistortionPlugin extends PluginBase {
     createUI() {
         const container = document.createElement('div');
         container.className = 'harmonic-distortion-plugin-ui plugin-parameter-ui';
+        container.appendChild(this.createSelectControl(
+            'Oversampling', [1, 2, 4, 8].map(value => ({ value, label: value + 'x' })),
+            this.os, value => this.setParameters({ os: Number(value) }), 'os'
+        ));
 
         // Use base helper to create parameter rows
         container.appendChild(this.createParameterControl(

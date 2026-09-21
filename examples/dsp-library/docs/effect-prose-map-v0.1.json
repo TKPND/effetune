@@ -3,6 +3,7 @@
   "effects": {
     "PitchShifterHQ": ["docs/plugins/modulation.md", "Pitch Shifter HQ"],
     "BandwidthExtender": ["docs/plugins/saturation.md", "Bandwidth Extender"],
+    "BassExtender": ["docs/plugins/saturation.md", "Bass Extender"],
     "ClickRemover": ["docs/plugins/restoration.md", "Click Remover"],
     "ClipRestorer": ["docs/plugins/restoration.md", "Clip Restorer"],
     "HumRemover": ["docs/plugins/restoration.md", "Hum Remover"],
@@ -15,6 +16,7 @@
     "Spectrogram": ["docs/plugins/analyzer.md", "Spectrogram"],
     "SpectrumAnalyzer": ["docs/plugins/analyzer.md", "Spectrum Analyzer"],
     "StereoMeter": ["docs/plugins/analyzer.md", "Stereo Meter"],
+    "BassManagement": ["docs/plugins/basics.md", "Bass Management"],
     "ChannelDivider": ["docs/plugins/basics.md", "Channel Divider"],
     "DCOffset": ["docs/plugins/basics.md", "DC Offset"],
     "FIRCrossover": ["docs/plugins/basics.md", "FIR Crossover"],
@@ -26,6 +28,7 @@
     "Volume": ["docs/plugins/basics.md", "Volume"],
     "Delay": ["docs/plugins/delay.md", "Delay"],
     "TimeAlignment": ["docs/plugins/delay.md", "Time Alignment"],
+    "AttackTonalBalance": ["docs/plugins/dynamics.md", "Attack Tonal Balance"],
     "AutoLeveler": ["docs/plugins/dynamics.md", "Auto Leveler"],
     "BrickwallLimiter": ["docs/plugins/dynamics.md", "Brickwall Limiter"],
     "Compressor": ["docs/plugins/dynamics.md", "Compressor"],

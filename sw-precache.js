@@ -1,4 +1,4 @@
-self.EFFECTUNE_CACHE_VERSION = "effetune-v2.11.0-b436f222320b5002";
+self.EFFECTUNE_CACHE_VERSION = "effetune-v2.11.0-6e25e3dfbb1046a6";
 self.EFFECTUNE_PRECACHE_URLS = [
   "./effetune-library.css",
   "./effetune-mobile.css",
@@ -47,6 +47,9 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/audio/startup-audio-warmup.js",
   "./js/audio/telemetry-hub.js",
   "./js/audio/visual-sync.js",
+  "./js/bass-management/design-core.js",
+  "./js/bass-management/design-worker.js",
+  "./js/bass-management/designer.js",
   "./js/crosstalk-cancellation/design-core.js",
   "./js/crosstalk-cancellation/design-worker.js",
   "./js/crosstalk-cancellation/designer.js",
@@ -279,6 +282,8 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./plugins/analyzer/stereo_meter.css",
   "./plugins/analyzer/stereo_meter.js",
   "./plugins/audio-processor.js",
+  "./plugins/basics/bass_management.css",
+  "./plugins/basics/bass_management.js",
   "./plugins/basics/channel_divider.css",
   "./plugins/basics/channel_divider.js",
   "./plugins/basics/dc_offset.js",
@@ -299,6 +304,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./plugins/dsp/effetune-dsp.meta.json",
   "./plugins/dsp/effetune-dsp.simd.wasm",
   "./plugins/dsp/effetune-dsp.wasm",
+  "./plugins/dynamics/attack_tonal_balance.js",
   "./plugins/dynamics/auto_leveler.css",
   "./plugins/dynamics/auto_leveler.js",
   "./plugins/dynamics/brickwall_limiter.js",
@@ -411,6 +417,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./plugins/reverb/ir_reverb.js",
   "./plugins/reverb/rs_reverb.js",
   "./plugins/saturation/bandwidth_extender.js",
+  "./plugins/saturation/bass_extender.js",
   "./plugins/saturation/dynamic_saturation.css",
   "./plugins/saturation/dynamic_saturation.js",
   "./plugins/saturation/exciter.css",

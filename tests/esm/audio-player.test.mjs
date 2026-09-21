@@ -92,6 +92,8 @@ test('startup-created player uses the canonical AudioContext for buffer and medi
 
     load() {}
     pause() {}
+    addEventListener() {}
+    removeEventListener() {}
   }
 
   await withAudioPlayerGlobals({ globals: { Audio: TestAudio } }, async () => {

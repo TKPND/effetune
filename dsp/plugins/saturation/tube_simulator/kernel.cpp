@@ -4155,6 +4155,10 @@ private:
     std::array<PlateEvaluation, 2> plate{};
     std::array<GridEvaluation, 2> grid{};
     for (int iteration = 0; iteration < 8192; ++iteration) {
+      const double previous_p = p;
+      const auto previous_vk = vk;
+      const auto previous_vg = vg;
+      const auto previous_va = va;
       for (int stage = 0; stage < 2; ++stage) {
         for (int grid_iteration = 0; grid_iteration < 8; ++grid_iteration) {
           grid[static_cast<std::size_t>(stage)] = evaluateGrid(vg[static_cast<std::size_t>(stage)] -
@@ -4180,6 +4184,10 @@ private:
         const double targetVa = p - plate_resistance_ * plate[index].current;
         vk[index] += 0.025 * (targetVk - vk[index]);
         va[index] += 0.025 * (targetVa - va[index]);
+      }
+      // Further iterations reproduce the same DC state once every voltage stops changing.
+      if (p == previous_p && vk == previous_vk && vg == previous_vg && va == previous_va) {
+        break;
       }
     }
     slow.cathode[0] = {vk[0], 0.0};

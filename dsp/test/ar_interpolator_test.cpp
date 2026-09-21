@@ -151,6 +151,29 @@ double knownContribution(const std::vector<double> &window, std::uint32_t pre, s
   return rhs;
 }
 
+void testKnownRhsMatchesResidualReference() {
+  Random random(0xa417c39du);
+  for (const std::uint32_t order : {1u, 6u, 24u}) {
+    for (const std::uint32_t gap : {1u, 2u, 12u, 24u, 25u, 96u, 384u}) {
+      std::vector<double> coefficients(order);
+      std::vector<double> window(order + gap + order);
+      std::vector<double> rhs(gap);
+      for (double &coefficient : coefficients) {
+        coefficient = 0.2 * random.bipolar();
+      }
+      for (double &sample : window) {
+        sample = random.bipolar();
+      }
+      effetune::dsp::ar_interpolator_detail::buildKnownRhs(window.data(), order, gap,
+                                                           coefficients.data(), order, rhs.data());
+      for (std::uint32_t unknown = 0u; unknown < gap; ++unknown) {
+        check(rhs[unknown] == knownContribution(window, order, gap, coefficients, unknown),
+              "shared known residuals preserve the per-unknown accumulation exactly");
+      }
+    }
+  }
+}
+
 std::vector<double> denseReference(const std::vector<double> &window, std::uint32_t pre,
                                    std::uint32_t gap, const std::vector<double> &coefficients) {
   const std::uint32_t order = static_cast<std::uint32_t>(coefficients.size());
@@ -271,6 +294,7 @@ void testFailureContracts() {
 
 int main() {
   testKnownProcessAndGapRestoration();
+  testKnownRhsMatchesResidualReference();
   testBandedAndBoundedSolves();
   testFailureContracts();
   if (failures != 0) {

@@ -15,7 +15,7 @@ public:
   void prepare(const PrepareInfo &info) override {
     sample_rate_ = static_cast<double>(info.sampleRate);
     max_channels_ = info.maxChannels;
-    const std::uint32_t max_delay = static_cast<std::uint32_t>(std::ceil(sample_rate_ * 0.1));
+    const std::uint32_t max_delay = static_cast<std::uint32_t>(std::ceil(sample_rate_ * 0.5));
     static_cast<void>(delay_.prepare(max_channels_, max_delay));
     const auto calculated_ramp = static_cast<std::uint32_t>(std::ceil(sample_rate_ * 0.005));
     ramp_frames_ = calculated_ramp == 0u ? 1u : calculated_ramp;

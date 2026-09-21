@@ -3,10 +3,10 @@ class TimeAlignmentPlugin extends PluginBase {
         super('Time Alignment', 'Time alignment effect');
 
         // Maximum delay time in milliseconds
-        this.maxDelayTime = 100;
+        this.maxDelayTime = 500;
 
         // Initialize parameters
-        this.dl = 0.00;  // dl: Delay (formerly delay) - 0 to 100 ms
+        this.dl = 0.00;  // dl: Delay (formerly delay) - 0 to 500 ms
 
         this.lastProcessTime = performance.now() / 1000;
 
@@ -15,7 +15,7 @@ class TimeAlignmentPlugin extends PluginBase {
             if (!parameters.enabled) return data;
 
             // Define max delay time constant (ms)
-            const maxDelayTime = 100;
+            const maxDelayTime = 500;
 
             const maxDelaySamplesRaw = Math.ceil(parameters.sampleRate * maxDelayTime * 0.001);
             const maxDelaySamples = maxDelaySamplesRaw > 0 ? maxDelaySamplesRaw : 1;

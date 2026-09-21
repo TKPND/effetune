@@ -47,7 +47,10 @@ class MultiChannelPanelPlugin extends PluginBase {
             const numChannelsToProcess = inputBufferChannelCount > 16 ? 16 : inputBufferChannelCount; // Process at most 16 channels.
             const blockSize = parameters.blockSize;       // The number of samples in each block per channel.
             const sampleRate = parameters.sampleRate;     // The sample rate of the audio context.
-            const blocksPerWindow = Math.floor(sampleRate / 30 / blockSize); // Number of blocks in ~1/30 second
+            const peakWindowBins = 32;
+            const desiredFramesPerPeakBin = sampleRate / 30 / peakWindowBins;
+            const framesPerPeakBin = desiredFramesPerPeakBin > 1 ?
+                Math.ceil(desiredFramesPerPeakBin) : 1;
 
             // Get parameter arrays holding the current state for each channel.
             const muteStates = parameters.m;     // Array of mute states (boolean).
@@ -78,23 +81,19 @@ class MultiChannelPanelPlugin extends PluginBase {
                 context.controlsInitialized = new Uint8Array(numChannelsToProcess);
             }
 
-            // Initialize context state for block-based peak tracking over 1/30 second window
-            if (!context.peakTrackingInitialized) {
+            // Fixed time bins preserve the peak window across irregular host block sizes.
+            if (!context.peakTrackingInitialized ||
+                context.peakBuffers.length !== numChannelsToProcess ||
+                context.peakSampleRate !== sampleRate) {
                 context.peakBuffers = new Array(numChannelsToProcess)
                     .fill()
-                    .map(() => new Float32Array(blocksPerWindow).fill(0));
-                context.blockIndex = 0;
-                context.blocksPerWindow = blocksPerWindow;
+                    .map(() => new Float32Array(peakWindowBins));
+                context.windowPeaks = new Float32Array(numChannelsToProcess);
+                context.currentPeakBin = 0;
+                context.currentPeakBinFrames = 0;
+                context.framesPerPeakBin = framesPerPeakBin;
+                context.peakSampleRate = sampleRate;
                 context.peakTrackingInitialized = true;
-            }
-            
-            // Reset peak tracking state if channel count or window size changes
-            if (context.peakBuffers.length !== numChannelsToProcess || context.blocksPerWindow !== blocksPerWindow) {
-                context.peakBuffers = new Array(numChannelsToProcess)
-                    .fill()
-                    .map(() => new Float32Array(blocksPerWindow).fill(0));
-                context.blockIndex = 0;
-                context.blocksPerWindow = blocksPerWindow;
             }
 
             // Determine if any channel is currently soloed.
@@ -132,6 +131,10 @@ class MultiChannelPanelPlugin extends PluginBase {
                 const delayBuffer = context.delayBuffers[ch];
                 let writeIndex = context.delayWriteIndices[ch];
                 const delayBufferLength = delayBuffer.length; // Cache for performance.
+                const peakBuffer = context.peakBuffers[ch];
+                let peakBin = context.currentPeakBin;
+                let peakBinFrames = context.currentPeakBinFrames;
+                let windowPeak = context.windowPeaks[ch];
 
                 let targetDelay = Math.fround(channelDelayTimeMs) * sampleRate * 0.001;
                 targetDelay = targetDelay < 0 ? 0 : (targetDelay > delayBufferLength ? delayBufferLength : targetDelay);
@@ -148,13 +151,23 @@ class MultiChannelPanelPlugin extends PluginBase {
                     context.controlRampRemaining[ch] = rampFrames;
                 }
 
-                let channelBlockPeak = 0; // Stores the peak absolute sample value for this channel in the current block (pre-gain).
-
                 // Determine if the current channel should be effectively muted based on solo and mute states.
                 const shouldEffectivelyMute = (isAnyChannelSoloed && !isChannelSoloActive) || (!isAnyChannelSoloed && isChannelMuteActive);
 
                 // --- Sample processing loop for the current channel ---
                 for (let i = 0; i < blockSize; i++) {
+                    if (peakBinFrames >= context.framesPerPeakBin) {
+                        peakBin = (peakBin + 1) % peakWindowBins;
+                        peakBinFrames = 0;
+                        const outgoingPeak = peakBuffer[peakBin];
+                        peakBuffer[peakBin] = 0;
+                        if (outgoingPeak === windowPeak) {
+                            windowPeak = 0;
+                            for (let bin = 0; bin < peakWindowBins; bin++) {
+                                if (peakBuffer[bin] > windowPeak) windowPeak = peakBuffer[bin];
+                            }
+                        }
+                    }
                     if (context.controlRampRemaining[ch] > 0) {
                         context.currentGains[ch] += context.gainSteps[ch];
                         context.currentDelays[ch] += context.delaySteps[ch];
@@ -166,7 +179,11 @@ class MultiChannelPanelPlugin extends PluginBase {
                     const sampleIndex = channelAudioOffset + i;
                     const currentInputSample = data[sampleIndex];
                     const absInputSample = Math.abs(currentInputSample);
-                    if (absInputSample > channelBlockPeak) channelBlockPeak = absInputSample;
+                    if (absInputSample > peakBuffer[peakBin]) {
+                        peakBuffer[peakBin] = absInputSample;
+                        if (peakBuffer[peakBin] > windowPeak) windowPeak = peakBuffer[peakBin];
+                    }
+                    ++peakBinFrames;
                     const processed = shouldEffectivelyMute ? 0 : currentInputSample * context.currentGains[ch];
                     const delay = context.currentDelays[ch];
                     const lower = Math.floor(delay);
@@ -182,25 +199,25 @@ class MultiChannelPanelPlugin extends PluginBase {
 
                 // Store the updated write index for the next processing block.
                 context.delayWriteIndices[ch] = writeIndex;
-
-                // Store block peak in circular buffer for 1/30 second window tracking
-                context.peakBuffers[ch][context.blockIndex] = channelBlockPeak;
-                
-                // Find maximum peak across the stored blocks (~1/30 second window)
-                let windowPeak = 0.0;
-                for (let i = 0; i < blocksPerWindow; i++) {
-                    if (context.peakBuffers[ch][i] > windowPeak) {
-                        windowPeak = context.peakBuffers[ch][i];
-                    }
-                }
-                
+                context.windowPeaks[ch] = windowPeak;
                 // Store the window peak value (pre-gain, pre-mute absolute peak) for this channel.
                 // The main thread will use this along with the 'muted' status for meter display.
                 currentBlockPeakValues[ch] = windowPeak;
             }
-            
-            // Advance block index for next processing call
-            context.blockIndex = (context.blockIndex + 1) % blocksPerWindow;
+
+            let remainingPeakFrames = blockSize;
+            while (remainingPeakFrames > 0) {
+                if (context.currentPeakBinFrames >= context.framesPerPeakBin) {
+                    context.currentPeakBin = (context.currentPeakBin + 1) % peakWindowBins;
+                    context.currentPeakBinFrames = 0;
+                }
+                const availablePeakFrames =
+                    context.framesPerPeakBin - context.currentPeakBinFrames;
+                const peakSegmentFrames = remainingPeakFrames < availablePeakFrames ?
+                    remainingPeakFrames : availablePeakFrames;
+                context.currentPeakBinFrames += peakSegmentFrames;
+                remainingPeakFrames -= peakSegmentFrames;
+            }
 
             // Prepare measurement data to be sent to the main thread for UI updates.
             const channelMeasurements = new Array(numChannelsToProcess);

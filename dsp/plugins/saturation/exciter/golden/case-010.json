@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "type": "ExciterPlugin",
+  "id": "oversampling-2x",
+  "stimulus": "noise",
+  "sampleRate": 48000,
+  "channels": 2,
+  "frameCount": 257,
+  "blockSize": 63,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 9,
+  "seed": "0xeffe7a57",
+  "params": {
+    "hf": 3000,
+    "hs": 1,
+    "dr": 3,
+    "bs": 0.1,
+    "mx": 25,
+    "os": 2
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.00001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "75526fdf864920aee369868facb22dc41ee4a4e14417849224ac2cd3064f2ee7",
+  "outputFloats": 514,
+  "byteLength": 2056,
+  "binary": "case-010.f32"
+}

@@ -126,7 +126,7 @@ playback timing को थोड़ी मात्रा में adjust क�
 - जांचने के लिए कि छोटा delay stereo image को अधिक stable या natural महसूस कराता है या नहीं
 
 ### पैरामीटर
-- **Delay** - इस plugin से route हुए channels पर लगाया जाने वाला delay time control करता है (0 से 100 ms)
+- **Delay** - इस plugin से route हुए channels पर लगाया जाने वाला delay time control करता है (0 से 500 ms)
   - 0 ms: कोई delay नहीं
   - छोटे values: speakers के बीच tiny arrival-time differences की भरपाई के लिए उपयोगी
   - अधिक values: अधिक noticeable timing shift बनाते हैं

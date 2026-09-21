@@ -1,6 +1,6 @@
 ---
 title: "다이내믹스 플러그인 - EffeTune"
-description: "Compressor, Limiter, Gate, Multiband Compressor, Transient Shaper를 포함한 다이내믹스 처리 플러그인입니다."
+description: "Attack Tonal Balance, Compressor, Limiter, Gate, Multiband Compressor, Transient Shaper를 포함한 다이내믹스 처리 플러그인입니다."
 lang: ko
 ---
 
@@ -10,6 +10,7 @@ lang: ko
 
 ## 플러그인 목록
 
+- [Attack Tonal Balance](#attack-tonal-balance) - 짧은 어택과 지속되는 음정 성분의 균형을 조정
 - [Auto Leveler](#auto-leveler) - 일관된 청취 경험을 위한 자동 볼륨 조절
 - [Brickwall Limiter](#brickwall-limiter) - 디지털 클리핑을 방지하는 투명한 피크 제어
 - [Compressor](#compressor) - 더 편안한 청취를 위해 볼륨 레벨을 자동으로 균형 조절 (상향 확장 포함)
@@ -20,6 +21,38 @@ lang: ko
 - [Multiband Transient](#multiband-transient) - 저역, 중역, 고역의 어택과 서스테인을 따로 조정
 - [Power Amp Sag](#power-amp-sag) - 큰 소리 구간을 부드럽게 완화하는 앰프 같은 컴프레션 추가
 - [Transient Shaper](#transient-shaper) - 음악의 펀치감과 바디감을 조정
+
+## Attack Tonal Balance
+
+같은 주파수 영역에 겹치는 짧고 넓은 대역의 어택과 지속되는 음정 성분 사이의 균형을 조정합니다. 지속음을 같은 방식으로 바꾸지 않으면서 타악기와 음의 시작 부분만 더 돋보이게 하거나 부드럽게 만들 때 사용합니다. Transient Shaper와 달리 빠르고 느린 레벨 엔벌로프가 아니라 시간과 주파수 패턴으로 두 성분을 나누며, Multiband Transient처럼 저역, 중역, 고역의 고정 밴드로 나누지 않습니다.
+
+### 청취 개선 가이드
+
+- Attack Enabled와 Tonal Enabled를 체크한 상태에서 두 게인을 모두 0 dB로 시작한 뒤, 한 번에 하나씩 1~3 dB 정도 조정합니다.
+- 드럼 타격, 뜯는 현의 소리, 음의 시작을 더 선명하게 하려면 Attack을 높입니다. 날카롭거나 피로한 어택을 부드럽게 하려면 낮춥니다.
+- 지속음, 화음, 보컬의 음정감을 앞으로 드러내려면 Tonal을 높입니다. 지속되는 음정 성분이 믹스를 압도할 때는 낮춥니다.
+- 한쪽 Enabled 체크를 해제하면 분리된 해당 성분을 잘라 내고 다른 성분을 비교하거나 조정할 수 있습니다. 게인 설정은 유지되지만 다시 켤 때까지 해당 슬라이더와 숫자 입력란을 조작할 수 없습니다.
+- 양수 설정은 피크나 체감 음량을 높일 수 있습니다. 비슷한 청취 음량으로 비교하고 필요하면 출력 레벨을 낮추십시오.
+
+### 파라미터
+
+- **Attack Enabled** (기본값: 켜짐)
+  - 분리된 Attack 성분을 출력에 포함합니다. 체크를 해제하면 해당 성분을 잘라 냅니다.
+
+- **Attack** (-12 dB~+12 dB, 기본값: 0 dB, 0.5 dB 간격)
+  - 인접한 주파수로 짧게 퍼지는 성분을 조정합니다.
+  - 양수 값은 어택을 강조하고 음수 값은 부드럽게 합니다.
+
+- **Tonal Enabled** (기본값: 켜짐)
+  - 분리된 Tonal 성분을 출력에 포함합니다. 체크를 해제하면 해당 성분을 잘라 냅니다.
+
+- **Tonal** (-12 dB~+12 dB, 기본값: 0 dB, 0.5 dB 간격)
+  - 시간에 따라 안정적으로 이어지는 성분을 조정합니다.
+  - 양수 값은 지속되는 음정 성분을 강조하고 음수 값은 줄입니다.
+
+### 지연과 분리의 한계
+
+이 효과는 48 kHz에서 5,120샘플(약 107 ms)의 고정 처리 지연을 더합니다. 악기나 음원을 구분하거나 음정이 음악적으로 정확한지 판단하는 기능이 아니라 스펙트럼 패턴을 식별합니다. 빠른 음정 변화, 지속적인 잡음, 밀도 높은 타악기, 변조가 강한 소리는 명확하게 분리되지 않을 수 있습니다. Attack이나 Tonal로 명확히 판단되지 않는 성분은 원래 레벨로 유지되므로 두 Enabled 체크를 모두 해제해도 출력이 무음이 되지는 않습니다.
 
 ## Auto Leveler
 
@@ -171,6 +204,7 @@ lang: ko
   - 정밀한 피크 제어를 위해 조정
 
 - **Oversampling** (1x, 2x, 4x, 8x)
+  - 1x(기본값)는 기존 처리를 유지합니다. 2x 이상에서는 Lookahead에 더해 64샘플(48 kHz에서 약 1.33 ms)의 필터 지연이 발생합니다.
   - 높은 값: 더 깨끗한 리미팅
   - 낮은 값: 더 적은 CPU 사용
   - 4x가 품질과 성능의 좋은 균형점

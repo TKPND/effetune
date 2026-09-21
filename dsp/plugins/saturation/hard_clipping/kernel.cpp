@@ -1,6 +1,7 @@
 #include "effetune/kernel.h"
 #include "HardClippingPluginParams.h"
 #include "effetune/dsp/denormal_noise.h"
+#include "effetune/dsp/oversampled_shaper.h"
 
 #include <cmath>
 #include <cstddef>
@@ -21,12 +22,14 @@ class HardClippingKernel final : public PluginKernel {
 
 public:
   void prepare(const PrepareInfo &info) override {
+    shaper_.prepare(info.maxChannels * 1u);
     oversampled_.resize(static_cast<std::size_t>(info.maxFrames) * kOversampleFactor);
     low_pass_previous_.resize(info.maxChannels);
     interpolation_previous_.resize(info.maxChannels);
   }
 
   void reset() noexcept override {
+    shaper_.reset();
     for (double &previous : low_pass_previous_) {
       previous = 0.0;
     }
@@ -40,6 +43,8 @@ public:
 
   void process(float *audio, std::uint32_t channel_count, std::uint32_t frame_count,
                const ProcessInfo &) noexcept override {
+    shaper_.configure(dsp::OversampledShaper::factor(params_.oversampling, 16u),
+                      channel_count * 1u);
     const std::size_t oversampled_count = static_cast<std::size_t>(frame_count) * kOversampleFactor;
     if (channel_count == 0u || frame_count == 0u || channel_count > low_pass_previous_.size() ||
         oversampled_count > oversampled_.size()) {
@@ -60,6 +65,24 @@ public:
 
     const std::uint32_t mode = static_cast<std::uint32_t>(params_.mode);
     const double negative_threshold = -threshold_;
+    if (dsp::OversampledShaper::factor(params_.oversampling, 16u) > 1u) {
+      for (std::uint32_t channel = 0; channel < channel_count; ++channel) {
+        low_pass_previous_[channel] = 0.0;
+        interpolation_previous_[channel] = 0.0;
+        for (std::uint32_t frame = 0; frame < frame_count; ++frame) {
+          const std::size_t index = static_cast<std::size_t>(channel) * frame_count + frame;
+          audio[index] =
+              static_cast<float>(shaper_.process(channel, audio[index], [&](double sample) {
+                if (mode != 2u && sample > threshold_)
+                  return threshold_;
+                if (mode != 1u && sample < negative_threshold)
+                  return negative_threshold;
+                return sample;
+              }));
+        }
+      }
+      return;
+    }
     for (std::uint32_t channel = 0; channel < channel_count; ++channel) {
       const std::size_t channel_offset = static_cast<std::size_t>(channel) * frame_count;
       double interpolation_previous = interpolation_previous_[channel];
@@ -118,7 +141,15 @@ public:
     denormal_noise_.advance(frame_count);
   }
 
+  [[nodiscard]] std::uint32_t latencySamples() const noexcept override {
+    const auto &parameters = params_pending_ ? staged_params_ : params_;
+    return dsp::OversampledShaper::factor(parameters.oversampling, 16u) == 1u
+               ? 0u
+               : dsp::OversampledShaper::kLatency;
+  }
+
 private:
+  dsp::OversampledShaper shaper_;
   void updateThreshold() noexcept {
     threshold_ = params_.threshold == 0.0F
                      ? 1.0

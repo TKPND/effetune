@@ -101,6 +101,31 @@ class StereoMeter(Effect):
         channel: EffectChannel = ...,
     ) -> None: ...
 
+class BassManagement(Effect):
+    effect_type: Literal["BassManagement"]
+    def __init__(
+        self,
+        *,
+        phase: Literal["IIR", "Linear"] = ...,
+        taps: Literal["8192", "16384", "32768"] = ...,
+        roles: tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int] = ...,
+        frequencies: tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float] = ...,
+        slopes: tuple[Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96], Literal[24, 48, 96]] = ...,
+        routes: tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int] = ...,
+        subs: int = ...,
+        lfe_frequency: float = ...,
+        lfe_slope: Literal[24, 48, 96] = ...,
+        lfe_lowpass: bool = ...,
+        bass_gain: float = ...,
+        lfe_gain: float = ...,
+        headroom: float = ...,
+        route_inversions: tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int] = ...,
+        id: str | None = ...,
+        enabled: bool = ...,
+        channel: EffectChannel = ...,
+        assets: IRReverbAssets | None = ...,
+    ) -> None: ...
+
 class ChannelDivider(Effect):
     effect_type: Literal["ChannelDivider"]
     def __init__(
@@ -235,6 +260,20 @@ class TimeAlignment(Effect):
         self,
         *,
         delay: float = ...,
+        id: str | None = ...,
+        enabled: bool = ...,
+        channel: EffectChannel = ...,
+    ) -> None: ...
+
+class AttackTonalBalance(Effect):
+    effect_type: Literal["AttackTonalBalance"]
+    def __init__(
+        self,
+        *,
+        attack: float = ...,
+        tonal: float = ...,
+        attack_enabled: bool = ...,
+        tonal_enabled: bool = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,
@@ -1428,6 +1467,18 @@ class BandwidthExtender(Effect):
         channel: EffectChannel = ...,
     ) -> None: ...
 
+class BassExtender(Effect):
+    effect_type: Literal["BassExtender"]
+    def __init__(
+        self,
+        *,
+        amount: float = ...,
+        output_gain: float = ...,
+        id: str | None = ...,
+        enabled: bool = ...,
+        channel: EffectChannel = ...,
+    ) -> None: ...
+
 class DynamicSaturation(Effect):
     effect_type: Literal["DynamicSaturation"]
     def __init__(
@@ -1442,6 +1493,7 @@ class DynamicSaturation(Effect):
         distortion_mix: float = ...,
         cone_motion_mix: float = ...,
         output_gain: float = ...,
+        oversampling: Literal[1, 2, 4, 8] = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,
@@ -1457,6 +1509,7 @@ class Exciter(Effect):
         drive: float = ...,
         bias: float = ...,
         mix: float = ...,
+        oversampling: Literal[1, 2, 4, 8] = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,
@@ -1469,6 +1522,7 @@ class HardClipping(Effect):
         *,
         threshold: float = ...,
         mode: Literal["both", "positive", "negative"] = ...,
+        oversampling: Literal[1, 2, 4, 8, 16] = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,
@@ -1484,6 +1538,7 @@ class HarmonicDistortion(Effect):
         fourth_harmonic: float = ...,
         fifth_harmonic: float = ...,
         sensitivity: float = ...,
+        oversampling: Literal[1, 2, 4, 8] = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,
@@ -1500,6 +1555,7 @@ class MultibandSaturation(Effect):
         bias: tuple[float, float, float] = ...,
         mix: tuple[float, float, float] = ...,
         gain: tuple[float, float, float] = ...,
+        oversampling: Literal[1, 2, 4, 8] = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,
@@ -1514,6 +1570,7 @@ class Saturation(Effect):
         bias: float = ...,
         mix: float = ...,
         gain: float = ...,
+        oversampling: Literal[1, 2, 4, 8] = ...,
         id: str | None = ...,
         enabled: bool = ...,
         channel: EffectChannel = ...,

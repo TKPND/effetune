@@ -1,14 +1,33 @@
 class HardClippingPlugin extends PluginBase {
     constructor() {
         super('Hard Clipping', 'Digital hard clipping effect with threshold and mode control');
+        this.os = 1;
         this.th = -18;    // th: Threshold (-60 to 0 dB)
         this.md = 'both'; // md: Mode ('both', 'positive', 'negative')
 
-        // Register processor function with 4x oversampling and additional one-pole IIR smoothing
+        // Keep legacy smoothing at 1x; higher factors use band-limited resampling.
         this.registerProcessor(`
             // Early exit if disabled
             if (!parameters.enabled) return data;
+            ${PluginBase.oversamplingProcessorSource(16, 1)}
 
+            if (osFactor > 1) {
+                context.lpPrev = null;
+                context.interpolationPrev = null;
+                const threshold = 10 ** (parameters.th / 20);
+                const mode = parameters.md;
+                for (let ch = 0; ch < parameters.channelCount; ch++) {
+                    for (let frame = 0; frame < parameters.blockSize; frame++) {
+                        const index = ch * parameters.blockSize + frame;
+                        data[index] = shapeSample(ch, data[index], sample => {
+                            if (mode !== 'negative' && sample > threshold) return threshold;
+                            if (mode !== 'positive' && sample < -threshold) return -threshold;
+                            return sample;
+                        });
+                    }
+                }
+                return data;
+            }
             // --- Parameter Destructuring & Constant Calculation ---
             const {
                 th: threshold,      // Threshold in dB (-60 to 0)
@@ -144,6 +163,9 @@ class HardClippingPlugin extends PluginBase {
 
     // Set parameters
     setParameters(params) {
+        if (params.os !== undefined) {
+            this.os = this.isAllowedEnum(Number(params.os), [1, 2, 4, 8, 16], this.os);
+        }
         let graphNeedsUpdate = false;
 
         if (params.th !== undefined) {
@@ -179,6 +201,7 @@ class HardClippingPlugin extends PluginBase {
             type: this.constructor.name,
             th: this.th,
             md: this.md,
+            os: this.os,
             enabled: this.enabled
         };
     }
@@ -289,6 +312,10 @@ class HardClippingPlugin extends PluginBase {
     createUI() {
         const container = document.createElement('div');
         container.className = 'hard-clipping-plugin-ui plugin-parameter-ui';
+        container.appendChild(this.createSelectControl(
+            'Oversampling', [1, 2, 4, 8, 16].map(value => ({ value, label: value + 'x' })),
+            this.os, value => this.setParameters({ os: Number(value) }), 'os'
+        ));
 
         // Use base helper for Threshold control
         const thresholdRow = this.createParameterControl(

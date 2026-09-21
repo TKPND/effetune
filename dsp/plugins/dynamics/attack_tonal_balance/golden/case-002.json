@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "type": "AttackTonalBalancePlugin",
+  "id": "tonal-cut",
+  "stimulus": "sin1k",
+  "sampleRate": 48000,
+  "channels": 2,
+  "frameCount": 12000,
+  "blockSize": 128,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 1,
+  "seed": "0xeffe7a5f",
+  "params": {
+    "at": 0,
+    "tn": -12,
+    "ae": true,
+    "te": true
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.00002,
+    "policy": "per-sample"
+  },
+  "referenceEngine": "production-native-promoted-v1",
+  "referenceHash": "sha256:af0529040e29015a80d542021f3403a66a27c881e7af6ec9a5cdd0093f0ba709",
+  "generationCommand": "node tools/dsp-parity/generate.mjs --type AttackTonalBalancePlugin --promote-production-native",
+  "outputFloats": 24000,
+  "byteLength": 96000,
+  "binary": "case-002.f32"
+}

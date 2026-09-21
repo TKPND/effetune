@@ -264,10 +264,10 @@ void testBrickwallFrameAndStagedLatency() {
 
   stage_and_check(0.0F, 1.0F, 1u);
   stage_and_check(3.0F, 1.0F, 144u);
-  stage_and_check(0.0F, 2.0F, 32u);
-  stage_and_check(0.0F, 4.0F, 17u);
-  stage_and_check(0.0F, 8.0F, 9u);
-  stage_and_check(3.0F, 8.0F, 152u);
+  stage_and_check(0.0F, 2.0F, 65u);
+  stage_and_check(0.0F, 4.0F, 65u);
+  stage_and_check(0.0F, 8.0F, 65u);
+  stage_and_check(3.0F, 8.0F, 208u);
   stage_and_check(0.0F, 1.0F, 1u);
   harness.process(1.0F);
   harness.telemetryTick();

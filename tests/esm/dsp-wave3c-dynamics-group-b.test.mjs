@@ -30,7 +30,7 @@ const ports = [
     hash: 0xb531a24a,
     floatCount: 6,
     caseCount: 8,
-    jsEngineHash: '58778d3557f2cc3be0a1aca4e4592ba782af62684bbc8fa9b47e78213f47e34b'
+    jsEngineHash: '8a38ea57fe0058410022b0ec52aecf322a4cba50506037d9da35fac77f779772'
   },
   {
     type: 'TransientShaperPlugin',
@@ -222,7 +222,7 @@ test('Wave 3c dynamics group B kernels freeze realtime, telemetry, and latency c
   const limiter = loaded.get('BrickwallLimiterPlugin').kernel;
   assert.match(limiter, /writeGainReduction/);
   assert.match(limiter, /reported_latency_samples_ = latencyFor\(staged_params_\)/);
-  assert.match(limiter, /lookahead \+ \(62u \+ factor - 1u\) \/ factor/);
+  assert.match(limiter, /lookahead \+ 64u/);
   assert.equal(TelemetryFrameType.TAP_LOUDNESS_LEVELS, 7);
   assert.equal(TelemetryFrameType.TAP_TRANSIENT_GAIN, 8);
 });

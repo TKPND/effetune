@@ -19,7 +19,7 @@ from .assets import (
     resolve_room_eq_topology,
     resolve_topology,
 )
-from .chain import Chain, _effect_channels, _native_effect_channel
+from .chain import Chain, _effect_channels, _native_effect_channel, _bass_management_asset
 from .errors import AssetError, EffeTuneRuntimeError, StateError, ValidationError
 from .graph_document import (
     chain_document_from_graph,
@@ -41,6 +41,7 @@ from .validation import (
     validate_positive_integer,
     validate_sample_rate,
     validate_seed,
+    validate_bass_management,
 )
 
 _GRAPH_MAGIC = 0x31475445
@@ -347,6 +348,11 @@ def _prepare_asset(native: Any, native_index: int, effect: Effect, asset: AssetD
         topology = resolve_topology(asset, effect_channels, effect.parameters["channelMode"])
         divider = resolve_rate_divider(asset.sample_rate, sample_rate, effect.parameters["convolutionRate"])
         head_block = int(effect.parameters["latency"])
+    elif effect.effect_type == "BassManagement":
+        asset = _bass_management_asset(effect, asset, effect_channels)
+        topology = resolve_topology(asset, effect_channels, "matrix")
+        divider = 1
+        head_block = 128
     elif effect.effect_type == "FIRCrossover":
         band_count = int(effect.parameters["bandCount"])
         expected_paths = tuple(
@@ -543,6 +549,8 @@ class GraphStream:
                 )
                 if not effect.enabled or effect.id not in effective:
                     continue
+                if effect.effect_type == "BassManagement":
+                    validate_bass_management(effect.parameters, effect.channel, effect.assets, self.channels)
                 packed, layout_hash, internal_type = pack_parameters(effect)
                 packed_bytes = pack_parameter_bytes(effect)
                 native_index = native.add_effect(

@@ -1,0 +1,22 @@
+{
+  "type": "BassManagementPlugin",
+  "parityReference": "native-bass-management-independent-v1",
+  "tolerance": { "abs": 0.0002, "policy": "per-sample" },
+  "assets": [{ "slot": 0, "format": "ET_ASSET_F32_MULTICH", "capacity": "32 MiB convolution cap" }],
+  "fields": [
+    { "name": "phase", "key": "ph", "kind": "enum", "values": ["IIR", "Linear"], "default": "IIR" },
+    { "name": "taps", "key": "tp", "kind": "enum", "values": ["8192", "16384", "32768"], "default": "16384" },
+    { "name": "roles", "key": "ro", "arrayKey": "ro", "kind": "int", "count": 16, "min": 0, "max": 3, "default": 0 },
+    { "name": "frequencies", "key": "fc", "arrayKey": "fc", "kind": "float", "count": 16, "min": 20, "max": 300, "default": 80, "unit": "Hz" },
+    { "name": "slopes", "key": "sl", "arrayKey": "sl", "kind": "int", "count": 16, "min": 24, "max": 96, "default": 24, "unit": "dB/oct" },
+    { "name": "routes", "key": "rt", "arrayKey": "rt", "kind": "int", "count": 16, "min": 0, "max": 65535, "default": 0 },
+    { "name": "subs", "key": "su", "kind": "int", "min": 0, "max": 65535, "default": 0 },
+    { "name": "lfeFrequency", "key": "lf", "kind": "float", "min": 20, "max": 300, "default": 120, "unit": "Hz" },
+    { "name": "lfeSlope", "key": "ls", "kind": "int", "min": 24, "max": 96, "default": 24, "unit": "dB/oct" },
+    { "name": "lfeLowpass", "key": "lo", "kind": "bool", "default": false },
+    { "name": "bassGain", "key": "bg", "kind": "float", "min": -24, "max": 12, "default": 0, "unit": "dB" },
+    { "name": "lfeGain", "key": "lg", "kind": "float", "min": -24, "max": 12, "default": 0, "unit": "dB" },
+    { "name": "headroom", "key": "hg", "kind": "float", "min": -24, "max": 0, "default": 0, "unit": "dB" },
+    { "name": "routeInversions", "key": "ri", "arrayKey": "ri", "kind": "int", "count": 16, "min": 0, "max": 65535, "default": 0 }
+  ]
+}

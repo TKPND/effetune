@@ -12,10 +12,11 @@ struct HarmonicDistortionPluginParams {
   float fourthHarmonic;
   float fifthHarmonic;
   float sensitivity;
-  static constexpr std::uint32_t kHash = 0x04f4b5e0u;
-  static constexpr std::uint32_t kFloatCount = 5u;
+  float oversampling;
+  static constexpr std::uint32_t kHash = 0x0c982ce6u;
+  static constexpr std::uint32_t kFloatCount = 6u;
 };
-static_assert(5u == 0u || sizeof(HarmonicDistortionPluginParams) == sizeof(float) * 5u);
+static_assert(6u == 0u || sizeof(HarmonicDistortionPluginParams) == sizeof(float) * 6u);
 
 } // namespace effetune::generated
 

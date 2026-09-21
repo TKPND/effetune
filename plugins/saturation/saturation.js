@@ -1,6 +1,7 @@
 class SaturationPlugin extends PluginBase {
     constructor() {
         super('Saturation', 'Saturation effect with drive and bias control');
+        this.os = 1;
         this.dr = 1.5;   // dr: Drive (0.0-10.0)
         this.bs = 0.1;   // bs: Bias (-0.3 to 0.3)
         this.mx = 100;   // mx: Mix (0-100%)
@@ -9,6 +10,7 @@ class SaturationPlugin extends PluginBase {
         // Register processor with ideal up/downsampling including anti-alias filtering during decimation.
         this.registerProcessor(`
             if (!parameters.enabled) return data;
+            ${PluginBase.oversamplingProcessorSource(8, 1)}
             const {
                 dr: drive,
                 bs: bias,
@@ -69,6 +71,10 @@ class SaturationPlugin extends PluginBase {
             let currentMix = context.saturationCurrentMix;
             let currentGain = context.saturationCurrentGain;
             let currentBiasOffset = context.saturationCurrentBiasOffset;
+            const shapeSaturation = sample => {
+                const shapedInput = Math.fround(currentDrive * (sample + currentBias));
+                return Math.fround(Math.tanh(shapedInput)) - currentBiasOffset;
+            };
             for (let frame = 0; frame < blockSize; ++frame) {
                 if (context.saturationRemaining > 0) {
                     currentDrive += context.saturationStepDrive;
@@ -87,9 +93,9 @@ class SaturationPlugin extends PluginBase {
                 for (let channel = 0; channel < channelCount; ++channel) {
                     const index = channel * blockSize + frame;
                     const dry = data[index];
-                    const shapedInput = Math.fround(currentDrive * (dry + currentBias));
-                    const wet = Math.fround(Math.tanh(shapedInput)) - currentBiasOffset;
-                    data[index] = (dry * (1 - currentMix) + wet * currentMix) * currentGain;
+                    const wet = shapeSample(channel, dry, shapeSaturation);
+                    const delayedDry = delaySample(channel, dry);
+                    data[index] = (delayedDry * (1 - currentMix) + wet * currentMix) * currentGain;
                 }
             }
             context.saturationCurrentDrive = currentDrive;
@@ -102,6 +108,9 @@ class SaturationPlugin extends PluginBase {
     }
 
     setParameters(params) {
+        if (params.os !== undefined) {
+            this.os = this.isAllowedEnum(Number(params.os), [1, 2, 4, 8], this.os);
+        }
         let graphNeedsUpdate = false;
         if (params.dr !== undefined) {
             this.dr = this.parseFiniteNumber(params.dr, 0, 10, this.dr);
@@ -147,6 +156,7 @@ class SaturationPlugin extends PluginBase {
             bs: this.bs,
             mx: this.mx,
             gn: this.gn,
+            os: this.os,
             enabled: this.enabled
         };
     }
@@ -216,6 +226,10 @@ class SaturationPlugin extends PluginBase {
     createUI() {
         const container = document.createElement('div');
         container.className = 'saturation-plugin-ui plugin-parameter-ui';
+        container.appendChild(this.createSelectControl(
+            'Oversampling', [1, 2, 4, 8].map(value => ({ value, label: value + 'x' })),
+            this.os, value => this.setParameters({ os: Number(value) }), 'os'
+        ));
 
         // Use base helper to create controls
         container.appendChild(this.createParameterControl(

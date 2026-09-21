@@ -1,0 +1,284 @@
+.bass-management-ui {
+  position: relative;
+}
+
+.bass-management-ui [hidden] {
+  display: none !important;
+}
+
+.bass-management-error {
+  margin-bottom: 10px;
+  padding: 5px;
+  color: var(--et-danger);
+  background: var(--et-danger-soft);
+  border-radius: 4px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.bass-management-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.bass-management-checkbox-group label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+}
+
+.bass-management-section-heading {
+  margin: 12px 0 6px;
+  color: var(--et-text-primary);
+  font-weight: 600;
+}
+
+.bass-management-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.bass-management-matrix-wrapper {
+  --bass-matrix-heading-height: 32px;
+  width: 100%;
+  max-height: 620px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bass-management-matrix {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--et-text-primary);
+  font: inherit;
+}
+
+.bass-management-matrix th,
+.bass-management-matrix td {
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid var(--et-surface-20);
+  border-width: 0 1px 1px 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.bass-management-matrix tr > :first-child {
+  border-left-width: 1px;
+}
+
+.bass-management-matrix thead tr:first-child > th {
+  border-top-width: 1px;
+}
+
+.bass-management-matrix thead th {
+  position: sticky;
+  z-index: 2;
+  height: var(--bass-matrix-heading-height);
+  background: color-mix(in srgb, var(--et-surface-13), var(--et-graph-bg-deep) 25%);
+  white-space: nowrap;
+}
+
+.bass-management-matrix thead tr:first-child th {
+  top: 0;
+}
+
+.bass-management-matrix thead tr:nth-child(2) th {
+  top: var(--bass-matrix-heading-height);
+}
+
+.bass-management-channel-cell,
+.bass-management-matrix thead tr:nth-child(2) th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 72px;
+  background: color-mix(in srgb, var(--et-surface-13), var(--et-graph-bg-deep) 25%);
+}
+
+.bass-management-matrix thead tr:nth-child(2) th:first-child {
+  z-index: 4;
+}
+
+.bass-management-matrix tbody tr.selected > * {
+  background-color: color-mix(in srgb, var(--et-surface-13), var(--et-graph-bg-deep) 25%);
+}
+
+.bass-management-channel-button {
+  border: 0;
+  padding: 5px 7px;
+  color: var(--et-text-primary);
+  background: transparent;
+  border-radius: 3px;
+  font: inherit;
+  font-weight: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bass-management-role-cell {
+  min-width: 104px;
+}
+
+.bass-management-role-cell > .parameter-row,
+.bass-management-frequency-cell > .parameter-row {
+  display: flex;
+  flex-wrap: nowrap;
+  margin: 0;
+}
+
+.bass-management-role-cell select {
+  width: 100%;
+  min-width: 96px;
+}
+
+.bass-management-frequency-cell {
+  width: 244px;
+  min-width: 210px;
+}
+
+.bass-management-frequency-cell .parameter-row input[type="range"] {
+  min-width: 110px;
+}
+
+.bass-management-frequency-cell .parameter-row input[type="number"] {
+  width: 66px;
+}
+
+.bass-management-slope-cell {
+  min-width: 76px;
+}
+
+.bass-management-slope-cell select {
+  width: 70px;
+}
+
+.bass-management-route-cell {
+  min-width: 68px;
+  white-space: nowrap;
+}
+
+.bass-management-matrix-button {
+  box-sizing: border-box;
+  min-width: 27px;
+  min-height: 28px;
+  margin: 1px;
+  padding: 3px 4px;
+  border: 1px solid var(--et-surface-33);
+  border-radius: 3px;
+  color: var(--et-text-primary);
+  background: var(--et-surface-47);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bass-management-matrix-button.active {
+  color: var(--et-on-status);
+  background: var(--et-success);
+}
+
+.bass-management-matrix-button.phase-button {
+  font-weight: bold;
+}
+
+.bass-management-matrix-button.phase-button.active {
+  background: var(--et-danger);
+}
+
+.bass-management-matrix-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bass-management-empty-heading,
+.bass-management-empty-cell {
+  min-width: 170px;
+  color: var(--et-surface-66);
+  font-weight: normal;
+}
+
+.bass-management-graph-container {
+  margin: 15px 0;
+}
+
+.bass-management-graph-container .graph-container {
+  margin: 10px auto;
+}
+
+.bass-management-graph-container canvas {
+  display: block;
+  background: var(--et-graph-bg-deep);
+}
+
+.bass-management-graph-container .responsive-graph-container canvas {
+  margin: 0;
+}
+
+.bass-management-route-summary {
+  margin-bottom: 4px;
+  color: var(--et-surface-66);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bass-management-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-height: 1.4em;
+  color: var(--et-surface-66);
+  font-size: 12px;
+}
+
+.bass-management-status[data-state="ready"] {
+  color: var(--et-success);
+}
+
+.bass-management-status[data-state="error"] {
+  color: var(--et-danger);
+}
+
+body.layout-mobile .bass-management-matrix-wrapper {
+  max-height: 560px;
+}
+
+body.layout-mobile .bass-management-role-cell {
+  min-width: 150px;
+}
+
+body.layout-mobile .bass-management-frequency-cell {
+  width: 330px;
+  min-width: 330px;
+}
+
+body.layout-mobile .bass-management-slope-cell {
+  min-width: 104px;
+}
+
+body.layout-mobile .bass-management-slope-cell select {
+  width: 96px;
+}
+
+body.layout-mobile .bass-management-matrix-button {
+  min-width: 40px;
+  min-height: var(--et-mobile-control-height);
+  font-size: 16px;
+}
+
+body.layout-mobile .bass-management-channel-button {
+  min-height: var(--et-mobile-control-height);
+  font-size: 16px;
+}

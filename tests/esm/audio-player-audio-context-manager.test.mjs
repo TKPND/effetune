@@ -154,6 +154,7 @@ class FakeAudioElement {
     this.title = options.title ?? '';
     this.error = options.error ?? null;
     this.playReject = options.playReject ?? null;
+    this.playPromise = options.playPromise ?? null;
     this.pauseThrows = options.pauseThrows ?? false;
     FakeAudioElement.instances.push(this);
   }
@@ -191,6 +192,7 @@ class FakeAudioElement {
   async play() {
     FakeAudioElement.calls.push(['audio.play', this.src]);
     if (this.playReject) throw this.playReject;
+    if (this.playPromise) await this.playPromise;
     this.paused = false;
   }
 
@@ -199,6 +201,15 @@ class FakeAudioElement {
     if (this.pauseThrows) throw new Error('pause failed');
     this.paused = true;
   }
+}
+
+async function waitForPendingMediaStartCandidate() {
+  for (let index = 0; index < 20; index += 1) {
+    const candidate = FakeAudioElement.instances.at(-1);
+    if ((candidate?.listeners.get('ended') || []).length > 0) return candidate;
+    await flushMicrotasks();
+  }
+  return FakeAudioElement.instances.at(-1);
 }
 
 function createNode(calls, name, options = {}) {
@@ -5328,6 +5339,193 @@ test('failed private transition candidate leaves the old backend connected and c
     assert.equal(calls.some(call => call[0] === 'node.stop' && call[1] === 'oldBuffer'), false);
     assert.equal(calls.some(call => call[0] === 'node.disconnect' && call[1] === 'oldBuffer'), false);
   });
+});
+
+test('a pending media start fails from error or ended without publishing its candidate', async t => {
+  for (const eventType of ['error', 'ended']) {
+    await t.test(eventType, async () => {
+      let resolvePlay;
+      const playPromise = new Promise(resolve => { resolvePlay = resolve; });
+      await withAudioContextGlobals({
+        electronIntegration: { audioPreferences: { useInputWithPlayer: true } },
+        audioElements: [{ readyState: 1, playPromise }]
+      }, async ({ calls }) => {
+        const currentTrack = { name: 'Current', path: '/current.wav', data: new Uint8Array([1]) };
+        const nextTrack = { name: 'Pending', path: 'https://example.test/pending.flac' };
+        const harness = createHarness({
+          calls,
+          playlist: [currentTrack, nextTrack],
+          currentTrack,
+          currentTrackIndex: 0,
+          isPlaying: true,
+          isStopped: false,
+          playbackMode: 'bufferSource'
+        });
+        const oldSource = createNode(calls, 'oldPendingMediaSource');
+        harness.manager.currentBuffer = { duration: 8 };
+        harness.manager.currentBufferSource = oldSource;
+
+        const stages = [];
+        const transitioning = harness.manager.seamlessTransition(nextTrack, 1, true, {
+          onStage: stage => stages.push(stage),
+          throwOnError: true
+        });
+        const candidate = await waitForPendingMediaStartCandidate();
+        assert.ok(candidate);
+        candidate.dispatch(eventType);
+
+        await assert.rejects(transitioning, error => error?.code === 'mediaStartFailed');
+        resolvePlay();
+        await flushMicrotasks();
+
+        assert.deepEqual(stages, ['mediaReady', 'activation', 'mediaStart']);
+        assert.equal(harness.manager.currentBufferSource, oldSource);
+        assert.equal(harness.state.currentTrack, currentTrack);
+        assert.equal(harness.state.playbackMode, 'bufferSource');
+        assert.equal(candidate.paused, true);
+        assert.equal((candidate.listeners.get('error') || []).length, 0);
+        assert.equal((candidate.listeners.get('ended') || []).length, 0);
+      });
+    });
+  }
+});
+
+test('a media start timeout pauses its candidate and ignores a late play resolution', async () => {
+  let resolvePlay;
+  const playPromise = new Promise(resolve => { resolvePlay = resolve; });
+  await withAudioContextGlobals({
+    electronIntegration: { audioPreferences: { useInputWithPlayer: true } },
+    audioElements: [{ readyState: 1, playPromise }]
+  }, async ({ calls, timers }) => {
+    const currentTrack = { name: 'Current', path: '/current.wav', data: new Uint8Array([1]) };
+    const nextTrack = { name: 'Slow', path: 'https://example.test/slow.flac' };
+    const harness = createHarness({
+      calls,
+      playlist: [currentTrack, nextTrack],
+      currentTrack,
+      currentTrackIndex: 0,
+      isPlaying: true,
+      isStopped: false,
+      playbackMode: 'bufferSource'
+    });
+    const oldSource = createNode(calls, 'oldTimeoutMediaSource');
+    harness.manager.currentBuffer = { duration: 8 };
+    harness.manager.currentBufferSource = oldSource;
+
+    const transitioning = harness.manager.seamlessTransition(nextTrack, 1, true, {
+      throwOnError: true
+    });
+    const candidate = await waitForPendingMediaStartCandidate();
+    const timeout = timers.at(-1);
+    assert.equal(timeout.delay, 15_000);
+    timeout.fn();
+
+    await assert.rejects(transitioning, error => error?.code === 'mediaStartTimeout');
+    resolvePlay();
+    await flushMicrotasks();
+
+    assert.equal(candidate.paused, true);
+    assert.equal(harness.manager.currentBufferSource, oldSource);
+    assert.equal(harness.state.currentTrack, currentTrack);
+    assert.equal(harness.state.playbackMode, 'bufferSource');
+  });
+});
+
+test('an aborted media start releases the candidate without publishing it', async () => {
+  let resolvePlay;
+  const playPromise = new Promise(resolve => { resolvePlay = resolve; });
+  await withAudioContextGlobals({
+    electronIntegration: { audioPreferences: { useInputWithPlayer: true } },
+    audioElements: [{ readyState: 1, playPromise }]
+  }, async ({ calls }) => {
+    const currentTrack = { name: 'Current', path: '/current.wav', data: new Uint8Array([1]) };
+    const nextTrack = { name: 'Canceled', path: 'https://example.test/canceled.flac' };
+    const harness = createHarness({
+      calls,
+      playlist: [currentTrack, nextTrack],
+      currentTrack,
+      currentTrackIndex: 0,
+      isPlaying: true,
+      isStopped: false,
+      playbackMode: 'bufferSource'
+    });
+    const oldSource = createNode(calls, 'oldAbortedMediaSource');
+    harness.manager.currentBuffer = { duration: 8 };
+    harness.manager.currentBufferSource = oldSource;
+    const controller = new AbortController();
+
+    const transitioning = harness.manager.seamlessTransition(nextTrack, 1, true, {
+      signal: controller.signal,
+      throwOnError: true
+    });
+    const candidate = await waitForPendingMediaStartCandidate();
+    controller.abort();
+
+    assert.equal(await transitioning, false);
+    resolvePlay();
+    await flushMicrotasks();
+
+    assert.equal(candidate.paused, true);
+    assert.equal(harness.manager.currentBufferSource, oldSource);
+    assert.equal(harness.state.currentTrack, currentTrack);
+    assert.equal(harness.state.playbackMode, 'bufferSource');
+  });
+});
+
+test('a candidate error or end during activation staging prevents media start', async t => {
+  for (const eventType of ['error', 'ended']) {
+    await t.test(eventType, async () => {
+      let releaseStage;
+      let stageEntered;
+      const staging = new Promise(resolve => { releaseStage = resolve; });
+      const entered = new Promise(resolve => { stageEntered = resolve; });
+      await withAudioContextGlobals({
+        electronIntegration: { audioPreferences: { useInputWithPlayer: true } },
+        audioElements: [{ readyState: 1 }]
+      }, async ({ calls }) => {
+        const currentTrack = { name: 'Current', path: '/current.wav', data: new Uint8Array([1]) };
+        const nextTrack = { name: 'Staged', path: 'https://example.test/staged.flac' };
+        const harness = createHarness({
+          calls,
+          playlist: [currentTrack, nextTrack],
+          currentTrack,
+          currentTrackIndex: 0,
+          isPlaying: true,
+          isStopped: false,
+          playbackMode: 'bufferSource',
+          audioManager: {
+            isStagedAudioActivationEnabled: () => true,
+            stageAudioActivation() {
+              stageEntered();
+              return staging;
+            }
+          }
+        });
+        const oldSource = createNode(calls, 'oldStagedMediaSource');
+        harness.manager.currentBuffer = { duration: 8 };
+        harness.manager.currentBufferSource = oldSource;
+
+        const transitioning = harness.manager.seamlessTransition(nextTrack, 1, true, {
+          throwOnError: true
+        });
+        await entered;
+        const candidate = await waitForPendingMediaStartCandidate();
+        assert.equal((candidate.listeners.get('error') || []).length, 1);
+        if (eventType === 'error') candidate.error = { code: 2 };
+        else candidate.ended = true;
+        candidate.dispatch(eventType);
+        releaseStage({ generation: 1 });
+
+        await assert.rejects(transitioning, error => error?.code === 'mediaStartFailed');
+        assert.equal(calls.some(call => call[0] === 'audio.play' && call[1] === candidate.src), false);
+        assert.equal(harness.manager.currentBufferSource, oldSource);
+        assert.equal(harness.state.currentTrack, currentTrack);
+        assert.equal(harness.state.playbackMode, 'bufferSource');
+        assert.equal((candidate.listeners.get('error') || []).length, 0);
+        assert.equal((candidate.listeners.get('ended') || []).length, 0);
+      });
+    });
+  }
 });
 
 test('catalog load failure returns to the catalog candidate loop without scheduling a second skip', async () => {

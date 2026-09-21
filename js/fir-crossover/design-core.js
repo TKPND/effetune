@@ -79,6 +79,32 @@ export function crossoverBandMagnitudes(config, frequency) {
     return bands;
 }
 
+export function analyzeFIRAtFrequencies(channel, sampleRate, frequencies) {
+    if (!(channel instanceof Float32Array) || channel.length === 0) {
+        throw new TypeError('FIR response requires a non-empty Float32Array');
+    }
+    if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Array.isArray(frequencies)) {
+        throw new TypeError('FIR response configuration is invalid');
+    }
+    const fftSize = channel.length * 2;
+    const padded = new Float64Array(fftSize);
+    padded.set(channel);
+    const spectrum = realTransform(padded);
+    return Float32Array.from(frequencies, frequency => {
+        const position = Math.max(0, Math.min(
+            spectrum.real.length - 1,
+            Number(frequency) * fftSize / sampleRate
+        ));
+        const lower = Math.floor(position);
+        const upper = Math.min(lower + 1, spectrum.real.length - 1);
+        const fraction = position - lower;
+        const lowerMagnitude = Math.hypot(spectrum.real[lower], spectrum.imag[lower]);
+        if (upper === lower) return lowerMagnitude;
+        const upperMagnitude = Math.hypot(spectrum.real[upper], spectrum.imag[upper]);
+        return lowerMagnitude + (upperMagnitude - lowerMagnitude) * fraction;
+    });
+}
+
 function minimumPhaseForMagnitude(magnitudes, fftSize) {
     const logMagnitude = new Float64Array(magnitudes.length);
     for (let bin = 0; bin < magnitudes.length; bin += 1) {

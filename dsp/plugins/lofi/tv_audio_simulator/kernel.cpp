@@ -7,6 +7,7 @@
 #include "TVAudioSimulatorPluginParams.h"
 #include "binary_io.h"
 #include "effetune/dsp/denormal_noise.h"
+#include "effetune/dsp/telemetry_spectrum.h"
 #include "effetune/dsp/xorshift_rng.h"
 #include "peak_controller.h"
 
@@ -40,9 +41,7 @@ constexpr std::uint32_t kMaximumBlockRatio = 10u;
 // float32 MPX spectrum magnitudes in dBFS on a fixed log-frequency grid.
 constexpr std::uint16_t kTelemetryFrameType = 25u;
 constexpr std::uint16_t kTelemetryVersion = 1u;
-constexpr std::uint32_t kSpectrumBins = 48u;
-constexpr std::uint32_t kSpectrumWindow = 1024u;
-constexpr double kSpectrumMinHz = 300.0;
+constexpr std::uint32_t kSpectrumBins = dsp::TelemetrySpectrum::kBins;
 constexpr double kSpectrumMaxHz = 60000.0;
 constexpr std::uint16_t kTelemetryPayloadBytes =
     static_cast<std::uint16_t>(24u + 4u * kSpectrumBins);
@@ -859,26 +858,7 @@ public:
       configureLowPass(amOutput_.filters[i], 10000.0, am_q[i], ratePlan_->mpx);
     }
 
-    // Telemetry-only state: Hann window, log-spaced Goertzel bins over the
-    // recovered MPX at the MPX-layer rate, and the snapshot scratch used by
-    // writeTelemetry (allocation-free at emission time).
-    spectrumRing_.assign(kSpectrumWindow, 0.0F);
-    spectrumWindowed_.assign(kSpectrumWindow, 0.0F);
-    hannWindow_.resize(kSpectrumWindow);
-    double window_sum = 0.0;
-    for (std::uint32_t index = 0u; index < kSpectrumWindow; ++index) {
-      const double window = 0.5 - 0.5 * std::cos(kTwoPi * static_cast<double>(index) /
-                                                 static_cast<double>(kSpectrumWindow - 1u));
-      hannWindow_[index] = static_cast<float>(window);
-      window_sum += window;
-    }
-    inverseWindowSum_ = window_sum > 0.0 ? 2.0 / window_sum : 0.0;
-    const double bin_ratio =
-        std::log(kSpectrumMaxHz / kSpectrumMinHz) / static_cast<double>(kSpectrumBins - 1u);
-    for (std::uint32_t bin = 0u; bin < kSpectrumBins; ++bin) {
-      const double frequency = kSpectrumMinHz * std::exp(bin_ratio * static_cast<double>(bin));
-      goertzelCoefficients_[bin] = 2.0 * std::cos(kTwoPi * frequency / ratePlan_->mpx);
-    }
+    spectrum_.prepare(ratePlan_->mpx, kSpectrumMaxHz);
     reset();
   }
 
@@ -955,10 +935,7 @@ public:
     }
     tuningRampRemaining_ = 0u;
     controlsConfigured_ = false;
-    for (float &sample : spectrumRing_) {
-      sample = 0.0F;
-    }
-    spectrumRingPosition_ = 0u;
+    spectrum_.reset();
     rfPowerEma_ = 0.0;
     clickCount_ = 0u;
     clickActive_ = false;
@@ -1078,7 +1055,7 @@ public:
       if (standard_ == 7)
         mpx = amOutput_.process(mpx);
       if (!isNicam())
-        captureSpectrum(mpx);
+        spectrum_.capture(mpx);
       const float main = mainDelay_.process(rxSum_.process(mpx) * (1.0F / 0.9F));
       float left = main, right = main;
       if (standard_ == 1) {
@@ -1126,6 +1103,7 @@ public:
         {rxLeft_.data(), rxRight_.data()}, recovered_mpx_count, {wetLeft_.data(), wetRight_.data()},
         static_cast<std::uint32_t>(wetLeft_.size()));
     finishHost(audio, channel_count, frame_count, host_count);
+    spectrum_.process(frame_count);
     telemetryAvailable_ = true;
   }
 
@@ -1165,37 +1143,10 @@ public:
     writeF32(payload.data() + 16u, multipath_db);
     writeU32(payload.data() + 20u, clickCount_);
 
-    // Snapshot the ring in chronological order through the Hann window, then
-    // evaluate the 48 log-spaced Goertzel bins. Runs at the telemetry rate
-    // (default 60 Hz), never inside the per-sample audio loops.
-    std::uint32_t read_position = spectrumRingPosition_;
-    for (std::uint32_t index = 0u; index < kSpectrumWindow; ++index) {
-      spectrumWindowed_[index] = spectrumRing_[read_position] * hannWindow_[index];
-      read_position = read_position + 1u == kSpectrumWindow ? 0u : read_position + 1u;
-    }
     for (std::uint32_t bin = 0u; bin < kSpectrumBins; ++bin) {
-      const double coefficient = goertzelCoefficients_[bin];
-      double s1 = 0.0;
-      double s2 = 0.0;
-      for (std::uint32_t index = 0u; index < kSpectrumWindow; ++index) {
-        const double s0 = static_cast<double>(spectrumWindowed_[index]) + coefficient * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-      }
-      double power = s1 * s1 + s2 * s2 - coefficient * s1 * s2;
-      if (power < 0.0) {
-        power = 0.0;
-      }
-      double magnitude = std::sqrt(power) * inverseWindowSum_;
-      if (magnitude < 1.0e-7) {
-        magnitude = 1.0e-7;
-      }
-      float db = static_cast<float>(20.0 * std::log10(magnitude));
-      if (db > 20.0F) {
-        db = 20.0F;
-      }
-      writeF32(payload.data() + 24u + 4u * bin, db);
+      writeF32(payload.data() + 24u + 4u * bin, spectrum_.values()[bin]);
     }
+    spectrum_.request();
     writer.write(kTelemetryFrameType, kTelemetryVersion, payload.data(),
                  static_cast<std::uint16_t>(payload.size()));
   }
@@ -1203,12 +1154,6 @@ public:
 private:
   bool isNicam() const noexcept { return standard_ == 4 || standard_ == 5; }
   bool hasFmSub() const noexcept { return standard_ == 0 || standard_ == 2 || standard_ == 3; }
-
-  void captureSpectrum(float sample) noexcept {
-    spectrumRing_[spectrumRingPosition_] = sample;
-    spectrumRingPosition_ =
-        spectrumRingPosition_ + 1u == kSpectrumWindow ? 0u : spectrumRingPosition_ + 1u;
-  }
 
   float compressDifference(float input) noexcept {
     const float absolute = input < 0.0F ? -input : input;
@@ -1330,12 +1275,7 @@ private:
     if (standard_changed) {
       const double maximum = isNicam() ? 15000.0 : standard_ == 7 ? 10000.0 : kSpectrumMaxHz;
       const double rate = isNicam() ? ratePlan_->host : ratePlan_->mpx;
-      const double ratio =
-          std::log(maximum / kSpectrumMinHz) / static_cast<double>(kSpectrumBins - 1u);
-      for (std::uint32_t bin = 0u; bin < kSpectrumBins; ++bin) {
-        const double frequency = kSpectrumMinHz * std::exp(ratio * static_cast<double>(bin));
-        goertzelCoefficients_[bin] = 2.0 * std::cos(kTwoPi * frequency / rate);
-      }
+      spectrum_.configure(rate, maximum);
     }
     pilotBaseSine_ = pilotRx_.stepSine;
     pilotBaseCosine_ = pilotRx_.stepCosine;
@@ -1617,7 +1557,7 @@ private:
         left += blend * (nicamDelayLeft_[dry_read] - left);
         right += blend * (nicamDelayRight_[dry_read] - right);
         selectedBlend_ = blend;
-        captureSpectrum(0.5F * (left + right));
+        spectrum_.capture(0.5F * (left + right));
       }
       if (transitionRemaining_ > 0u) {
         const float remaining =
@@ -1769,15 +1709,10 @@ private:
   bool controlsConfigured_ = false;
 
   // Telemetry-only state (HUD; never read by the audio path).
-  std::vector<float> spectrumRing_;
-  std::vector<float> spectrumWindowed_;
-  std::vector<float> hannWindow_;
-  std::array<double, kSpectrumBins> goertzelCoefficients_{};
-  double inverseWindowSum_ = 0.0;
+  dsp::TelemetrySpectrum spectrum_;
   double rfPowerEma_ = 0.0;
   double rfPowerAlpha_ = 0.0;
   double telemetryNoisePower_ = 1.0e-30;
-  std::uint32_t spectrumRingPosition_ = 0u;
   std::uint32_t clickCount_ = 0u;
   bool clickActive_ = false;
   bool telemetryAvailable_ = false;

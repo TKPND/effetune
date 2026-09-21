@@ -25,9 +25,9 @@ struct ExpectedDescriptor final {
 
 int main() {
   const std::array<ExpectedDescriptor, 4u> expected = {{
-      {et_kernel_descriptor_DynamicSaturationPlugin, "DynamicSaturationPlugin", 0xc8929bf3u, 9u},
-      {et_kernel_descriptor_ExciterPlugin, "ExciterPlugin", 0xfc6e6a7au, 5u},
-      {et_kernel_descriptor_HarmonicDistortionPlugin, "HarmonicDistortionPlugin", 0x04f4b5e0u, 5u},
+      {et_kernel_descriptor_DynamicSaturationPlugin, "DynamicSaturationPlugin", 0x022a0917u, 10u},
+      {et_kernel_descriptor_ExciterPlugin, "ExciterPlugin", 0x27629114u, 6u},
+      {et_kernel_descriptor_HarmonicDistortionPlugin, "HarmonicDistortionPlugin", 0x0c982ce6u, 6u},
       {et_kernel_descriptor_SubSynthPlugin, "SubSynthPlugin", 0x06f29552u, 8u},
   }};
 

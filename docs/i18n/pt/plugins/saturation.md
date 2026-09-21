@@ -16,6 +16,7 @@ Pressione o ícone de espectro de um gráfico compatível para alternar entre Af
 ## Lista de Plugins
 
 - [Bandwidth Extender](#bandwidth-extender) - Gera agudos acima de um corte detectado ou definido
+- [Bass Extender](#bass-extender) - Gera graves uma oitava abaixo de conteúdo adequado
 - [Dynamic Saturation](#dynamic-saturation) - Simula o deslocamento não linear de cones de alto-falantes
 - [Exciter](#exciter) - Adiciona conteúdo harmônico para melhorar a clareza e presença
 - [Hard Clipping](#hard-clipping) - Adiciona intensidade e borda ao som
@@ -46,9 +47,28 @@ A banda gerada tem dois componentes ajustáveis separadamente: continuação har
 
 Bandwidth Extender adiciona cerca de 26,7-29,0 ms de latência, incluindo um salto extra de processamento: 1.280 amostras a 48 kHz, 2.560 a 96 kHz ou 5.120 a 192 kHz. Se não puder funcionar com a taxa de amostragem, a configuração de canais ou o dispositivo atuais, o painel informa que o plugin está em bypass e o áudio não muda. Use uma configuração compatível ou desative o plugin.
 
+## Bass Extender
+
+Bass Extender reforça gravações com poucos graves gerando conteúdo aproximadamente uma oitava abaixo dos graves já presentes. Ele analisa a entrada de cerca de 60–200 Hz e adiciona graves na faixa de 30–100 Hz, mantendo o sinal original. Não recupera a fundamental, o nível nem a fase originais que estão ausentes.
+
+### Guia de aprimoramento sonoro
+
+- Comece com **Amount** no valor padrão de 25% e aumente aos poucos.
+- Compare com bypass em volume semelhante. Reduza **Output** se os graves adicionados deixarem o som processado mais alto.
+- Reduza **Amount** se as notas de baixo, o bumbo ou a sobreposição dos dois ficarem embolados ou irregulares.
+- Use Spectrum Analyzer e Level Meter para comparar a faixa de graves adicionada e o nível de saída.
+- O efeito será pequeno se seus fones ou alto-falantes não reproduzirem a faixa gerada de 30–100 Hz.
+
+### Parâmetros
+
+- **Amount** (0–100%, padrão: 25%) controla o nível dos graves gerados. 0% remove essa contribuição; valores maiores a tornam mais presente sem alterar diretamente o sinal original.
+- **Output** (-24 a 0 dB, padrão: 0 dB) ajusta o nível final depois da adição dos graves. Reduza-o para igualar o volume ao bypass ou criar mais margem na saída.
+
 ## Dynamic Saturation
 
 Um efeito baseado na física que simula o deslocamento não linear de cones de alto-falantes sob diferentes condições. Ao modelar o comportamento mecânico de um alto-falante e depois aplicar saturação a esse deslocamento, ele cria uma forma única de distorção que responde dinamicamente à sua música.
+
+**Oversampling**: Escolha 1x (padrão), 2x, 4x, 8x. Valores maiores reduzem os sons indesejados causados pelo retorno de harmônicos de alta frequência à faixa audível, mas exigem mais CPU. Comece com 2x ou 4x; use 8x para maior redução a 48 kHz. 1x mantém o processamento original. Valores acima de 1x acrescentam um atraso de 64 amostras (cerca de 1,33 ms a 48 kHz).
 
 ### Predefinições do sistema
 
@@ -142,6 +162,8 @@ Clique em **Predefinições de efeito** no cabeçalho do efeito para comparar co
 
 Um efeito que adiciona conteúdo harmônico para melhorar a clareza e presença. Ao filtrar o conteúdo de alta frequência e aplicar saturação, ele cria harmônicos adicionais que iluminam e aprimoram sua música.
 
+**Oversampling**: Escolha 1x (padrão), 2x, 4x, 8x. Valores maiores reduzem os sons indesejados causados pelo retorno de harmônicos de alta frequência à faixa audível, mas exigem mais CPU. Comece com 2x ou 4x; use 8x para maior redução a 48 kHz. 1x mantém o processamento original. Valores acima de 1x acrescentam um atraso de 64 amostras (cerca de 1,33 ms a 48 kHz).
+
 ### Guia de Aprimoramento da Audição
 - **Aprimoramento Sutil:**
   - Adiciona clareza e ar a vozes e detalhes de alta frequência
@@ -216,6 +238,8 @@ Um efeito que adiciona conteúdo harmônico para melhorar a clareza e presença.
 
 Um efeito de clipping digital que limita picos acima de um threshold definido. Use quando quiser mais borda, densidade ou distorção criativa; mantenha o threshold alto para controle leve de picos e abaixe aos poucos para caráter mais forte.
 
+**Oversampling**: Escolha 1x (padrão), 2x, 4x, 8x, 16x. Valores maiores reduzem os sons indesejados causados pelo retorno de harmônicos de alta frequência à faixa audível, mas exigem mais CPU. Comece com 2x ou 4x; use 16x para maior redução a 48 kHz. 1x mantém o processamento original. Valores acima de 1x acrescentam um atraso de 64 amostras (cerca de 1,33 ms a 48 kHz).
+
 ### Guia de Aprimoramento da Audição
 - Aprimoramento Sutil:
   - Adiciona um pouco de borda e densidade quando Threshold permanece alto
@@ -259,6 +283,8 @@ Um efeito de clipping digital que limita picos acima de um threshold definido. U
 
 O plugin Harmonic Distortion molda a forma de onda com termos não lineares ajustáveis de 2ª a 5ª ordem. Ele permite ajustar o caráter de distorção par e ímpar, de calor sutil a coloração mais forte, ajudando músicas limpas, finas ou achatadas demais a soarem mais vivas.
 
+**Oversampling**: Escolha 1x (padrão), 2x, 4x, 8x. Valores maiores reduzem os sons indesejados causados pelo retorno de harmônicos de alta frequência à faixa audível, mas exigem mais CPU. Comece com 2x ou 4x; use 8x para maior redução a 48 kHz. 1x mantém o processamento original. Valores acima de 1x acrescentam um atraso de 64 amostras (cerca de 1,33 ms a 48 kHz).
+
 ### Guia de Aperfeiçoamento Auditivo
 - **Efeito Sutil:**
   - Adiciona uma camada suave de calor harmônico
@@ -300,6 +326,8 @@ O plugin Harmonic Distortion molda a forma de onda com termos não lineares ajus
 ## Multiband Saturation
 
 Um efeito versátil que permite adicionar calor e caráter a faixas de frequência específicas do sinal de reprodução inteiro. Ao dividir o som em bandas Low, Mid e High, você pode moldar cada faixa independentemente para um aprimoramento preciso do som.
+
+**Oversampling**: Escolha 1x (padrão), 2x, 4x, 8x. Valores maiores reduzem os sons indesejados causados pelo retorno de harmônicos de alta frequência à faixa audível, mas exigem mais CPU. Comece com 2x ou 4x; use 8x para maior redução a 48 kHz. 1x mantém o processamento original. Valores acima de 1x acrescentam um atraso de 64 amostras (cerca de 1,33 ms a 48 kHz).
 
 ### Guia de Aprimoramento da Audição
 - Calor nas Baixas Frequências:
@@ -379,6 +407,8 @@ Como este efeito processa bandas de frequência, ele afeta todos os sons na faix
 ## Saturation
 
 Um efeito que simula o som quente e agradável de equipamentos valvulados vintage. Pode adicionar riqueza e caráter à sua música, fazendo-a soar mais "analógica" e menos "digital".
+
+**Oversampling**: Escolha 1x (padrão), 2x, 4x, 8x. Valores maiores reduzem os sons indesejados causados pelo retorno de harmônicos de alta frequência à faixa audível, mas exigem mais CPU. Comece com 2x ou 4x; use 8x para maior redução a 48 kHz. 1x mantém o processamento original. Valores acima de 1x acrescentam um atraso de 64 amostras (cerca de 1,33 ms a 48 kHz).
 
 ### Guia de Aprimoramento da Audição
 - Adicionando Calor:

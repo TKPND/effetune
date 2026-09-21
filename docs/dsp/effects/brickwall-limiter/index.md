@@ -83,6 +83,7 @@ A peak limiter that keeps the chain's digital signal below a specified ceiling w
   - Adjust for precise peak control
 
 - **Oversampling** (1x, 2x, 4x, 8x)
+  - 1x (default) preserves the original processing. Above 1x, filtering adds 64 samples of delay in addition to Lookahead (about 1.33 ms at 48 kHz).
   - Higher values for cleaner limiting
   - Lower values for less CPU usage
   - 4x is a good balance of quality and performance

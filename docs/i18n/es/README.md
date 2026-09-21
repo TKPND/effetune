@@ -332,6 +332,7 @@ Si el problema persiste, repórtalo a través de [GitHub Issues](https://github.
 | Basics    | Volume             | Control básico de volumen                                                 | [Detalles](plugins/basics.md#volume)                    |
 | Delay     | Delay          | Efecto de retardo estándar | [Detalles](plugins/delay.md#delay) |
 | Delay     | Time Alignment | Ajusta con precisión el tiempo de reproducción para alinear altavoces y posición de escucha | [Detalles](plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | Equilibra ataques breves y estructura tonal sostenida | [Detalles](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | Ajuste automático de volumen basado en medición LUFS para una experiencia de escucha uniforme | [Detalles](plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | Limita los picos de señal para evitar el recorte digital | [Detalles](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | Suaviza los pasajes que se vuelven fuertes de golpe para una escucha más cómoda | [Detalles](plugins/dynamics.md#compressor) |
@@ -401,6 +402,7 @@ Si el problema persiste, repórtalo a través de [GitHub Issues](https://github.
 | Reverb    | IR Reverb | Reverberación por convolución con respuestas al impulso importadas de salas y equipos | [Detalles](plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | Reverberación de dispersión aleatoria con difusión natural | [Detalles](plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | Genera contenido de alta frecuencia por encima de un corte detectado o especificado | [Detalles](plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | Genera graves una octava por debajo del contenido adecuado | [Detalles](plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | Simula el desplazamiento no lineal de conos de altavoz | [Detalles](plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | Añade contenido armónico para mejorar la claridad y presencia | [Detalles](plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | Efecto de recorte duro digital | [Detalles](plugins/saturation.md#hard-clipping) |

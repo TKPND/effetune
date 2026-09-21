@@ -27,6 +27,7 @@ analyzer/pitch_meter: Pitch Meter | Analyzer | PitchMeterPlugin
 analyzer/spectrogram: Spectrogram | Analyzer | SpectrogramPlugin | css
 analyzer/spectrum_analyzer: Spectrum Analyzer | Analyzer | SpectrumAnalyzerPlugin | css
 analyzer/stereo_meter: Stereo Meter | Analyzer | StereoMeterPlugin | css
+basics/bass_management: Bass Management | Basics | BassManagementPlugin | css
 basics/channel_divider: Channel Divider | Basics | ChannelDividerPlugin | css
 basics/dc_offset: DC Offset | Basics | DCOffsetPlugin
 basics/fir_crossover: FIR Crossover | Basics | FIRCrossoverPlugin | css
@@ -38,6 +39,7 @@ basics/stereo_balance: Stereo Balance | Basics | StereoBalancePlugin
 basics/volume: Volume | Basics | VolumePlugin
 delay/delay: Delay | Delay | DelayPlugin
 delay/time_alignment: Time Alignment | Delay | TimeAlignmentPlugin
+dynamics/attack_tonal_balance: Attack Tonal Balance | Dynamics | AttackTonalBalancePlugin
 dynamics/auto_leveler: Auto Leveler | Dynamics | AutoLevelerPlugin | css
 dynamics/brickwall_limiter: Brickwall Limiter | Dynamics | BrickwallLimiterPlugin
 dynamics/compressor: Compressor | Dynamics | CompressorPlugin | css
@@ -107,6 +109,7 @@ reverb/fdn_reverb: FDN Reverb | Reverb | FDNReverbPlugin
 reverb/ir_reverb: IR Reverb | Reverb | IRReverbPlugin | css
 reverb/rs_reverb: RS Reverb | Reverb | RSReverbPlugin
 saturation/bandwidth_extender: Bandwidth Extender | Saturation | BandwidthExtenderPlugin
+saturation/bass_extender: Bass Extender | Saturation | BassExtenderPlugin
 saturation/dynamic_saturation: Dynamic Saturation | Saturation | DynamicSaturationPlugin | css
 saturation/exciter: Exciter | Saturation | ExciterPlugin | css
 saturation/hard_clipping: Hard Clipping | Saturation | HardClippingPlugin | css

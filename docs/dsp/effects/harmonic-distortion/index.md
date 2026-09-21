@@ -16,7 +16,7 @@ Adds configurable harmonic components derived from the input.
 - Seeded: **no**
 - Catalog sample rates: **not declared; this does not mean unsupported**
 - Assets: **none**
-- Catalog-declared latency: **zero**
+- Catalog-declared latency: **dynamic**; depends on oversampling
 
 | Semantic name | Python constructor keyword | Type / count | Default | Unit | Range or values |
 |---|---|---:|---|---|---|
@@ -25,6 +25,7 @@ Adds configurable harmonic components derived from the input.
 | `fourthHarmonic` | `fourth_harmonic` | number / 1 | `0.5` | % | -30 … 30 |
 | `fifthHarmonic` | `fifth_harmonic` | number / 1 | `0.3` | % | -30 … 30 |
 | `sensitivity` | `sensitivity` | number / 1 | `0.5` | Not declared in catalog | 0.1 … 2 |
+| `oversampling` | `oversampling` | integer / 1 | `1` | Not declared in catalog | `1`, `2`, `4`, `8` |
 
 
 
@@ -35,6 +36,8 @@ Adds configurable harmonic components derived from the input.
 ## Harmonic Distortion
 
 The Harmonic Distortion plugin shapes the waveform with adjustable 2nd- to 5th-order nonlinear terms. It lets you tune even- and odd-order distortion character from subtle warmth to stronger coloration, which can help music that sounds too clean, thin, or flat feel more vivid.
+
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
 
 ### Listening Enhancement Guide
 - **Subtle Effect:**

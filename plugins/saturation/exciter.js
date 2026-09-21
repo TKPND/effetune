@@ -1,6 +1,7 @@
 class ExciterPlugin extends PluginBase {
     constructor() {
         super('Exciter', 'Add harmonic content to enhance clarity and presence');
+        this.os = 1;
         this.hf = 3000;   // hf: HPF Freq (500-10000 Hz)
         this.hs = 1;      // hs: HPF Slope (0=off, 1=6dB/oct, 2=12dB/oct)
         this.dr = 3.0;    // dr: Drive (0.0-10.0)
@@ -10,6 +11,7 @@ class ExciterPlugin extends PluginBase {
         this.registerProcessor(`
             // Bypass processing if the plugin is disabled.
             if (!parameters.enabled) return data;
+            ${PluginBase.oversamplingProcessorSource(8, 1)}
             
             const {
                 hf: hpfFreq,
@@ -116,8 +118,8 @@ class ExciterPlugin extends PluginBase {
                             const y = b0 * dry + b1 * x1 - a1 * y1;
                             x1 = dry;
                             y1 = (Math.abs(y) < 1.0e-25) ? 0 : y;
-                            const wet = Math.tanh(drive * (y1 + bias)) - biasOffset;
-                            data[offset + i] = dry + wet * mixRatio;
+                            const wet = shapeSample(ch, y1, sample => Math.tanh(drive * (sample + bias)) - biasOffset);
+                            data[offset + i] = delaySample(ch, dry) + wet * mixRatio;
                         }
                     } else {
                         // Process audio with 2nd Order HPF.
@@ -130,16 +132,16 @@ class ExciterPlugin extends PluginBase {
                             x1 = dry;
                             y2 = y1;
                             y1 = (Math.abs(y) < 1.0e-25) ? 0 : y;
-                            const wet = Math.tanh(drive * (y1 + bias)) - biasOffset;
-                            data[offset + i] = dry + wet * mixRatio;
+                            const wet = shapeSample(ch, y1, sample => Math.tanh(drive * (sample + bias)) - biasOffset);
+                            data[offset + i] = delaySample(ch, dry) + wet * mixRatio;
                         }
                     }
                 } else {
                     // Process audio with HPF bypassed.
                     for (let i = 0; i < blockSize; i++) {
                         const dry = data[offset + i];
-                        const wet = Math.tanh(drive * (dry + bias)) - biasOffset;
-                        data[offset + i] = dry + wet * mixRatio;
+                        const wet = shapeSample(ch, dry, sample => Math.tanh(drive * (sample + bias)) - biasOffset);
+                        data[offset + i] = delaySample(ch, dry) + wet * mixRatio;
                     }
                 }
                 
@@ -166,6 +168,9 @@ class ExciterPlugin extends PluginBase {
     }
 
     setParameters(params) {
+        if (params.os !== undefined) {
+            this.os = this.isAllowedEnum(Number(params.os), [1, 2, 4, 8], this.os);
+        }
         let graphNeedsUpdate = false;
         
         if (params.hf !== undefined) {
@@ -213,6 +218,7 @@ class ExciterPlugin extends PluginBase {
             dr: this.dr,
             bs: this.bs,
             mx: this.mx,
+            os: this.os,
             enabled: this.enabled
         };
     }
@@ -393,6 +399,10 @@ class ExciterPlugin extends PluginBase {
     createUI() {
         const container = document.createElement('div');
         container.className = 'exciter-plugin-ui plugin-parameter-ui';
+        container.appendChild(this.createSelectControl(
+            'Oversampling', [1, 2, 4, 8].map(value => ({ value, label: value + 'x' })),
+            this.os, value => this.setParameters({ os: Number(value) }), 'os'
+        ));
 
         // HPF Frequency control
         const freqRow = this.createLogarithmicParameterControl(

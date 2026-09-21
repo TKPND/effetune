@@ -332,6 +332,7 @@ PC पर Chromium ब्राउज़र चुने हुए संगी�
 | Basics    | Volume | बुनियादी volume control | [विवरण](plugins/basics.md#volume) |
 | Delay     | Delay          | सामान्य delay effect | [विवरण](plugins/delay.md#delay) |
 | Delay     | Time Alignment | speakers और listening position alignment के लिए playback timing की fine tuning | [विवरण](plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | छोटे attacks और टिके रहने वाले tonal ढाँचे का संतुलन | [विवरण](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | consistent listening experience के लिए LUFS measurement आधारित automatic volume adjustment | [विवरण](plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | डिजिटल क्लिपिंग रोकने के लिए सिग्नल पीक सीमित करता है | [विवरण](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | अचानक तेज़ हिस्सों को smooth करके सुनना अधिक आरामदायक बनाता है | [विवरण](plugins/dynamics.md#compressor) |
@@ -401,6 +402,7 @@ PC पर Chromium ब्राउज़र चुने हुए संगी�
 | Reverb    | IR Reverb | इम्पोर्ट की गई room और equipment impulse responses वाला convolution reverb | [विवरण](plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | natural diffusion वाला random scattering reverb | [विवरण](plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | पहचाने गए या निर्धारित cutoff के ऊपर high-frequency content बनाता है | [विवरण](plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | उपयुक्त low-frequency content से एक octave नीचे bass बनाता है | [विवरण](plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | speaker cones के nonlinear displacement को simulate करता है | [विवरण](plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | clarity और presence बढ़ाने के लिए harmonic content जोड़ता है | [विवरण](plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | digital hard clipping effect | [विवरण](plugins/saturation.md#hard-clipping) |

@@ -11,10 +11,11 @@ struct SaturationPluginParams {
   float bias;
   float mix;
   float gain;
-  static constexpr std::uint32_t kHash = 0x42759ad3u;
-  static constexpr std::uint32_t kFloatCount = 4u;
+  float oversampling;
+  static constexpr std::uint32_t kHash = 0xae9fd2f7u;
+  static constexpr std::uint32_t kFloatCount = 5u;
 };
-static_assert(4u == 0u || sizeof(SaturationPluginParams) == sizeof(float) * 4u);
+static_assert(5u == 0u || sizeof(SaturationPluginParams) == sizeof(float) * 5u);
 
 } // namespace effetune::generated
 

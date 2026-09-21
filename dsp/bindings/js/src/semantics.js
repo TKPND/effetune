@@ -14,6 +14,8 @@ import {
 const DOCUMENT_KEYS = new Set(['version', 'chain']);
 const EFFECT_KEYS = new Set(['id', 'type', 'enabled', 'channel', 'parameters', 'assets']);
 const STREAM_RECONFIGURATION_PARAMETERS = new Map([
+  ['BassManagement', new Set(['phase', 'taps', 'roles', 'frequencies', 'slopes', 'routes', 'routeInversions',
+    'subs', 'lfeFrequency', 'lfeSlope', 'lfeLowpass'])],
   ['CrosstalkCancellation', new Set(['latencyMode', 'filterDelaySamples'])],
   ['FIRCrossover', new Set(['bandCount', 'latencyMode', 'filterDelaySamples'])],
   ['FiveBandFIRPEQ', new Set(['latencyMode', 'filterDelaySamples'])],
@@ -121,14 +123,15 @@ function fromPlainEffect(value, index, label = `Chain entry ${index}`) {
     if (declaredAssets.length === 0) {
       if (value.assets !== undefined) throw new AssetError(`${value.type} does not accept external assets.`);
     } else {
-      if (!isRecord(value.assets)) throw new AssetError(`${value.type} requires an assets object.`);
+      const suppliedAssets = value.assets ?? (declaredAssets.every(asset => !asset.required) ? {} : undefined);
+      if (!isRecord(suppliedAssets)) throw new AssetError(`${value.type} requires an assets object.`);
       const allowed = new Set(declaredAssets.map(asset => asset.name));
-      for (const name of Object.keys(value.assets)) {
+      for (const name of Object.keys(suppliedAssets)) {
         if (!allowed.has(name)) throw new AssetError(`${value.type} has no asset named ${name}.`);
       }
       assets = {};
       for (const asset of declaredAssets) {
-        const reference = value.assets[asset.name];
+        const reference = suppliedAssets[asset.name];
         if (asset.required && (typeof reference !== 'string' || reference.length < 1 || reference.length > 128)) {
           throw new AssetError(`${value.type}.${asset.name} requires a non-empty asset reference.`);
         }
@@ -138,7 +141,44 @@ function fromPlainEffect(value, index, label = `Chain entry ${index}`) {
   } catch (error) {
     throw withValidationDetail(error, { kind: 'assets' });
   }
-  return { id, type: value.type, enabled, channel, parameters, ...(assets ? { assets } : {}) };
+  const effect = { id, type: value.type, enabled, channel, parameters, ...(assets ? { assets } : {}) };
+  validateBassManagement(effect);
+  return effect;
+}
+
+export function validateBassManagement(effect, channels = 16) {
+  if (effect.type !== 'BassManagement') return;
+  const p = effect.parameters;
+  if (effect.channel !== 'all') throw new ValidationError('BassManagement requires channel all.');
+  const mask = (1 << channels) - 1;
+  if ((p.subs & ~mask) !== 0) throw new ValidationError('BassManagement Sub output is outside the processing bus.');
+  if (![24, 48, 96].includes(p.lfeSlope) || p.slopes.some(value => ![24, 48, 96].includes(value))) {
+    throw new ValidationError('BassManagement slopes must be 24, 48, or 96 dB/oct.');
+  }
+  if (p.subs !== 0) {
+    for (let ch = 0; ch < 16; ch++) {
+      const role = p.roles[ch], route = p.routes[ch];
+      if ((ch >= channels && (role === 1 || role === 2 || route !== 0)) ||
+          (ch < channels && role <= 1 && (p.subs & (1 << ch))) ||
+          (route & ~p.subs) || (p.routeInversions[ch] & ~route) ||
+          ((role === 1 || role === 2) && route === 0)) {
+        throw new ValidationError('BassManagement requires separate Main/Sub outputs and valid destinations for every Managed/LFE input.');
+      }
+    }
+  }
+  const needsAsset = bassManagementNeedsAsset(effect);
+  if (needsAsset && !effect.assets?.impulseResponse) {
+    throw new AssetError('BassManagement Linear processing requires its low-pass filter asset.');
+  }
+  if (!needsAsset && effect.assets?.impulseResponse) {
+    throw new AssetError('BassManagement does not use a filter asset for this configuration.');
+  }
+}
+
+export function bassManagementNeedsAsset(effect) {
+  return effect.parameters.subs !== 0 && effect.parameters.phase === 'Linear' &&
+    effect.parameters.roles.some(role =>
+      role === 1 || (role === 2 && effect.parameters.lfeLowpass));
 }
 
 function assignIds(effects) {

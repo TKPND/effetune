@@ -192,6 +192,82 @@ void testRisingTriggerCaptureContent() {
   SCOPE_CHECK(readF32(payload + 28u) == 0.5F);
 }
 
+void testPreviousSnapshotRemainsPublishedDuringCapture() {
+  KernelHarness harness(1000.0F, 4u);
+  harness.setParams(0.004F, 1.0F, 1.0F, 0.0F, 0.0001F);
+  std::array<float, 4> first = {0.1F, 0.2F, 0.3F, 0.4F};
+  harness.process(first.data(), 1u, 4u, 0.0);
+  harness.telemetryTick();
+  harness.telemetryTick();
+  SCOPE_CHECK(harness.read() == 48u);
+
+  harness.setParams(0.008F, 1.0F, 0.0F, 0.0F, 0.0001F);
+  std::array<float, 4> second = {-1.0F, -0.5F, -0.25F, 0.5F};
+  harness.process(second.data(), 1u, 4u, 0.01);
+  harness.telemetryTick();
+  harness.telemetryTick();
+
+  SCOPE_CHECK(harness.read() == 48u);
+  const std::uint8_t *payload = harness.output.data() + 16u;
+  SCOPE_CHECK(readU32(payload + 4u) == 4u);
+  for (std::uint32_t frame = 0u; frame < 4u; ++frame) {
+    SCOPE_CHECK(readF32(payload + 16u + frame * 4u) == first[frame]);
+  }
+}
+
+void testPastTriggerCaptureIsBoundedAcrossRingWrap() {
+  constexpr std::uint32_t kFrames = 8u;
+  constexpr std::uint32_t kCaptureSamples = 100u;
+  KernelHarness harness(1000.0F, 128u);
+  harness.setParams(0.1F, 1.0F, 0.5F, 0.0F, 0.0001F);
+
+  std::array<float, 128> prefill{};
+  prefill.fill(-1.0F);
+  for (std::uint32_t processed = 0u; processed < 65520u; processed += 128u) {
+    harness.process(prefill.data(), 1u, 128u, static_cast<double>(processed) / 1000.0);
+  }
+
+  std::array<float, kFrames> block{};
+  block.fill(-1.0F);
+  block[1] = 1.0F;
+  harness.process(block.data(), 1u, kFrames, 65.520);
+  harness.process(block.data(), 1u, kFrames, 65.528);
+  block.fill(-1.0F);
+  for (std::uint32_t absolute = 65536u; absolute < 65624u; absolute += kFrames) {
+    harness.process(block.data(), 1u, kFrames, static_cast<double>(absolute) / 1000.0);
+  }
+
+  harness.telemetryTick();
+  harness.telemetryTick();
+  SCOPE_CHECK(harness.read() == 432u);
+  const std::uint8_t *payload = harness.output.data() + 16u;
+  SCOPE_CHECK(readU32(payload + 4u) == kCaptureSamples);
+  SCOPE_CHECK(payload[15u] == 1u);
+  SCOPE_CHECK(readF32(payload + 16u) == 1.0F);
+  SCOPE_CHECK(readF32(payload + 16u + 8u * 4u) == 1.0F);
+
+  harness.process(block.data(), 1u, kFrames, 65.624);
+  harness.telemetryTick();
+  harness.telemetryTick();
+  SCOPE_CHECK(harness.read() == 432u);
+  payload = harness.output.data() + 16u;
+  SCOPE_CHECK(readF32(payload + 16u + 8u * 4u) == 1.0F);
+
+  for (std::uint32_t absolute = 65632u; absolute < 65680u; absolute += kFrames) {
+    harness.process(block.data(), 1u, kFrames, static_cast<double>(absolute) / 1000.0);
+  }
+  harness.telemetryTick();
+  harness.telemetryTick();
+  SCOPE_CHECK(harness.read() == 432u);
+  payload = harness.output.data() + 16u;
+  SCOPE_CHECK(readU32(payload + 4u) == kCaptureSamples);
+  SCOPE_CHECK(payload[15u] == 1u);
+  SCOPE_CHECK(readF32(payload + 16u) == 1.0F);
+  for (std::uint32_t sample = 1u; sample < kCaptureSamples; ++sample) {
+    SCOPE_CHECK(readF32(payload + 16u + sample * 4u) == -1.0F);
+  }
+}
+
 void testM4ReductionWithVariableBlocks() {
   constexpr std::uint32_t kFrames = 4800u;
   KernelHarness harness(48000.0F, 127u);
@@ -206,9 +282,9 @@ void testM4ReductionWithVariableBlocks() {
       const std::uint32_t index = processed + frame;
       if (index == 0u) {
         audio[frame] = 1.0F;
-      } else if (index == 1u) {
+      } else if (index == 1u || index == 2u) {
         audio[frame] = 10.0F;
-      } else if (index == 4u) {
+      } else if (index == 4u || index == 5u) {
         audio[frame] = -10.0F;
       } else if (index == 8u) {
         audio[frame] = 2.0F;
@@ -251,6 +327,8 @@ void testM4ReductionWithVariableBlocks() {
 int main() {
   testRawCadenceTapSequenceResetAndPassthrough();
   testRisingTriggerCaptureContent();
+  testPreviousSnapshotRemainsPublishedDuringCapture();
+  testPastTriggerCaptureIsBoundedAcrossRingWrap();
   testM4ReductionWithVariableBlocks();
   if (failures != 0) {
     std::fprintf(stderr, "%d Oscilloscope frame-content check(s) failed\n", failures);

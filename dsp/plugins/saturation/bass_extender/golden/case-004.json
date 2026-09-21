@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "type": "BassExtenderPlugin",
+  "id": "impulse-44100",
+  "stimulus": "imp",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frameCount": 11025,
+  "blockSize": 63,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 3,
+  "seed": "0xeffe7a5d",
+  "params": {
+    "am": 25,
+    "og": 0
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.000002,
+    "policy": "per-sample"
+  },
+  "referenceEngine": "production-native-promoted-v1",
+  "referenceHash": "sha256:ff086f02ed5355fdcb006593186031c7490259225d075d42c53d58a10f12def5",
+  "generationCommand": "node tools/dsp-parity/generate.mjs --type BassExtenderPlugin --promote-production-native",
+  "outputFloats": 22050,
+  "byteLength": 88200,
+  "binary": "case-004.f32"
+}

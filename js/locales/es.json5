@@ -398,6 +398,7 @@
   "library.job.phase.ready": "Listo para confirmar",
   "library.job.phase.cancel_requested": "Cancelación solicitada",
   "library.job.phase.committing": "Confirmando",
+  "library.job.phase.starting_playback": "Iniciando la reproducción",
   "library.job.terminal.succeeded": "Completado",
   "library.job.terminal.failed": "Falló",
   "library.job.terminal.cancelled": "Cancelado",
@@ -444,6 +445,8 @@
   "library.confirm.mergeFolders": "La carpeta seleccionada contiene carpetas que ya están en la biblioteca. ¿Quieres sustituirlas por la carpeta principal seleccionada?",
   "library.confirm.deletePlaylist": "¿Eliminar esta lista? Las pistas permanecerán en la biblioteca.",
   "library.error.actionFailed": "La biblioteca de música no pudo completar esta acción. Inténtalo de nuevo.",
+  "library.error.playbackStartTimeout": "No se pudo iniciar la reproducción porque se detuvo la carga de la pista. Inténtalo de nuevo.",
+  "library.error.playbackStartFailed": "No se pudo iniciar la reproducción. Inténtalo de nuevo.",
   "library.error.folderAlreadyAdded": "{name} ya está en tu biblioteca.",
   "library.error.folderInsideExisting": "{name} ya está incluida en {existing}.",
   "library.recovery.initializing.title": "Iniciando la biblioteca de música",
@@ -804,6 +807,7 @@
 
   // FIR filters
   "crosstalkCancellation.error.design": "No se pudieron preparar los filtros de Crosstalk Cancellation. Comprueba las cuatro mediciones seleccionadas y los ajustes, y vuelve a intentarlo.",
+  "bassManagement.error.design": "No se pudieron preparar los filtros de Bass Management. Reduce Taps y vuelve a intentarlo.",
   "firCrossover.error.design": "No se pudieron diseñar los filtros de FIR Crossover. Prueba con menos Taps o ajustes menos extremos.",
   "fiveBandFirPeq.error.design": "No se pudo diseñar el filtro de 5Band FIR PEQ. Prueba con menos Taps o ajustes menos extremos.",
   "fiveBandFirPeq.graph.target": "Objetivo",

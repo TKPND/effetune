@@ -32,6 +32,7 @@ export const NATIVE_CONTROL_ASSET_HEADER_BYTES = 84;
 export const WASM_PIPELINE_TELEMETRY_BYTES = 256 * 1024;
 
 const NATIVE_DIRECT_REFERENCE_ENGINES = new Set([
+  'native-bass-management-independent-v1',
   'native-fir-crossover-direct-double-v1',
   'native-five-band-fir-peq-direct-double-v1',
   'native-group-delay-eq-direct-double-v1',

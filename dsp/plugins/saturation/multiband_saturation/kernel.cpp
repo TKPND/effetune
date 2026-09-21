@@ -2,6 +2,7 @@
 #include "MultibandSaturationPluginParams.h"
 #include "effetune/dsp/denormal_noise.h"
 #include "effetune/dsp/linkwitz_riley.h"
+#include "effetune/dsp/oversampled_shaper.h"
 
 #include <algorithm>
 #include <array>
@@ -55,6 +56,7 @@ class MultibandSaturationKernel final : public PluginKernel {
 
 public:
   void prepare(const PrepareInfo &info) override {
+    shaper_.prepare(info.maxChannels * 3u);
     sample_rate_ = static_cast<double>(info.sampleRate);
     max_channels_ = info.maxChannels;
     max_frames_ = info.maxFrames;
@@ -68,6 +70,7 @@ public:
   }
 
   void reset() noexcept override {
+    shaper_.reset();
     resetFilterStates();
     configured_ = false;
     last_channel_count_ = 0u;
@@ -82,6 +85,7 @@ public:
 
   void process(float *audio, std::uint32_t channel_count, std::uint32_t frame_count,
                const ProcessInfo &) noexcept override {
+    shaper_.configure(dsp::OversampledShaper::factor(params_.oversampling, 8u), channel_count * 3u);
     if (audio == nullptr || channel_count == 0u || channel_count > max_channels_ ||
         frame_count == 0u || frame_count > max_frames_ || sample_rate_ <= 0.0) {
       return;
@@ -142,8 +146,11 @@ public:
           const double gain = std::pow(10.0, controlAt(base + 3u, frame) / 20.0);
           const double bias_offset = std::tanh(drive * bias);
           const double dry = static_cast<double>(signal[frame]);
-          const double wet = std::tanh(drive * (dry + bias)) - bias_offset;
-          signal[frame] = static_cast<float>((dry * (1.0 - mix) + wet * mix) * gain);
+          const double wet = shaper_.process(channel * 3u + band, dry, [&](double sample) {
+            return std::tanh(drive * (sample + bias)) - bias_offset;
+          });
+          const double delayed_dry = shaper_.delay(channel * 3u + band, dry);
+          signal[frame] = static_cast<float>((delayed_dry * (1.0 - mix) + wet * mix) * gain);
         }
       }
 
@@ -171,7 +178,15 @@ public:
     denormal_noise_.advance(frame_count);
   }
 
+  [[nodiscard]] std::uint32_t latencySamples() const noexcept override {
+    const auto &parameters = params_pending_ ? staged_params_ : params_;
+    return dsp::OversampledShaper::factor(parameters.oversampling, 8u) == 1u
+               ? 0u
+               : dsp::OversampledShaper::kLatency;
+  }
+
 private:
+  dsp::OversampledShaper shaper_;
   void retargetControls() noexcept {
     std::array<double, 12u> targets{};
     for (std::size_t band = 0u; band < 3u; ++band) {

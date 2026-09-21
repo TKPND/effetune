@@ -54,7 +54,7 @@ try {
 
   const smoke = [
     "import('@effetune/dsp').then(async m => {",
-    "  if (m.EFFECT_TYPES.length !== 103) throw new Error('catalog mismatch');",
+    "  if (m.EFFECT_TYPES.length !== m.EFFECT_CATALOG.effects.length || !m.EFFECT_TYPES.includes('BassExtender')) throw new Error('catalog mismatch');",
     "  if (m.EFFECT_CATALOG.channels.length !== 27) throw new Error('catalog channels missing');",
     "  for (const type of m.EFFECT_TYPES) {",
     "    const factoryName = `create${type}`;",
@@ -166,8 +166,10 @@ try {
     "  assetGraph.close();",
     "  const generated = await import('@effetune/dsp');",
     "  new generated.Compressor({threshold: -12});",
+    "  const bassExtender = new generated.BassExtender({amount: 100, outputGain: -6});",
+    "  if (bassExtender.parameters.amount !== 100 || bassExtender.parameters.outputGain !== -6) throw new Error('Bass Extender parameters failed');",
     "  const catalog = await import('@effetune/dsp/catalog');",
-    "  if (catalog.EFFECT_CATALOG.effects.length !== 103) throw new Error('catalog subpath failed');",
+    "  if (catalog.EFFECT_CATALOG.effects.length !== m.EFFECT_CATALOG.effects.length || !catalog.EFFECT_CATALOG.effects.some(effect => effect.type === 'BassExtender')) throw new Error('catalog subpath failed');",
     "})"
   ].join('\n');
   await run(process.execPath, ['--input-type=module', '--eval', smoke], {

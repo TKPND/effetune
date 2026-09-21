@@ -1,6 +1,6 @@
 ---
 title: "Dynamics 插件 - EffeTune"
-description: "动态处理插件,包括 Compressor、Limiter、Gate、Multiband Compressor 和 Transient Shaper。"
+description: "动态处理插件,包括 Attack Tonal Balance、Compressor、Limiter、Gate、Multiband Compressor 和 Transient Shaper。"
 lang: zh
 ---
 
@@ -10,6 +10,7 @@ lang: zh
 
 ## 插件列表
 
+- [Attack Tonal Balance](#attack-tonal-balance) - 平衡短促起音与持续音调结构
 - [Auto Leveler](#auto-leveler) - 自动调整音量以保持一致的聆听体验
 - [Brickwall Limiter](#brickwall-limiter) - 透明地控制峰值，防止数字削波
 - [Compressor](#compressor) - 自动平衡音量级别,实现更舒适的聆听体验 (包括向上扩展)
@@ -20,6 +21,38 @@ lang: zh
 - [Multiband Transient](#multiband-transient) - 分别调整低频、中频和高频的冲击力与延音
 - [Power Amp Sag](#power-amp-sag) - 加入类似放大器的压缩,轻柔软化响亮段落
 - [Transient Shaper](#transient-shaper) - 控制信号的瞬态和延音部分
+
+## Attack Tonal Balance
+
+平衡同一频率范围内短促、宽频的起音与持续音调结构。适合在不同时改变持续音的情况下，让打击声和音符起始更突出或更柔和。与 Transient Shaper 不同，它根据时间和频率模式分离两类成分，而不是使用快慢电平包络；与 Multiband Transient 不同，它不会把声音划分为固定的低频、中频和高频段。
+
+### 聆听改善指南
+
+- 保持 Attack Enabled 和 Tonal Enabled 处于勾选状态，将两个增益控制都从 0 dB 开始，再逐项以 1 至 3 dB 的幅度调整。
+- 提高 Attack 可让鼓点、拨弦和音符起始更清晰；降低它可柔化尖锐或容易引起疲劳的起音。
+- 提高 Tonal 可突出持续音、和弦和人声的音调；当持续音调成分在混音中过强时，可降低它。
+- 取消任一 Enabled 复选框可切除对应的已分离成分，便于对比或调整另一成分。增益设置会保留，但重新开启前无法操作对应的滑块和数值输入框。
+- 正值可能提高峰值或感知响度。请在相近的聆听音量下比较，必要时降低输出电平。
+
+### 参数
+
+- **Attack Enabled**（默认：开启）
+  - 将分离出的 Attack 成分加入输出。取消勾选可切除该成分。
+
+- **Attack**（-12 dB 至 +12 dB，默认值：0 dB，步进 0.5 dB）
+  - 调整短时间内扩展到相邻频率的结构。
+  - 正值增强起音，负值使其更柔和。
+
+- **Tonal Enabled**（默认：开启）
+  - 将分离出的 Tonal 成分加入输出。取消勾选可切除该成分。
+
+- **Tonal**（-12 dB 至 +12 dB，默认值：0 dB，步进 0.5 dB）
+  - 调整随时间保持稳定的结构。
+  - 正值增强持续音调成分，负值减弱它。
+
+### 延迟与分离限制
+
+该效果会增加固定处理延迟：在 48 kHz 下为 5,120 个采样（约 107 ms）。它识别的是频谱模式，而不是乐器或声源，也不会判断音高在音乐上是否正确。音高快速变化、持续噪声、密集打击声和强烈调制的声音可能无法清晰分离。无法明确归为 Attack 或 Tonal 的成分会保持原始电平，因此同时取消两个 Enabled 复选框也不会让输出静音。
 
 ## Auto Leveler
 
@@ -175,6 +208,7 @@ lang: zh
   - 调整以获得精确的峰值控制
 
 - **Oversampling** (1x, 2x, 4x, 8x)
+  - 1x（默认）保留原有处理方式。2x及以上除了Lookahead之外，还会增加64个采样点的滤波延迟（48 kHz下约1.33 ms）。
   - 较高值获得更清晰的限制
   - 较低值减少 CPU 使用
   - 4x 是质量和性能的良好平衡

@@ -128,7 +128,7 @@ Ajusta o tempo de reprodução em pequenas quantidades, útil quando você quer 
 - Verificar se um pequeno atraso deixa a imagem estéreo mais estável ou natural
 
 ### Parâmetros
-- **Delay** - Controla o tempo de delay aplicado aos canais roteados por este plugin (0 a 100 ms)
+- **Delay** - Controla o tempo de delay aplicado aos canais roteados por este plugin (0 a 500 ms)
   - 0 ms: Sem delay
   - Valores pequenos: Úteis para compensar diferenças mínimas de tempo de chegada entre alto-falantes
   - Valores mais altos: Criam um deslocamento temporal mais perceptível

@@ -332,6 +332,7 @@ Si le souci persiste, signalez-le sur [GitHub Issues](https://github.com/Frieve-
 | Basics    | Volume            | Contrôle basique du volume                                               | [Détails](plugins/basics.md#volume)                     |
 | Delay     | Delay          | Effet de retard standard | [Détails](plugins/delay.md#delay) |
 | Delay     | Time Alignment | Réglage fin du timing de lecture pour aligner les enceintes et la position d'écoute | [Détails](plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | Équilibre les attaques brèves et la structure tonale soutenue | [Détails](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | Réglage automatique du volume basé sur la mesure LUFS pour une expérience d'écoute cohérente | [Détails](plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | Limite les crêtes du signal pour éviter l'écrêtage numérique | [Détails](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | Lisse les passages soudainement forts pour une écoute plus confortable | [Détails](plugins/dynamics.md#compressor) |
@@ -401,6 +402,7 @@ Si le souci persiste, signalez-le sur [GitHub Issues](https://github.com/Frieve-
 | Reverb    | IR Reverb | Réverbération à convolution avec des réponses impulsionnelles de salles et d'équipements | [Détails](plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | Réverbération à dispersion aléatoire avec diffusion naturelle | [Détails](plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | Génère du contenu haute fréquence au-dessus d'une coupure détectée ou spécifiée | [Détails](plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | Génère des graves une octave sous un contenu adapté | [Détails](plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | Simule le déplacement non linéaire des cônes de haut-parleur | [Détails](plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | Ajoute du contenu harmonique pour améliorer la clarté et la présence | [Détails](plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | Effet d'écrêtage dur numérique | [Détails](plugins/saturation.md#hard-clipping) |

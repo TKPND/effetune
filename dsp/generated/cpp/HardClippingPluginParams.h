@@ -9,10 +9,11 @@ namespace effetune::generated {
 struct HardClippingPluginParams {
   float threshold;
   float mode;
-  static constexpr std::uint32_t kHash = 0x31e6082du;
-  static constexpr std::uint32_t kFloatCount = 2u;
+  float oversampling;
+  static constexpr std::uint32_t kHash = 0x39cb58fdu;
+  static constexpr std::uint32_t kFloatCount = 3u;
 };
-static_assert(2u == 0u || sizeof(HardClippingPluginParams) == sizeof(float) * 2u);
+static_assert(3u == 0u || sizeof(HardClippingPluginParams) == sizeof(float) * 3u);
 
 } // namespace effetune::generated
 

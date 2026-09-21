@@ -398,6 +398,7 @@
   "library.job.phase.ready": "कमिट के लिए तैयार",
   "library.job.phase.cancel_requested": "रद्द करने का अनुरोध किया गया",
   "library.job.phase.committing": "कमिट हो रहा है",
+  "library.job.phase.starting_playback": "प्लेबैक शुरू हो रहा है",
   "library.job.terminal.succeeded": "पूरा हुआ",
   "library.job.terminal.failed": "विफल",
   "library.job.terminal.cancelled": "रद्द किया गया",
@@ -444,6 +445,8 @@
   "library.confirm.mergeFolders": "चयनित फ़ोल्डर में ऐसे फ़ोल्डर हैं जो पहले से लाइब्रेरी में हैं। क्या उन्हें चयनित पैरेंट फ़ोल्डर से बदलना है?",
   "library.confirm.deletePlaylist": "यह प्लेलिस्ट हटाएँ? ट्रैक आपकी लाइब्रेरी में बने रहेंगे.",
   "library.error.actionFailed": "संगीत लाइब्रेरी यह कार्रवाई पूरी नहीं कर सकी। कृपया फिर से कोशिश करें।",
+  "library.error.playbackStartTimeout": "ट्रैक लोड होना रुक गया, इसलिए प्लेबैक शुरू नहीं हो सका। कृपया फिर से कोशिश करें।",
+  "library.error.playbackStartFailed": "प्लेबैक शुरू नहीं हो सका। कृपया फिर से कोशिश करें।",
   "library.error.folderAlreadyAdded": "{name} पहले से आपकी लाइब्रेरी में है.",
   "library.error.folderInsideExisting": "{name} पहले से {existing} में शामिल है.",
   "library.recovery.initializing.title": "संगीत लाइब्रेरी शुरू हो रही है",
@@ -804,6 +807,7 @@
 
   // FIR filters
   "crosstalkCancellation.error.design": "Crosstalk Cancellation फ़िल्टर तैयार नहीं किए जा सके। चुनी गई चारों मापों और सेटिंग की जाँच करें, फिर दोबारा कोशिश करें।",
+  "bassManagement.error.design": "Bass Management फ़िल्टर तैयार नहीं किए जा सके। Taps कम करके फिर से कोशिश करें।",
   "firCrossover.error.design": "FIR Crossover फ़िल्टर डिज़ाइन नहीं किए जा सके। Taps कम करें या कम तीव्र सेटिंग आज़माएँ।",
   "fiveBandFirPeq.error.design": "5Band FIR PEQ फ़िल्टर डिज़ाइन नहीं किया जा सका। Taps कम करें या कम तीव्र सेटिंग आज़माएँ।",
   "fiveBandFirPeq.graph.target": "लक्ष्य",

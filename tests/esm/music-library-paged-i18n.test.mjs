@@ -30,11 +30,13 @@ const PAGED_KEYS = [
   'library.job.phase.received', 'library.job.phase.snapshotting',
   'library.job.phase.materializing', 'library.job.phase.ready',
   'library.job.phase.cancel_requested', 'library.job.phase.committing',
+  'library.job.phase.starting_playback',
   'library.job.terminal.succeeded', 'library.job.terminal.failed',
   'library.job.terminal.cancelled', 'library.job.terminal.interrupted',
   'library.job.progressKnown', 'library.job.progressUnknown',
   'library.queue.previousPage', 'library.queue.nextPage', 'library.queue.trackNumber',
-  'library.error.actionFailed', 'error.playbackCommandFailed'
+  'library.error.actionFailed', 'library.error.playbackStartTimeout',
+  'library.error.playbackStartFailed', 'error.playbackCommandFailed'
 ];
 const REMOVED_LIBRARY_KEYS = [
   'library.action.reorder',

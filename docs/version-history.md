@@ -7,6 +7,7 @@ lang: en
 # Version History
 
 ### Version 2.11.0 (TBD, 2026)
+- Added Attack Tonal Balance, Bass Extender and Bass Management effects
 - Enhanced the browser extension with multi-tab processing (up to 4), URL preset rules, sample rate selection, slide/sheet transitions, and improved mobile-width layout/controls
 - Various minor improvements
 

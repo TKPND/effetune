@@ -1,5 +1,6 @@
 #include "effetune/kernel.h"
 #include "SaturationPluginParams.h"
+#include "effetune/dsp/oversampled_shaper.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,17 +14,20 @@ class SaturationKernel final : public PluginKernel {
 
 public:
   void prepare(const PrepareInfo &info) override {
+    shaper_.prepare(info.maxChannels * 1u);
     ramp_frames_ = std::max(
         1u, static_cast<std::uint32_t>(std::ceil(static_cast<double>(info.sampleRate) * 0.005)));
   }
 
   void reset() noexcept override {
+    shaper_.reset();
     initialized_ = false;
     ramp_remaining_ = 0u;
   }
 
   void process(float *audio, std::uint32_t channel_count, std::uint32_t frame_count,
                const ProcessInfo &) noexcept override {
+    shaper_.configure(dsp::OversampledShaper::factor(params_.oversampling, 8u), channel_count * 1u);
     if (paramsDirty()) {
       updateTargets();
     }
@@ -33,15 +37,27 @@ public:
       for (std::uint32_t channel = 0u; channel < channel_count; ++channel) {
         const std::size_t index = static_cast<std::size_t>(channel) * frame_count + frame;
         const double dry = static_cast<double>(audio[index]);
-        const double shaped_input = static_cast<double>(static_cast<float>(drive_ * (dry + bias_)));
-        const double wet =
-            static_cast<double>(static_cast<float>(std::tanh(shaped_input))) - bias_offset_;
-        audio[index] = static_cast<float>((dry * (1.0 - mix_ratio_) + wet * mix_ratio_) * gain_);
+        const double wet = shaper_.process(channel, dry, [&](double sample) {
+          const double shaped_input =
+              static_cast<double>(static_cast<float>(drive_ * (sample + bias_)));
+          return static_cast<double>(static_cast<float>(std::tanh(shaped_input))) - bias_offset_;
+        });
+        const double delayed_dry = shaper_.delay(channel, dry);
+        audio[index] =
+            static_cast<float>((delayed_dry * (1.0 - mix_ratio_) + wet * mix_ratio_) * gain_);
       }
     }
   }
 
+  [[nodiscard]] std::uint32_t latencySamples() const noexcept override {
+    const auto &parameters = params_pending_ ? staged_params_ : params_;
+    return dsp::OversampledShaper::factor(parameters.oversampling, 8u) == 1u
+               ? 0u
+               : dsp::OversampledShaper::kLatency;
+  }
+
 private:
+  dsp::OversampledShaper shaper_;
   void updateTargets() noexcept {
     const double next_drive = static_cast<double>(params_.drive);
     const double next_bias = static_cast<double>(params_.bias);

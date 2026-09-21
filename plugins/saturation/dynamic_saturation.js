@@ -1,15 +1,15 @@
 const DYNAMIC_SATURATION_SYSTEM_PRESETS = Object.freeze([
     Object.freeze({
         id: 'subtle-cone-color', label: 'Subtle Cone Color',
-        params: Object.freeze({ sd: 2, ss: 1.5, sp: 0.8, sm: 1, dd: 1.2, db: 0.1, dm: 60, cm: 10, og: 0 })
+        params: Object.freeze({ os: 1, sd: 2, ss: 1.5, sp: 0.8, sm: 1, dd: 1.2, db: 0.1, dm: 60, cm: 10, og: 0 })
     }),
     Object.freeze({
         id: 'pushed-speaker', label: 'Pushed Speaker',
-        params: Object.freeze({ sd: 5, ss: 3, sp: 1.5, sm: 1.5, dd: 2, db: 0.16, dm: 100, cm: 25, og: -0.6 })
+        params: Object.freeze({ os: 1, sd: 5, ss: 3, sp: 1.5, sm: 1.5, dd: 2, db: 0.16, dm: 100, cm: 25, og: -0.6 })
     }),
     Object.freeze({
         id: 'ragged-cone', label: 'Ragged Cone',
-        params: Object.freeze({ sd: 8, ss: 5, sp: 2.5, sm: 2, dd: 3, db: 0.3, dm: 100, cm: 35, og: -1.7 })
+        params: Object.freeze({ os: 1, sd: 8, ss: 5, sp: 2.5, sm: 2, dd: 3, db: 0.3, dm: 100, cm: 35, og: -1.7 })
     })
 ]);
 
@@ -20,6 +20,7 @@ class DynamicSaturationPlugin extends PluginBase {
 
     constructor() {
         super('Dynamic Saturation', 'Simulates distortion caused by speaker cone movement');
+        this.os = 1;
 
         // Initialize parameters with default values
         this.sd = 3.0;   // sd: Speaker Drive (0.0-10.0)
@@ -35,6 +36,7 @@ class DynamicSaturationPlugin extends PluginBase {
         // Register processor with our speaker cone simulation
         this.registerProcessor(`
             if (!parameters.enabled) return data;
+            ${PluginBase.oversamplingProcessorSource(8, 1)}
         
             const {
                 sd: spkDrive,
@@ -124,11 +126,14 @@ class DynamicSaturationPlugin extends PluginBase {
                     v = vClamped;
         
                     const dstBiasTerm = Math.tanh(currentDstDrive * currentDstBias);
-                    const wetDist = Math.tanh(currentDstDrive * (x + currentDstBias)) - dstBiasTerm;
+                    const wetDist = shapeSample(ch, x, sample =>
+                        Math.tanh(currentDstDrive * (sample + currentDstBias)) - dstBiasTerm);
                     const xNl = x + dstMixRatio * (wetDist - x);
                     const coneDelta = (xNl - x) * coneMixRatio;
         
-                    let outputSample = inputSample + coneDelta;
+                    let outputSample = osFactor === 1 ? inputSample + coneDelta :
+                        delaySample(ch, inputSample - x * dstMixRatio * coneMixRatio) +
+                        wetDist * dstMixRatio * coneMixRatio;
                     outputSample *= gainLinear;
         
                     data[dataIndex] = outputSample;
@@ -156,6 +161,9 @@ class DynamicSaturationPlugin extends PluginBase {
     }
 
     setParameters(params) {
+        if (params.os !== undefined) {
+            this.os = this.isAllowedEnum(Number(params.os), [1, 2, 4, 8], this.os);
+        }
         let graphNeedsUpdate = false;
         if (params.sd !== undefined) {
             const sd = params.sd < 0 ? 0 : (params.sd > 10 ? 10 : params.sd);
@@ -228,6 +236,7 @@ class DynamicSaturationPlugin extends PluginBase {
             dm: this.dm,
             cm: this.cm,
             og: this.og,
+            os: this.os,
             enabled: this.enabled
         };
     }
@@ -299,6 +308,10 @@ class DynamicSaturationPlugin extends PluginBase {
     createUI() {
         const container = document.createElement('div');
         container.className = 'dynamic-saturation-plugin-ui plugin-parameter-ui';
+        container.appendChild(this.createSelectControl(
+            'Oversampling', [1, 2, 4, 8].map(value => ({ value, label: value + 'x' })),
+            this.os, value => this.setParameters({ os: Number(value) }), 'os'
+        ));
 
         // Use base helper to create controls
         container.appendChild(this.createParameterControl(

@@ -46,6 +46,14 @@
       "default": -2,
       "unit": "dB",
       "automation": true
+    },
+    {
+      "name": "oversampling",
+      "key": "os",
+      "kind": "int",
+      "min": 1,
+      "max": 8,
+      "default": 1
     }
   ]
 }

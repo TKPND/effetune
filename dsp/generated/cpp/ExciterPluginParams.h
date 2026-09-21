@@ -12,10 +12,11 @@ struct ExciterPluginParams {
   float drive;
   float bias;
   float mix;
-  static constexpr std::uint32_t kHash = 0xfc6e6a7au;
-  static constexpr std::uint32_t kFloatCount = 5u;
+  float oversampling;
+  static constexpr std::uint32_t kHash = 0x27629114u;
+  static constexpr std::uint32_t kFloatCount = 6u;
 };
-static_assert(5u == 0u || sizeof(ExciterPluginParams) == sizeof(float) * 5u);
+static_assert(6u == 0u || sizeof(ExciterPluginParams) == sizeof(float) * 6u);
 
 } // namespace effetune::generated
 

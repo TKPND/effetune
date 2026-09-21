@@ -52,9 +52,9 @@ test('production schemas expose the audited automation population', async () => 
     .filter(([, parameters]) => parameters.length === 0)
     .map(([type]) => type);
 
-  assert.equal(entries.length, 103);
-  assert.equal(entries.filter(([, parameters]) => parameters.length !== 0).length, 89);
-  assert.equal(entries.reduce((count, [, parameters]) => count + parameters.length, 0), 970);
+  assert.equal(entries.length, 106);
+  assert.equal(entries.filter(([, parameters]) => parameters.length !== 0).length, 91);
+  assert.equal(entries.reduce((count, [, parameters]) => count + parameters.length, 0), 976);
   for (const effect of specs) {
     const expectedLeaves = [];
     let packedOffset = 0;
@@ -86,10 +86,10 @@ test('production schemas expose the audited automation population', async () => 
   }
   assert.equal(
     createHash('sha256').update(JSON.stringify(catalog.effects)).digest('hex'),
-    'bd8a8ea684dee63c22317825efb42a7b50ae96ed142df3e5ef68266fb03dcd4d'
+    '9eaa673d2f4d848f88131dc5a16bb1e059ebd7d74744cd74e84ae81c58fb3e46'
   );
   assert.deepEqual(privateEffects, [
-    'FIRCrossoverPlugin', 'FiveBandFIRPEQPlugin', 'GroupDelayEqPlugin',
+    'BassManagementPlugin', 'FIRCrossoverPlugin', 'FiveBandFIRPEQPlugin', 'GroupDelayEqPlugin',
     'GroupDelayPEQPlugin', 'LevelMeterPlugin', 'MatrixPlugin', 'MutePlugin', 'NoteSpectrogramPlugin',
     'OscilloscopePlugin', 'PitchMeterPlugin', 'PolarityInversionPlugin', 'SpectrogramPlugin',
     'SpectrumAnalyzerPlugin', 'StereoMeterPlugin'
@@ -116,7 +116,13 @@ test('production schemas expose the audited automation population', async () => 
       RoomEqPlugin: ['latencyMode', 'filterDelaySamples']
     },
     changesCompensatedLatency: {
-      BrickwallLimiterPlugin: ['lookahead', 'oversampling']
+      BrickwallLimiterPlugin: ['lookahead', 'oversampling'],
+      DynamicSaturationPlugin: ['oversampling'],
+      ExciterPlugin: ['oversampling'],
+      HardClippingPlugin: ['oversampling'],
+      HarmonicDistortionPlugin: ['oversampling'],
+      MultibandSaturationPlugin: ['oversampling'],
+      SaturationPlugin: ['oversampling']
     },
     violatesCoupledFrequencyOrder: {
       MultibandBalancePlugin: ['frequency4'],
@@ -130,6 +136,11 @@ test('production schemas expose the audited automation population', async () => 
       PitchShifterPlugin: ['windowSize', 'crossfadeTime']
     },
     reconfiguresSpatialAnalysisOrRouting: {
+      BassManagementPlugin: [
+        'phase', 'taps', 'roles', 'frequencies', 'slopes', 'routes', 'subs',
+        'lfeFrequency', 'lfeSlope', 'lfeLowpass', 'bassGain', 'lfeGain', 'headroom',
+        'routeInversions'
+      ],
       SpatialMapperPlugin: [
         'inputChannels', 'bands', 'energyPreservation',
         'directMatrix', 'diffuseMatrix', 'residualMatrix'

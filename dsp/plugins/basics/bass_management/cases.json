@@ -1,0 +1,21 @@
+{
+  "defaults": {
+    "sampleRate": 48000, "frames": 1024, "channels": 4, "channelMode": "all4",
+    "blockSize": 127, "performanceBudgetMs": 2500,
+    "params": { "ro": [1,2,3,3,0,0,0,0,0,0,0,0,0,0,0,0],
+      "rt": [12,12,0,0,0,0,0,0,0,0,0,0,0,0,0,0], "su": 12 }
+  },
+  "cases": [
+    { "id": "lr24-two-subs", "stimulus": "noise", "channels": 4, "channelMode": "all4", "frames": 1024 },
+    { "id": "lr96-independent-lfe", "stimulus": "imp", "blockSize": 1, "channels": 4, "channelMode": "all4", "frames": 1024,
+      "params": { "sl": [96,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24], "lo": true, "bg": -3, "lg": 3, "hg": -6,
+        "rt": [12,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0], "ri": [8,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0] } },
+    { "id": "linear-complementary", "stimulus": "noise", "frames": 6144, "channels": 4, "channelMode": "all4",
+      "params": { "ph": "Linear", "tp": "8192", "ri": [8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+      "asset": { "slot": 0, "format": 1, "channels": 1, "frames": 8192,
+        "topology": 4, "headBlock": 128, "rateDivider": 1, "pathCount": 1, "inputCount": 4,
+        "paths": [{ "input": 0, "output": 0, "irChannel": 0 }],
+        "ir": { "kind": "sparse-decay-v1", "seed": 4201, "tapCount": 9, "directGain": 0.5, "tailGain": 0.1 } }
+    }
+  ]
+}

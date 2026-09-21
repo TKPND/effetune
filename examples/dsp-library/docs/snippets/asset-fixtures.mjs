@@ -22,7 +22,8 @@ const COEFFICIENTS = Object.freeze({
 });
 
 export function assetSetup(effect, sampleRate = 48000, irVariant = 'a') {
-  if (!effect.assets.length) {
+  const requiredAssets = effect.assets.filter(asset => asset.required);
+  if (!requiredAssets.length) {
     return { channels: 2, references: undefined, assetResolver: undefined };
   }
   if (!ASSET_EFFECT_TYPES.includes(effect.type)) {
@@ -69,7 +70,7 @@ export function assetSetup(effect, sampleRate = 48000, irVariant = 'a') {
   return {
     channels: crossover ? 4 : 2,
     parameters,
-    references: Object.fromEntries(effect.assets.map(asset => [
+    references: Object.fromEntries(requiredAssets.map(asset => [
       asset.name,
       `memory:${effect.type}:${asset.name}`
     ])),

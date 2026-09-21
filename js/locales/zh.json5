@@ -398,6 +398,7 @@
   "library.job.phase.ready": "可以提交",
   "library.job.phase.cancel_requested": "已请求取消",
   "library.job.phase.committing": "正在提交",
+  "library.job.phase.starting_playback": "正在开始播放",
   "library.job.terminal.succeeded": "已完成",
   "library.job.terminal.failed": "失败",
   "library.job.terminal.cancelled": "已取消",
@@ -444,6 +445,8 @@
   "library.confirm.mergeFolders": "所选文件夹包含已添加到音乐库的文件夹。要用所选父文件夹替换它们吗？",
   "library.confirm.deletePlaylist": "要删除此播放列表吗？曲目仍会保留在音乐库中。",
   "library.error.actionFailed": "音乐库无法完成此操作。请重试。",
+  "library.error.playbackStartTimeout": "曲目停止加载，无法开始播放。请重试。",
+  "library.error.playbackStartFailed": "无法开始播放。请重试。",
   "library.error.folderAlreadyAdded": "{name} 已在您的音乐库中。",
   "library.error.folderInsideExisting": "{name} 已包含在 {existing} 中。",
   "library.recovery.initializing.title": "正在启动音乐库",
@@ -804,6 +807,7 @@
 
   // FIR filters
   "crosstalkCancellation.error.design": "无法准备Crosstalk Cancellation滤波器。请检查所选的四项测量和设置，然后重试。",
+  "bassManagement.error.design": "无法准备Bass Management滤波器。请减少Taps后重试。",
   "firCrossover.error.design": "无法设计FIR Crossover滤波器。请减少Taps或使用较温和的设置。",
   "fiveBandFirPeq.error.design": "无法设计5Band FIR PEQ滤波器。请减少Taps或使用较温和的设置。",
   "fiveBandFirPeq.graph.target": "目标",

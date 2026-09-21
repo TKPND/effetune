@@ -41,8 +41,8 @@ class ValidationAndEffectsTests(unittest.TestCase):
             effetune._generated_effects.create_effect("NotAnEffect")
 
     def test_generated_catalog_imports_and_constructs_all_approved_classes(self) -> None:
-        self.assertEqual(len(EFFECT_CLASSES), 103)
-        self.assertEqual(len(EFFECT_METADATA["effects"]), 103)
+        self.assertEqual(len(EFFECT_CLASSES), len(EFFECT_METADATA["effects"]))
+        self.assertIn("BassExtender", EFFECT_CLASSES)
         asset_effects = {
             "CrosstalkCancellation",
             "FIRCrossover",
@@ -59,6 +59,10 @@ class ValidationAndEffectsTests(unittest.TestCase):
                 else effect_class()
             )
             self.assertEqual(effect.type, name)
+        bass_extender = effetune.BassExtender(amount=100, output_gain=-6)
+        self.assertEqual(
+            bass_extender.parameters, {"amount": 100, "outputGain": -6}
+        )
 
     def test_public_catalog_mutation_does_not_change_runtime_metadata(self) -> None:
         self.assertIsNot(effetune.EFFECT_METADATA, EFFECT_METADATA)

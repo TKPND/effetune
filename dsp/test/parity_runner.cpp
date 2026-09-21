@@ -439,8 +439,99 @@ std::vector<float> interpolateReference(const std::vector<float> &input, std::ui
   return output;
 }
 
+bool runBassManagementReference(const Control &control, const std::vector<float> &input,
+                                std::vector<float> &output) {
+  if (control.initialParams.size() != 89u || !control.events.empty())
+    return false;
+  const auto &p = control.initialParams;
+  const bool linear = p[0] == 1;
+  const std::uint32_t taps = p[1] == 0 ? 8192 : p[1] == 2 ? 32768 : 16384;
+  const std::uint32_t delay = linear ? taps / 2u + 128u : 0u;
+  const double bassGain = std::pow(10.0, p[70] / 20.0);
+  const double lfeGain = std::pow(10.0, p[71] / 20.0);
+  const double headroom = std::pow(10.0, p[72] / 20.0);
+  output.assign(input.size(), 0);
+  std::uint32_t irChannel = 0;
+  for (std::uint32_t ch = 0; ch < control.channels; ++ch) {
+    const int role = static_cast<int>(p[2u + ch]);
+    const std::size_t offset = static_cast<std::size_t>(ch) * control.frames;
+    std::vector<double> low(control.frames, 0), high(control.frames, 0);
+    const bool filtered = role == 1 || (role == 2 && p[69] == 1);
+    if (filtered && linear) {
+      if (!control.hasAsset || control.asset.begin.frames != taps)
+        return false;
+      const auto &asset = control.asset;
+      const std::size_t start = 32u + static_cast<std::size_t>(asset.begin.pathCount) * 12u +
+                                static_cast<std::size_t>(irChannel++) * taps * 4u;
+      if (start + static_cast<std::size_t>(taps) * 4u > asset.bytes.size())
+        return false;
+      for (std::uint32_t tap = 0; tap < taps; ++tap) {
+        const double coefficient =
+            readF32(asset.bytes.data() + start + static_cast<std::size_t>(tap) * 4u);
+        if (coefficient == 0)
+          continue;
+        for (std::uint32_t frame = tap + 128u; frame < control.frames; ++frame)
+          low[frame] += coefficient * input[offset + frame - tap - 128u];
+      }
+    } else if (filtered) {
+      // Independent RBJ/DF1 realization of the squared Butterworth crossover.
+      const double frequency = role == 1 ? p[18u + ch] : p[67];
+      const int order = static_cast<int>(role == 1 ? p[34u + ch] : p[68]) / 12;
+      const double omega = 2.0 * std::acos(-1.0) * frequency / control.sampleRate;
+      for (int branch = 0; branch < 2; ++branch) {
+        std::vector<double> values(control.frames);
+        for (std::uint32_t f = 0; f < control.frames; ++f)
+          values[f] = input[offset + f];
+        for (int repeat = 0; repeat < 2; ++repeat) {
+          for (int pair = 0; pair < order / 2; ++pair) {
+            const double q =
+                1.0 / (2.0 * std::sin((2.0 * pair + 1.0) * std::acos(-1.0) / (2.0 * order)));
+            const double alpha = std::sin(omega) / (2.0 * q), cosine = std::cos(omega);
+            const double a0 = 1 + alpha;
+            const double b0 = (branch ? 1 + cosine : 1 - cosine) / (2 * a0);
+            const double b1 = (branch ? -2 : 2) * b0, b2 = b0;
+            const double a1 = -2 * cosine / a0, a2 = (1 - alpha) / a0;
+            double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+            for (double &sample : values) {
+              const double result = b0 * sample + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+              x2 = x1;
+              x1 = sample;
+              y2 = y1;
+              y1 = result;
+              sample = result;
+            }
+          }
+        }
+        (branch ? high : low) = std::move(values);
+      }
+    }
+    const auto routes = static_cast<std::uint32_t>(p[50u + ch]);
+    const int destinations = std::popcount(routes);
+    for (std::uint32_t frame = 0; frame < control.frames; ++frame) {
+      const double dry = frame >= delay ? input[offset + frame - delay] : 0;
+      if (role <= 1)
+        output[offset + frame] = static_cast<float>((role == 0 ? dry
+                                                     : linear  ? dry - low[frame]
+                                                               : high[frame]) *
+                                                    headroom);
+      if ((role != 1 && role != 2) || destinations == 0)
+        continue;
+      const double bass =
+          role == 1 ? low[frame] * bassGain : (filtered ? low[frame] : dry) * lfeGain;
+      for (std::uint32_t out = 0; out < control.channels; ++out)
+        if ((routes & (1u << out)) != 0)
+          output[static_cast<std::size_t>(out) * control.frames + frame] += static_cast<float>(
+              bass * headroom / destinations *
+              ((static_cast<std::uint32_t>(p[73u + ch]) & (1u << out)) ? -1 : 1));
+    }
+  }
+  return true;
+}
+
 bool runDirectReference(const std::string &type, const Control &control,
                         const std::vector<float> &input, std::vector<float> &output) {
+  if (type == "BassManagementPlugin")
+    return runBassManagementReference(control, input, output);
   struct RoutePath {
     std::uint32_t input;
     std::uint32_t output;

@@ -33,11 +33,14 @@ from .validation import (
     validate_positive_integer,
     validate_sample_rate,
     validate_seed,
+    validate_bass_management,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 _STREAM_RECONFIGURATION_PARAMETERS = {
+    "BassManagement": frozenset({"phase", "taps", "roles", "frequencies", "slopes", "routes", "routeInversions",
+                                  "subs", "lfeFrequency", "lfeSlope", "lfeLowpass"}),
     "CrosstalkCancellation": frozenset({"latencyMode", "filterDelaySamples"}),
     "FIRCrossover": frozenset(
         {"bandCount", "latencyMode", "filterDelaySamples"}
@@ -63,6 +66,25 @@ def _validate_stream_parameter_update(
             f"{effect_type} parameter(s) {names} cannot be updated while a stream "
             "is open; create a new stream with the updated effect"
         )
+
+
+def _bass_management_asset(effect, asset, channels):
+    p = effect.parameters
+    inputs = [ch for ch, role in enumerate(p["roles"])
+              if role == 1 or (role == 2 and p["lfeLowpass"])]
+    expected = tuple((ch, ch, index) for index, ch in enumerate(inputs))
+    if asset.topology == "automatic":
+        asset = AssetData(asset.samples, asset.sample_rate, kind=asset.kind,
+                          topology="matrix", paths=expected, input_count=channels)
+    actual = tuple((path.input_slot, path.output_slot, path.ir_channel) for path in asset.paths)
+    if (asset.samples.shape != (len(inputs), int(p["taps"]))
+            or actual != expected or asset.input_count > channels):
+        raise AssetError(
+            "BassManagement requires one diagonal low-pass filter per Managed "
+            "or filtered LFE input, matching the selected tap count"
+        )
+    return AssetData(asset.samples, asset.sample_rate, kind=asset.kind,
+                     topology=asset.topology, paths=asset.paths, input_count=channels)
 
 
 def _canonicalize_processing_parameters(
@@ -312,6 +334,8 @@ class Stream:
         resolved_assets: dict[int, Any] = {}
         processing_channels: dict[int, int] = {}
         for index, effect in enabled:
+            if effect.effect_type == "BassManagement":
+                validate_bass_management(effect.parameters, effect.channel, effect.assets, self.channels)
             processing_channels[index] = _effect_channels(effect.channel, self.channels)
             metadata = effect_metadata(effect.effect_type)
             rates = metadata.get("sampleRates")
@@ -373,6 +397,11 @@ class Stream:
                             effect.parameters["convolutionRate"],
                         )
                         head_block = int(effect.parameters["latency"])
+                    elif effect.effect_type == "BassManagement":
+                        asset = _bass_management_asset(effect, asset, effect_channels)
+                        topology = resolve_topology(asset, effect_channels, "matrix")
+                        divider = 1
+                        head_block = 128
                     elif effect.effect_type == "FIRCrossover":
                         band_count = int(effect.parameters["bandCount"])
                         expected_paths = tuple(

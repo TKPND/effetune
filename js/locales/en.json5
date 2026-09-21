@@ -344,6 +344,7 @@
   "library.job.phase.ready": "Ready to commit",
   "library.job.phase.cancel_requested": "Cancellation requested",
   "library.job.phase.committing": "Committing",
+  "library.job.phase.starting_playback": "Starting playback",
   "library.job.terminal.succeeded": "Completed",
   "library.job.terminal.failed": "Failed",
   "library.job.terminal.cancelled": "Cancelled",
@@ -390,6 +391,8 @@
   "library.confirm.mergeFolders": "The selected folder contains folders that are already in the library. Replace them with the selected parent folder?",
   "library.confirm.deletePlaylist": "Delete this playlist? Tracks will stay in your library.",
   "library.error.actionFailed": "The Music Library could not complete this action. Please try again.",
+  "library.error.playbackStartTimeout": "Playback could not start because loading the track stopped. Please try again.",
+  "library.error.playbackStartFailed": "Playback could not start. Please try again.",
   "library.error.folderAlreadyAdded": "{name} is already in your library.",
   "library.error.folderInsideExisting": "{name} is already included in {existing}.",
   "library.recovery.initializing.title": "Starting Music Library",
@@ -807,6 +810,7 @@
 
   // FIR filters
   "crosstalkCancellation.error.design": "The Crosstalk Cancellation filters could not be prepared. Check the four selected measurements and settings, then try again.",
+  "bassManagement.error.design": "Bass Management filters could not be prepared. Try reducing Taps and try again.",
   "firCrossover.error.design": "The FIR crossover filters could not be designed. Try fewer Taps or less extreme settings.",
   "fiveBandFirPeq.error.design": "The 5Band FIR PEQ filter could not be designed. Try fewer Taps or less extreme settings.",
   "fiveBandFirPeq.graph.target": "Target",

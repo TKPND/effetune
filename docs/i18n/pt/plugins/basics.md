@@ -1,6 +1,6 @@
 ---
 title: "Plugins Básicos - EffeTune"
-description: "Plugins essenciais de áudio, incluindo Volume, Mute, Stereo Balance, FIR Crossover, roteamento Matrix e outros."
+description: "Plugins essenciais de áudio, incluindo Bass Management, Volume, Mute, Stereo Balance, FIR Crossover, roteamento Matrix e outros."
 lang: pt
 ---
 
@@ -15,6 +15,7 @@ Pressione o ícone de espectro de um gráfico compatível para alternar entre Af
 
 ## Lista de Plugins
 
+* [Bass Management](#bass-management) - Envia graves gerenciados e LFE para as saídas de subwoofer escolhidas
 * [Channel Divider](#channel-divider) - Divide áudio estéreo em bandas de frequência por pares de saída estéreo
 * [DC Offset](#dc-offset) - Adiciona ou corrige um offset DC constante
 * [FIR Crossover](#fir-crossover) - Divide o sinal estéreo em bandas de inclinação acentuada com filtros FIR
@@ -24,6 +25,37 @@ Pressione o ícone de espectro de um gráfico compatível para alternar entre Af
 * [Polarity Inversion](#polarity-inversion) - Inverte a polaridade do sinal para correção ou casos especiais de roteamento
 * [Stereo Balance](#stereo-balance) - Ajusta o equilíbrio esquerdo-direito da sua música
 * [Volume](#volume) - Controla o quão alto a música é reproduzida
+
+## Bass Management
+
+Bass Management envia os graves dos canais principais selecionados e a entrada LFE dedicada para as saídas de subwoofer escolhidas. Cada canal **Managed** mantém os agudos na própria saída principal e envia os graves aos subwoofers. Use-o em um bus multicanal com alto-falantes principais e um ou mais subwoofers; ele requer WASM DSP.
+
+Enquanto nenhuma **Sub Outputs** estiver selecionada, Bass Management não separa nem distribui os graves aos subwoofers; os canais de entrada passam sem crossover. Uma nova instância começa com os canais reais do barramento em **Managed** e nenhuma **Sub Outputs** selecionada.
+
+Escolha **All** no roteamento do bus e canais de saída suficientes para todos os alto-falantes e subwoofers. A tabela mostra a função de entrada e as saídas de subwoofer. Uma saída de subwoofer não pode também ser **Full Range** ou **Managed**. Uma entrada **LFE** pode ter o mesmo número de uma saída de subwoofer: ela é coletada antes de montar as saídas e enviada apenas uma vez.
+
+### Guia de melhoria do som
+
+- Para estéreo com dois subwoofers, use quatro canais: defina 1 e 2 como **Managed** e selecione 3 e 4 como **Sub Outputs**. Seus papéis passam automaticamente a **LFE**; use Matrix para manter ou desligar cada rota do principal ao subwoofer.
+- Para conteúdo surround, marque apenas canais principais reais como **Managed** e o canal LFE da fonte como **LFE**. Comece em 80 Hz e 24 dB/oct por canal gerenciado; aumente a frequência se o alto-falante principal tiver pouca extensão de graves e use Slope maior para reduzir a sobreposição.
+- A divisão igual para vários subwoofers não impede picos de sinais combinados. Reduza **Headroom** se necessário, observe o medidor posterior e use Brickwall Limiter no fim da cadeia. **LFE Gain** só deve ser usado se a fonte ainda não aplicou o ajuste LFE desejado; não há correção automática de nível de cinema.
+- Depois de Bass Management, aplique passa-altas, EQ ou polaridade por subwoofer. Use MultiChannel Panel para trim, mute/solo e até 30 ms de delay; adicione um limitador por último se necessário.
+
+### Parâmetros
+
+- **Phase**: **IIR** tem menor latência e altera a fase perto do crossover. **Linear** alinha a divisão no tempo, mas adiciona latência visível e pode gerar pre-ringing.
+- **Taps**: escolha 8192, 16384 ou 32768 para Linear. Mais Taps melhoram a precisão de graves e inclinações fortes, mas aumentam preparação e latência. O inicial é 16384 e afeta Linear.
+- **Headroom** atenua todas as saídas igualmente. **Bass Gain** ajusta os graves separados de **Managed** antes da mixagem; **LFE Gain** faz o mesmo para entradas **LFE**.
+- **Channel Role** define cada entrada: **Full Range** mantém a fonte na saída principal; **Managed** mantém ali os agudos e envia graves aos subwoofers; **LFE** envia a fonte apenas aos subwoofers; **Unused** reserva normalmente uma entrada para saída de subwoofer.
+- **Crossover Frequency** ajusta cada crossover **Managed** de 20 a 300 Hz; maior valor envia mais graves ao subwoofer. **Slope** oferece 24, 48 ou 96 dB/oct; maior valor reduz a sobreposição.
+- **Sub Outputs** escolhe as saídas de cada entrada **Managed** ou **LFE**. Selecionar um canal muda seu **Channel Role** para **LFE**. Uma saída recém-selecionada começa com rotas **ON** em polaridade normal de todas as entradas do barramento; use Matrix para desligar uma rota individual. Sem **Sub Outputs**, a separação dos graves e o roteamento para subwoofers param, e os canais de entrada passam sem crossover. **LFE Low-pass**, **LFE Frequency** e **LFE Slope** limitam opcionalmente LFE acima de 20 a 300 Hz em 24, 48 ou 96 dB/oct, sem filtrar de novo os graves já separados.
+- **ON** e **Ø**: em cada célula da tabela de canais, **ON** envia essa entrada **Managed** ou **LFE** à saída de subwoofer escolhida. **Ø** inverte a polaridade somente nesse caminho entre a entrada e o subwoofer, para ajustá-lo ao resultado medido ou ouvido. **Ø** fica disponível apenas enquanto **ON** estiver selecionado; desativar **ON** também desativa **Ø**. A saída principal da entrada não muda.
+
+### Tela, estado e calibração
+
+- O resumo de rotas mostra quais entradas alimentam cada subwoofer. Confira-o antes de aumentar o nível, sobretudo após mudar canais. Selecione um **Managed** para ver as respostas passa-altas e passa-baixas ativas, não uma curva ideal.
+- O estado mostra modo, preparação Linear e latência efetiva em amostras e ms. Alterar Linear pode reduzir ou interromper o som brevemente. Se não preparar os filtros, reduza **Taps** e tente novamente. Se a configuração anterior não puder continuar, canais principais normais passam com atraso correspondente, saídas reservadas ficam silenciosas e LFE não toca até a preparação terminar.
+- O bypass do host restaura áudio e mapeamento originais; roteamento, proteção e alinhamento não continuam. Para comparar ou silenciar mantendo a fiação, use MultiChannel Panel depois. EQ/passa-altas IIR ou delay relativo posterior muda a fase do sistema Linear completo. Salve a cadeia calibrada em um único preset.
 
 ## Channel Divider
 

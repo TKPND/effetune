@@ -112,6 +112,9 @@
           "$ref": "#/$defs/StereoMeter"
         },
         {
+          "$ref": "#/$defs/BassManagement"
+        },
+        {
           "$ref": "#/$defs/ChannelDivider"
         },
         {
@@ -143,6 +146,9 @@
         },
         {
           "$ref": "#/$defs/TimeAlignment"
+        },
+        {
+          "$ref": "#/$defs/AttackTonalBalance"
         },
         {
           "$ref": "#/$defs/AutoLeveler"
@@ -353,6 +359,9 @@
         },
         {
           "$ref": "#/$defs/BandwidthExtender"
+        },
+        {
+          "$ref": "#/$defs/BassExtender"
         },
         {
           "$ref": "#/$defs/DynamicSaturation"
@@ -738,6 +747,257 @@
               "maximum": 1,
               "x-effetune-unit": "s",
               "default": 0.1
+            }
+          }
+        }
+      }
+    },
+    "BassManagement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "BassManagement"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "channel": {
+          "$ref": "#/$defs/channel"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "phase": {
+              "type": "string",
+              "enum": [
+                "IIR",
+                "Linear"
+              ],
+              "default": "IIR"
+            },
+            "taps": {
+              "type": "string",
+              "enum": [
+                "8192",
+                "16384",
+                "32768"
+              ],
+              "default": "16384"
+            },
+            "roles": {
+              "type": "array",
+              "minItems": 16,
+              "maxItems": 16,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "default": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "frequencies": {
+              "type": "array",
+              "minItems": 16,
+              "maxItems": 16,
+              "items": {
+                "type": "number",
+                "minimum": 20,
+                "maximum": 300,
+                "x-effetune-unit": "Hz"
+              },
+              "default": [
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80,
+                80
+              ]
+            },
+            "slopes": {
+              "type": "array",
+              "minItems": 16,
+              "maxItems": 16,
+              "items": {
+                "type": "integer",
+                "enum": [
+                  24,
+                  48,
+                  96
+                ],
+                "x-effetune-unit": "dB/oct"
+              },
+              "default": [
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24,
+                24
+              ]
+            },
+            "routes": {
+              "type": "array",
+              "minItems": 16,
+              "maxItems": 16,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "default": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "subs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535,
+              "default": 0
+            },
+            "lfeFrequency": {
+              "type": "number",
+              "minimum": 20,
+              "maximum": 300,
+              "x-effetune-unit": "Hz",
+              "default": 120
+            },
+            "lfeSlope": {
+              "type": "integer",
+              "enum": [
+                24,
+                48,
+                96
+              ],
+              "x-effetune-unit": "dB/oct",
+              "default": 24
+            },
+            "lfeLowpass": {
+              "type": "boolean",
+              "default": false
+            },
+            "bassGain": {
+              "type": "number",
+              "minimum": -24,
+              "maximum": 12,
+              "x-effetune-unit": "dB",
+              "default": 0
+            },
+            "lfeGain": {
+              "type": "number",
+              "minimum": -24,
+              "maximum": 12,
+              "x-effetune-unit": "dB",
+              "default": 0
+            },
+            "headroom": {
+              "type": "number",
+              "minimum": -24,
+              "maximum": 0,
+              "x-effetune-unit": "dB",
+              "default": 0
+            },
+            "routeInversions": {
+              "type": "array",
+              "minItems": 16,
+              "maxItems": 16,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "default": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          }
+        },
+        "assets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "impulseResponse": {
+              "$ref": "#/$defs/assetReference"
             }
           }
         }
@@ -1381,9 +1641,62 @@
             "delay": {
               "type": "number",
               "minimum": 0,
-              "maximum": 100,
+              "maximum": 500,
               "x-effetune-unit": "ms",
               "default": 0
+            }
+          }
+        }
+      }
+    },
+    "AttackTonalBalance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "AttackTonalBalance"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "channel": {
+          "$ref": "#/$defs/channel"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "attack": {
+              "type": "number",
+              "minimum": -12,
+              "maximum": 12,
+              "x-effetune-unit": "dB",
+              "default": 0
+            },
+            "tonal": {
+              "type": "number",
+              "minimum": -12,
+              "maximum": 12,
+              "x-effetune-unit": "dB",
+              "default": 0
+            },
+            "attackEnabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "tonalEnabled": {
+              "type": "boolean",
+              "default": true
             }
           }
         }
@@ -7724,6 +8037,51 @@
         }
       }
     },
+    "BassExtender": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "BassExtender"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "channel": {
+          "$ref": "#/$defs/channel"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "x-effetune-unit": "%",
+              "default": 25
+            },
+            "outputGain": {
+              "type": "number",
+              "minimum": -24,
+              "maximum": 0,
+              "x-effetune-unit": "dB",
+              "default": 0
+            }
+          }
+        }
+      }
+    },
     "DynamicSaturation": {
       "type": "object",
       "additionalProperties": false,
@@ -7807,6 +8165,16 @@
               "maximum": 18,
               "x-effetune-unit": "dB",
               "default": 0
+            },
+            "oversampling": {
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4,
+                8
+              ],
+              "default": 1
             }
           }
         }
@@ -7874,6 +8242,16 @@
               "maximum": 100,
               "x-effetune-unit": "%",
               "default": 25
+            },
+            "oversampling": {
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4,
+                8
+              ],
+              "default": 1
             }
           }
         }
@@ -7921,6 +8299,17 @@
                 "negative"
               ],
               "default": "both"
+            },
+            "oversampling": {
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4,
+                8,
+                16
+              ],
+              "default": 1
             }
           }
         }
@@ -7986,6 +8375,16 @@
               "minimum": 0.1,
               "maximum": 2,
               "default": 0.5
+            },
+            "oversampling": {
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4,
+                8
+              ],
+              "default": 1
             }
           }
         }
@@ -8093,6 +8492,16 @@
                 0,
                 0
               ]
+            },
+            "oversampling": {
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4,
+                8
+              ],
+              "default": 1
             }
           }
         }
@@ -8150,6 +8559,16 @@
               "maximum": 18,
               "x-effetune-unit": "dB",
               "default": -2
+            },
+            "oversampling": {
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4,
+                8
+              ],
+              "default": 1
             }
           }
         }

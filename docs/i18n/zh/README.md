@@ -331,6 +331,7 @@ PC 上的 Chromium 浏览器可以在不同会话间保留对所选音乐文件�
 | Basics    | Volume | 基本音量控制 | [详情](plugins/basics.md#volume) |
 | Delay     | Delay | 标准延迟效果 | [详情](plugins/delay.md#delay) |
 | Delay     | Time Alignment | 为扬声器与聆听位置校准微调播放时序 | [详情](plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | 平衡短促起音与持续音调结构 | [详情](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | 基于LUFS测量的自动音量调整，以实现一致的聆听体验 | [详情](plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | 在保留动态的同时控制数字峰值 | [详情](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | 平滑突然变大的段落，让聆听更舒适 | [详情](plugins/dynamics.md#compressor) |
@@ -400,6 +401,7 @@ PC 上的 Chromium 浏览器可以在不同会话间保留对所选音乐文件�
 | Reverb    | IR Reverb | 使用导入房间和设备脉冲响应的卷积混响 | [详情](plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | 具有自然扩散的随机散射混响 | [详情](plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | 在检测或指定的截止频率以上生成高频内容 | [详情](plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | 从合适的低频内容生成低一个八度的低音 | [详情](plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | 模拟扬声器振膜的非线性位移 | [详情](plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | 添加谐波内容以增强清晰度和存在感 | [详情](plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | 数字硬削波效果 | [详情](plugins/saturation.md#hard-clipping) |

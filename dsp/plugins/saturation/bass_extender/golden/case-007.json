@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "type": "BassExtenderPlugin",
+  "id": "noise-176400",
+  "stimulus": "noise",
+  "sampleRate": 176400,
+  "channels": 2,
+  "frameCount": 44100,
+  "blockSize": 127,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 6,
+  "seed": "0xeffe7a58",
+  "params": {
+    "am": 100,
+    "og": -6
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.000002,
+    "policy": "per-sample"
+  },
+  "referenceEngine": "production-native-promoted-v1",
+  "referenceHash": "sha256:ff086f02ed5355fdcb006593186031c7490259225d075d42c53d58a10f12def5",
+  "generationCommand": "node tools/dsp-parity/generate.mjs --type BassExtenderPlugin --promote-production-native",
+  "outputFloats": 88200,
+  "byteLength": 352800,
+  "binary": "case-007.f32"
+}

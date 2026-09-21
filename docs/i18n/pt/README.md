@@ -332,6 +332,7 @@ Se o problema continuar, reporte em [GitHub Issues](https://github.com/Frieve-A/
 | Basics    | Volume             | Controle básico de volume                                               | [Detalhes](plugins/basics.md#volume)                 |
 | Delay     | Delay | Efeito de atraso padrão | [Detalhes](plugins/delay.md#delay) |
 | Delay     | Time Alignment | Ajusta finamente o tempo de reprodução para alinhar caixas e posição de escuta | [Detalhes](plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | Equilibra ataques curtos e estrutura tonal sustentada | [Detalhes](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | Ajuste automático de volume baseado na medição LUFS para experiência de audição consistente | [Detalhes](plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | Controle de picos digitais preservando a dinâmica | [Detalhes](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | Suaviza trechos que ficam altos de repente para uma audição mais confortável | [Detalhes](plugins/dynamics.md#compressor) |
@@ -401,6 +402,7 @@ Se o problema continuar, reporte em [GitHub Issues](https://github.com/Frieve-A/
 | Reverb    | IR Reverb | Reverb por convolução com respostas ao impulso importadas de salas e equipamentos | [Detalhes](plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | Reverberação por espalhamento randômico com difusão natural | [Detalhes](plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | Gera conteúdo de alta frequência acima de um corte detectado ou especificado | [Detalhes](plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | Gera graves uma oitava abaixo de conteúdo adequado | [Detalhes](plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | Simula o deslocamento não linear de cones de alto-falantes | [Detalhes](plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | Adiciona conteúdo harmônico para melhorar clareza e presença | [Detalhes](plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | Efeito de hard clipping digital | [Detalhes](plugins/saturation.md#hard-clipping) |

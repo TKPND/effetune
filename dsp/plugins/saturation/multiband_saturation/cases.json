@@ -16,32 +16,87 @@
       "stimulus": "sweep",
       "frames": 4099,
       "blockSize": 127,
-      "params": { "bands": [
-        { "dr": 10, "bs": -0.3, "mx": 0, "gn": 0 },
-        { "dr": 0, "bs": 0.3, "mx": 0, "gn": 0 },
-        { "dr": 5, "bs": 0, "mx": 0, "gn": 0 }
-      ] }
+      "params": {
+        "bands": [
+          {
+            "dr": 10,
+            "bs": -0.3,
+            "mx": 0,
+            "gn": 0
+          },
+          {
+            "dr": 0,
+            "bs": 0.3,
+            "mx": 0,
+            "gn": 0
+          },
+          {
+            "dr": 5,
+            "bs": 0,
+            "mx": 0,
+            "gn": 0
+          }
+        ]
+      }
     },
     {
       "id": "maximum-asymmetric-saturation",
       "stimulus": "fs",
       "frames": 4101,
-      "params": { "f1": 20, "f2": 20000, "bands": [
-        { "dr": 10, "bs": -0.3, "mx": 100, "gn": 18 },
-        { "dr": 10, "bs": 0.3, "mx": 100, "gn": -18 },
-        { "dr": 10, "bs": 0, "mx": 50, "gn": 18 }
-      ] }
+      "params": {
+        "f1": 20,
+        "f2": 20000,
+        "bands": [
+          {
+            "dr": 10,
+            "bs": -0.3,
+            "mx": 100,
+            "gn": 18
+          },
+          {
+            "dr": 10,
+            "bs": 0.3,
+            "mx": 100,
+            "gn": -18
+          },
+          {
+            "dr": 10,
+            "bs": 0,
+            "mx": 50,
+            "gn": 18
+          }
+        ]
+      }
     },
     {
       "id": "fractional-band-controls",
       "stimulus": "noise",
       "frames": 4201,
       "blockSize": 95,
-      "params": { "f1": 731.25, "f2": 6789.5, "bands": [
-        { "dr": 2.75, "bs": -0.125, "mx": 17.5, "gn": -7.25 },
-        { "dr": 4.125, "bs": 0.0625, "mx": 53.25, "gn": 2.5 },
-        { "dr": 7.5, "bs": 0.225, "mx": 88.75, "gn": 9.125 }
-      ] }
+      "params": {
+        "f1": 731.25,
+        "f2": 6789.5,
+        "bands": [
+          {
+            "dr": 2.75,
+            "bs": -0.125,
+            "mx": 17.5,
+            "gn": -7.25
+          },
+          {
+            "dr": 4.125,
+            "bs": 0.0625,
+            "mx": 53.25,
+            "gn": 2.5
+          },
+          {
+            "dr": 7.5,
+            "bs": 0.225,
+            "mx": 88.75,
+            "gn": 9.125
+          }
+        ]
+      }
     },
     {
       "id": "mono-zero-drive-wet",
@@ -49,11 +104,28 @@
       "channels": 1,
       "channelMode": "mono",
       "frames": 4099,
-      "params": { "bands": [
-        { "dr": 0, "bs": -0.3, "mx": 100, "gn": 18 },
-        { "dr": 0, "bs": 0, "mx": 100, "gn": 0 },
-        { "dr": 0, "bs": 0.3, "mx": 100, "gn": -18 }
-      ] }
+      "params": {
+        "bands": [
+          {
+            "dr": 0,
+            "bs": -0.3,
+            "mx": 100,
+            "gn": 18
+          },
+          {
+            "dr": 0,
+            "bs": 0,
+            "mx": 100,
+            "gn": 0
+          },
+          {
+            "dr": 0,
+            "bs": 0.3,
+            "mx": 100,
+            "gn": -18
+          }
+        ]
+      }
     },
     {
       "id": "all4-192k-crossover-extremes",
@@ -63,7 +135,10 @@
       "channelMode": "all4",
       "frames": 5003,
       "blockSize": 127,
-      "params": { "f1": 2000, "f2": 20000 }
+      "params": {
+        "f1": 2000,
+        "f2": 20000
+      }
     },
     {
       "id": "32k-nyquist-minus-one-clamp",
@@ -71,20 +146,58 @@
       "sampleRate": 32000,
       "frames": 4001,
       "blockSize": 127,
-      "params": { "f1": 2000, "f2": 20000 }
+      "params": {
+        "f1": 2000,
+        "f2": 20000
+      }
     },
     {
       "id": "crossover-events-reset-and-fade",
       "stimulus": "noise",
       "frames": 4301,
-      "params": { "f1": 1000, "f2": 200 },
+      "params": {
+        "f1": 1000,
+        "f2": 200
+      },
       "events": [
-        { "frame": 31, "params": { "f1": 400 } },
-        { "frame": 256, "params": { "f2": 200 } },
-        { "frame": 512, "params": { "f1": 20 } },
-        { "frame": 1024, "params": { "f2": 12000 } },
-        { "frame": 2049, "params": { "f1": 80, "f2": 600 } },
-        { "frame": 3500, "params": { "f1": 1600, "f2": 18000 } }
+        {
+          "frame": 31,
+          "params": {
+            "f1": 400
+          }
+        },
+        {
+          "frame": 256,
+          "params": {
+            "f2": 200
+          }
+        },
+        {
+          "frame": 512,
+          "params": {
+            "f1": 20
+          }
+        },
+        {
+          "frame": 1024,
+          "params": {
+            "f2": 12000
+          }
+        },
+        {
+          "frame": 2049,
+          "params": {
+            "f1": 80,
+            "f2": 600
+          }
+        },
+        {
+          "frame": 3500,
+          "params": {
+            "f1": 1600,
+            "f2": 18000
+          }
+        }
       ]
     },
     {
@@ -93,16 +206,56 @@
       "frames": 4201,
       "blockSize": 127,
       "events": [
-        { "frame": 17, "params": { "bands": [
-          { "dr": 10, "bs": -0.3, "mx": 100, "gn": 18 },
-          { "dr": 0, "bs": 0, "mx": 0, "gn": 0 },
-          { "dr": 3, "bs": 0.3, "mx": 50, "gn": -18 }
-        ] } },
-        { "frame": 2051, "params": { "bands": [
-          { "dr": 1, "bs": 0.2, "mx": 25, "gn": -6 },
-          { "dr": 6, "bs": -0.1, "mx": 75, "gn": 4 },
-          { "dr": 10, "bs": 0, "mx": 100, "gn": 12 }
-        ] } }
+        {
+          "frame": 17,
+          "params": {
+            "bands": [
+              {
+                "dr": 10,
+                "bs": -0.3,
+                "mx": 100,
+                "gn": 18
+              },
+              {
+                "dr": 0,
+                "bs": 0,
+                "mx": 0,
+                "gn": 0
+              },
+              {
+                "dr": 3,
+                "bs": 0.3,
+                "mx": 50,
+                "gn": -18
+              }
+            ]
+          }
+        },
+        {
+          "frame": 2051,
+          "params": {
+            "bands": [
+              {
+                "dr": 1,
+                "bs": 0.2,
+                "mx": 25,
+                "gn": -6
+              },
+              {
+                "dr": 6,
+                "bs": -0.1,
+                "mx": 75,
+                "gn": 4
+              },
+              {
+                "dr": 10,
+                "bs": 0,
+                "mx": 100,
+                "gn": 12
+              }
+            ]
+          }
+        }
       ]
     },
     {
@@ -118,7 +271,59 @@
       "sampleRate": 44100,
       "frames": 1025,
       "blockSize": 512,
-      "params": { "f1": 2000, "f2": 20000 }
+      "params": {
+        "f1": 2000,
+        "f2": 20000
+      }
+    },
+    {
+      "id": "oversampling-2x",
+      "stimulus": "noise",
+      "frames": 257,
+      "params": {
+        "os": 2
+      }
+    },
+    {
+      "id": "oversampling-4x",
+      "stimulus": "noise",
+      "frames": 257,
+      "params": {
+        "os": 4
+      }
+    },
+    {
+      "id": "oversampling-8x",
+      "stimulus": "noise",
+      "frames": 257,
+      "params": {
+        "os": 8
+      }
+    },
+    {
+      "id": "oversampling-transitions",
+      "stimulus": "noise",
+      "frames": 259,
+      "events": [
+        {
+          "frame": 17,
+          "params": {
+            "os": 4
+          }
+        },
+        {
+          "frame": 130,
+          "params": {
+            "os": 1
+          }
+        },
+        {
+          "frame": 193,
+          "params": {
+            "os": 8
+          }
+        }
+      ]
     }
   ]
 }

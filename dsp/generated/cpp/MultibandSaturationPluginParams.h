@@ -13,10 +13,11 @@ struct MultibandSaturationPluginParams {
   float bias[3];
   float mix[3];
   float gain[3];
-  static constexpr std::uint32_t kHash = 0x29a70026u;
-  static constexpr std::uint32_t kFloatCount = 14u;
+  float oversampling;
+  static constexpr std::uint32_t kHash = 0xa48eec70u;
+  static constexpr std::uint32_t kFloatCount = 15u;
 };
-static_assert(14u == 0u || sizeof(MultibandSaturationPluginParams) == sizeof(float) * 14u);
+static_assert(15u == 0u || sizeof(MultibandSaturationPluginParams) == sizeof(float) * 15u);
 
 } // namespace effetune::generated
 

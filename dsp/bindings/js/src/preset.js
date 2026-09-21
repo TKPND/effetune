@@ -291,14 +291,31 @@ function dropEchoedStructuralKeysV1(parameters, effectType) {
 // itself is checked by the shared chain-document validation. The Python binding keeps
 // the same table in effetune.presets._prepare_legacy_parameters_v1.
 const LEGACY_SHORT_KEY_ARRAYS_V1 = Object.freeze({
+  BassManagement: Object.freeze({
+    effectLabel: 'Bass Management',
+    itemLabel: 'channel',
+    members: Object.freeze({
+      ro: 'roles',
+      fc: 'frequencies',
+      sl: 'slopes',
+      rt: 'routes',
+      ri: 'routeInversions'
+    })
+  }),
   MultiChannelPanel: Object.freeze({
     effectLabel: 'MultiChannel Panel',
     itemLabel: 'channel',
-    members: Object.freeze({ m: 'mute', s: 'solo', v: 'volume', d: 'delay', l: 'link' })
+    members: Object.freeze({ m: 'mute', s: 'solo', v: 'volume', d: 'delay', l: 'link' }),
+    extendEightChannelDefaults: true
   })
 });
 
-function expandLegacyShortKeyArraysV1(parameters, { effectLabel, itemLabel, members }) {
+function expandLegacyShortKeyArraysV1(parameters, {
+  effectLabel,
+  itemLabel,
+  members,
+  extendEightChannelDefaults = false
+}) {
   for (const [legacyName, publicName] of Object.entries(members)) {
     if (!Object.hasOwn(parameters, legacyName)) continue;
     if (Object.hasOwn(parameters, publicName)) {
@@ -313,11 +330,16 @@ function expandLegacyShortKeyArraysV1(parameters, { effectLabel, itemLabel, memb
         `Legacy ${effectLabel} contains unsupported or incomplete ${itemLabel} settings.`
       );
     }
-    // App presets retain eight channels when the extended channels are at their defaults.
-    const originalCount = legacyName === 'l' ? 7 : 8;
-    const defaultValue = legacyName === 'v' || legacyName === 'd' ? 0 : false;
-    parameters[publicName] = values.length === originalCount
-      ? [...values, ...Array(8).fill(defaultValue)] : values;
+    if (extendEightChannelDefaults) {
+      // MultiChannel Panel presets retain eight channels when the extended
+      // channels are at their defaults.
+      const originalCount = legacyName === 'l' ? 7 : 8;
+      const defaultValue = legacyName === 'v' || legacyName === 'd' ? 0 : false;
+      parameters[publicName] = values.length === originalCount
+        ? [...values, ...Array(8).fill(defaultValue)] : values;
+    } else {
+      parameters[publicName] = values;
+    }
   }
 }
 

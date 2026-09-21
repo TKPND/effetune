@@ -1,5 +1,6 @@
 #include "effetune/kernel.h"
 #include "DynamicSaturationPluginParams.h"
+#include "effetune/dsp/oversampled_shaper.h"
 
 #include <algorithm>
 #include <cmath>
@@ -14,6 +15,7 @@ class DynamicSaturationKernel final : public PluginKernel {
 
 public:
   void prepare(const PrepareInfo &info) override {
+    shaper_.prepare(info.maxChannels * 1u);
     sample_rate_ = static_cast<double>(info.sampleRate);
     max_channels_ = info.maxChannels;
     positions_.resize(max_channels_);
@@ -21,6 +23,7 @@ public:
   }
 
   void reset() noexcept override {
+    shaper_.reset();
     clearState();
     initialized_ = false;
     controls_initialized_ = false;
@@ -29,6 +32,7 @@ public:
 
   void process(float *audio, std::uint32_t channel_count, std::uint32_t frame_count,
                const ProcessInfo &) noexcept override {
+    shaper_.configure(dsp::OversampledShaper::factor(params_.oversampling, 8u), channel_count * 1u);
     if (audio == nullptr || channel_count == 0u || channel_count > max_channels_) {
       return;
     }
@@ -101,10 +105,17 @@ public:
         position = new_position;
         velocity = new_velocity;
 
-        const double wet_distortion = std::tanh(distortion_drive * (position + bias)) - bias_term;
+        const double wet_distortion = shaper_.process(channel, position, [&](double sample) {
+          return std::tanh(distortion_drive * (sample + bias)) - bias_term;
+        });
         const double nonlinear_position = position + distortion_mix * (wet_distortion - position);
         const double cone_delta = (nonlinear_position - position) * cone_mix;
-        audio[offset + frame] = static_cast<float>((input + cone_delta) * output_gain);
+        const double output =
+            dsp::OversampledShaper::factor(params_.oversampling) == 1u
+                ? input + cone_delta
+                : shaper_.delay(channel, input - position * distortion_mix * cone_mix) +
+                      wet_distortion * distortion_mix * cone_mix;
+        audio[offset + frame] = static_cast<float>(output * output_gain);
       }
       positions_[channel] = flushSubnormalState(static_cast<float>(position));
       velocities_[channel] = flushSubnormalState(static_cast<float>(velocity));
@@ -117,7 +128,15 @@ public:
     output_gain_.advance(frame_count);
   }
 
+  [[nodiscard]] std::uint32_t latencySamples() const noexcept override {
+    const auto &parameters = params_pending_ ? staged_params_ : params_;
+    return dsp::OversampledShaper::factor(parameters.oversampling, 8u) == 1u
+               ? 0u
+               : dsp::OversampledShaper::kLatency;
+  }
+
 private:
+  dsp::OversampledShaper shaper_;
   [[nodiscard]] static float flushSubnormalState(float value) noexcept {
     constexpr float minimum_normal = std::numeric_limits<float>::min();
     return std::isfinite(value) && value > -minimum_normal && value < minimum_normal ? 0.0F : value;

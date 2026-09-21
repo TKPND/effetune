@@ -2,7 +2,7 @@ import { instantiateDspBinding, ET_OK } from './internal/dsp-engine-binding.js';
 import { getEffectImplementation } from './catalog.js';
 import { prepareConvolutionAsset } from './assets.js';
 import { AssetError, EffeTuneError, EffeTuneRuntimeError, ValidationError } from './errors.js';
-import { channelRange, packEffect } from './semantics.js';
+import { channelRange, packEffect, validateBassManagement } from './semantics.js';
 import { TELEMETRY_RING_BYTES } from './telemetry.js';
 import { GRAPH_V1_CAPACITY } from './generated-graph-contract.js';
 
@@ -344,6 +344,7 @@ export async function createGraphEngineSession(artifact, state, resolvedAssets, 
     let tapId = 1;
     for (const [nodeIndex, effect] of state.document.nodes.entries()) {
       if (!effect.enabled || !effective.has(effect.id)) continue;
+      validateBassManagement(effect, channels);
       const packed = packEffect(effect);
       const instanceId = binding.createInstance(packed.internalType);
       if (!instanceId) {
@@ -355,7 +356,7 @@ export async function createGraphEngineSession(artifact, state, resolvedAssets, 
       requireOk(binding.instanceSetParams(instanceId, packed.values, packed.hash), `${effect.type} parameter configuration`);
       if (packed.bytes) requireOk(binding.instanceSetParamBytes(instanceId, packed.bytes, packed.hash), `${effect.type} structured parameter configuration`);
       const implementation = getEffectImplementation(effect.type);
-      if (implementation.assets?.length) {
+      if (implementation.assets?.length && effect.assets?.impulseResponse) {
         assetNodeIds.add(effect.id);
         let prepared;
         try {

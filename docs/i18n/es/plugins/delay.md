@@ -126,7 +126,7 @@ Ajusta el tiempo de reproducción en pequeñas cantidades. Es útil cuando quier
 - Comprobar si un pequeño retardo hace que la imagen estéreo se sienta más estable o natural
 
 ### Parámetros
-- **Delay** - Controla el tiempo de retardo aplicado a los canales enrutados a través de este plugin (0 a 100 ms)
+- **Delay** - Controla el tiempo de retardo aplicado a los canales enrutados a través de este plugin (0 a 500 ms)
   - 0 ms: Sin retardo
   - Valores pequeños: Útiles para compensar diferencias mínimas de llegada entre altavoces
   - Valores más altos: Crean un desplazamiento temporal más perceptible

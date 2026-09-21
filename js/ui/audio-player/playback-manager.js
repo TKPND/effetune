@@ -1014,15 +1014,31 @@ export class PlaybackManager {
   }
 
   async installBulkPlayProvisional(options = {}) {
-    return this.runWithPlaybackPending(() => this.#installBulkPlayProvisional(options), 3);
+    return this.runWithPlaybackPending(() => {
+      const pending = this.#installBulkPlayProvisional(options);
+      if (!options.signal) return pending;
+      return new Promise((resolve, reject) => {
+        const onAbort = () => {
+          void this.cancelBulkPlay(options.receipt?.operationId)
+            .catch(error => console.warn('Unable to restore cancelled playback.', error));
+          reject(options.signal.reason);
+        };
+        options.signal.addEventListener('abort', onAbort, { once: true });
+        if (options.signal.aborted) onAbort();
+        pending.then(resolve, reject).finally(() => options.signal.removeEventListener('abort', onAbort));
+      });
+    }, 3);
   }
 
   async #installBulkPlayProvisional({
     receipt,
     service,
     resolveSource,
+    signal,
+    onStage,
     resolutionScope = createPlaybackSourceResolutionScope()
   } = {}) {
+    if (signal?.aborted) throw signal.reason;
     const entry = receipt?.provisionalEntry;
     const trackUid = entry?.trackUid ?? entry?.libraryTrackId;
     if (!entry?.entryInstanceId || !trackUid) {
@@ -1047,6 +1063,7 @@ export class PlaybackManager {
     this.activeBulkPlay = operation;
     let resolution;
     try {
+      onStage?.('sourceResolve');
       resolution = await this.pendingTransport.run({
         kind: 'play-replace',
         playbackGeneration,
@@ -1061,13 +1078,7 @@ export class PlaybackManager {
       if (operation !== this.activeBulkPlay || playbackGeneration !== this.playbackGeneration) {
         return { accepted: false, reason: 'stale' };
       }
-      operation.provisionalSourceError = error;
-      return {
-        accepted: true,
-        deferred: true,
-        operationId: receipt.operationId,
-        playbackGeneration
-      };
+      throw error;
     }
     if (!resolution.accepted || !resolution.value || playbackGeneration !== this.playbackGeneration) {
       return { accepted: false, reason: resolution.reason ?? 'stale' };
@@ -1092,10 +1103,15 @@ export class PlaybackManager {
       ) {
         return false;
       }
-      return this.audioPlayer.contextManager?.seamlessTransition?.(loadedTrack, 0, true);
+      return this.audioPlayer.contextManager?.seamlessTransition?.(loadedTrack, 0, true, {
+        signal,
+        onStage,
+        throwOnError: true
+      });
     };
-    const played = await this.transportMediaChain.then(mediaOperation, mediaOperation);
-    this.transportMediaChain = Promise.resolve(played).catch(() => {});
+    const mediaPromise = this.transportMediaChain.then(mediaOperation, mediaOperation);
+    this.transportMediaChain = mediaPromise.catch(() => {});
+    const played = await mediaPromise;
     if (played === false || playbackGeneration !== this.playbackGeneration) {
       return { accepted: false, reason: 'stale' };
     }
@@ -1132,27 +1148,7 @@ export class PlaybackManager {
     if (publishedCurrentEntry.entryInstanceId !== operation.provisionalEntryInstanceId) {
       throw operationError('stalePlaybackEntry', 'Published sequence no longer matches the provisional track');
     }
-    if (!operation.provisionalLoaded) {
-      const playbackResult = await this.loadCatalogSequence(publishedSequence, {
-        currentOrdinal,
-        autoPlay: true,
-        userInitiated: true,
-        preservePlaybackGeneration: true,
-        resolutionScope: operation.resolutionScope
-      });
-      if (operation !== this.activeBulkPlay || operation.playbackGeneration !== this.playbackGeneration) {
-        return { accepted: false, reason: 'stale' };
-      }
-      operation.phase = 'published';
-      this.sessionTransportUndo = operation.previousSessionState;
-      operation.previousSessionState = null;
-      return {
-        accepted: true,
-        phase: 'published',
-        playbackAccepted: playbackResult?.accepted !== false,
-        skippedCount: playbackResult?.skippedCount ?? 0
-      };
-    }
+    if (!operation.provisionalLoaded) return { accepted: false, reason: 'playbackStartFailed' };
     await this.loadCatalogSequence(publishedSequence, {
       currentOrdinal,
       preservePlayback: true,
@@ -1301,18 +1297,21 @@ export class PlaybackManager {
     if (operation.phase === 'published' || operation.phase === 'terminal') {
       return { accepted: false, reason: 'tooLate' };
     }
-    const result = typeof operation.service?.cancel === 'function'
-      ? await operation.service.cancel(operationId)
-      : { accepted: true };
-    if (result?.kind === 'tooLate' || result?.reason === 'tooLate') {
-      return { accepted: false, reason: 'tooLate' };
-    }
-    if (result?.kind === 'cancelRequested') {
-      operation.phase = 'cancel-requested';
-      return { accepted: true, phase: 'cancel-requested' };
-    }
     operation.phase = 'terminal';
-    await this.#restoreBulkPlaySession(operation);
+    if (operation.playbackGeneration !== this.playbackGeneration) {
+      return { accepted: false, reason: 'stale' };
+    }
+    this.pendingTransport.invalidate();
+    this.audioPlayer.contextManager?.invalidatePendingTransitionRequests?.();
+    this.audioPlayer.contextManager?.cancelPendingMediaCandidateReadiness?.();
+    this.transportMediaChain = Promise.resolve();
+    this.playbackGeneration += 1;
+    this.audioPlayer.stateManager?.updateState?.({
+      isTransitioning: false,
+      transitionType: null,
+      playbackGeneration: this.playbackGeneration
+    }, 'PlaybackManager bulk Play cancelled');
+    await this.#restoreBulkPlaySession(operation, this.playbackGeneration);
     return { accepted: true, phase: 'cancelled' };
   }
 
@@ -1356,25 +1355,31 @@ export class PlaybackManager {
     return { ...common, kind: 'materialized', snapshot: this.capturePlaybackQueueSnapshot() };
   }
 
-  async #restoreBulkPlaySession(operation) {
+  async #restoreBulkPlaySession(operation, expectedGeneration = operation.playbackGeneration) {
     const snapshot = operation?.previousSessionState;
     operation.previousSessionState = null;
     if (!snapshot || !operation.provisionalInstalled ||
-        operation.playbackGeneration !== this.playbackGeneration) {
+        expectedGeneration !== this.playbackGeneration) {
       return false;
     }
-    return this.#restoreSessionPlaybackState(snapshot);
+    return this.#restoreSessionPlaybackState(snapshot, {
+      restoreMedia: operation.provisionalLoaded
+    });
   }
 
-  async #restoreSessionPlaybackState(snapshot) {
+  async #restoreSessionPlaybackState(snapshot, { restoreMedia = true } = {}) {
     if (snapshot.kind === 'catalog' && snapshot.sequence) {
-      await this.loadCatalogSequence(snapshot.sequence, {
+      this.pendingTransport.invalidate();
+      this.trackCommandGeneration += 1;
+      this.catalogSequence?.clear();
+      this.installCatalogSequence(snapshot.sequence, {
         currentOrdinal: snapshot.currentOrdinal,
-        preservePlayback: true,
+        currentTrack: snapshot.currentTrack,
         resolvedEntries: snapshot.currentTrack
           ? new Map([[snapshot.currentOrdinal, snapshot.currentTrack]])
           : null
       });
+      this.audioPlayer.contextManager?.refreshActiveRegionTransportPlan?.();
     } else if (snapshot.kind === 'materialized' && this.restorePlaybackQueueSnapshot(snapshot.snapshot)) {
       this.playbackGeneration += 1;
       this.syncPlaylistState(snapshot.currentOrdinal);
@@ -1387,7 +1392,11 @@ export class PlaybackManager {
       currentTrackPosition: snapshot.currentTrackPosition,
       playbackGeneration: this.playbackGeneration
     }, 'PlaybackManager bulk Play rollback');
-    if (!snapshot.currentTrack) return true;
+    if (!restoreMedia) return true;
+    if (!snapshot.currentTrack) {
+      await this.audioPlayer.contextManager?.stop?.();
+      return true;
+    }
     if (snapshot.wasPlaying && this.audioPlayer.contextManager?.seamlessTransition) {
       await this.audioPlayer.contextManager.seamlessTransition(
         snapshot.currentTrack,

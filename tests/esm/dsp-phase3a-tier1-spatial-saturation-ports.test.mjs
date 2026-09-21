@@ -35,18 +35,18 @@ const ports = [
   {
     directory: 'saturation/hard_clipping',
     type: 'HardClippingPlugin',
-    hash: 0x31e6082d,
-    floatCount: 2,
-    caseCount: 11,
-    jsEngineHash: 'c1e78d2fc125302093155e68fa0c817203d7b51ee095ccc42574dcdf3b0febd8'
+    hash: 0x39cb58fd,
+    floatCount: 3,
+    caseCount: 16,
+    jsEngineHash: '2a2b73550f3fb4bf7d77e2c5790774fad9f739ead89bd3654610b7cc3b4d1e4c'
   },
   {
     directory: 'saturation/saturation',
     type: 'SaturationPlugin',
-    hash: 0x42759ad3,
-    floatCount: 4,
-    caseCount: 12,
-    jsEngineHash: '4544d48abcb69251bbd513901652fa65d22d5062281af069b957c1d3bdbe6ec4'
+    hash: 0xae9fd2f7,
+    floatCount: 5,
+    caseCount: 16,
+    jsEngineHash: 'f4f9b1ebef665a8496629cd4016524388b38bf93caf7f8d17befd98539c4a256'
   }
 ];
 

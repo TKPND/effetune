@@ -332,6 +332,7 @@
 | Basics | Volume | تحكم أساسي في مستوى الصوت | [تفاصيل](plugins/basics.md#volume) |
 | Delay | Delay | تأثير تأخير قياسي | [تفاصيل](plugins/delay.md#delay) |
 | Delay | Time Alignment | يضبط توقيت التشغيل بدقة لمحاذاة السماعات وموضع الاستماع | [تفاصيل](plugins/delay.md#time-alignment) |
+| Dynamics | Attack Tonal Balance | يوازن بين الهجمات القصيرة والبنية النغمية المستمرة | [تفاصيل](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics | Auto Leveler | يضبط مستوى الصوت تلقائيًا بناءً على قياس LUFS لتجربة استماع أكثر اتساقًا | [تفاصيل](plugins/dynamics.md#auto-leveler) |
 | Dynamics | Brickwall Limiter | يحد ذروات الإشارة لمنع القطع الرقمي | [تفاصيل](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics | Compressor | يخفف المقاطع العالية المفاجئة لاستماع أكثر راحة | [تفاصيل](plugins/dynamics.md#compressor) |
@@ -401,6 +402,7 @@
 | Reverb | IR Reverb | صدى التفاف يستخدم استجابات نبضية مستوردة للغرف والمعدات | [تفاصيل](plugins/reverb.md#ir-reverb) |
 | Reverb | RS Reverb | صدى random scattering بانتشار طبيعي | [تفاصيل](plugins/reverb.md#rs-reverb) |
 | Saturation | Bandwidth Extender | يولّد محتوى عالي التردد فوق تردد قطع مكتشف أو محدد | [تفاصيل](plugins/saturation.md#bandwidth-extender) |
+| Saturation | Bass Extender | يولّد جهيرًا أخفض بأوكتاف من محتوى منخفض التردد مناسب | [تفاصيل](plugins/saturation.md#bass-extender) |
 | Saturation | Dynamic Saturation | يحاكي الإزاحة غير الخطية لمخاريط السماعات | [تفاصيل](plugins/saturation.md#dynamic-saturation) |
 | Saturation | Exciter | يضيف محتوى توافقيًا لتعزيز الوضوح والحضور | [تفاصيل](plugins/saturation.md#exciter) |
 | Saturation | Hard Clipping | تأثير قص رقمي صلب | [تفاصيل](plugins/saturation.md#hard-clipping) |

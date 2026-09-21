@@ -20,7 +20,7 @@ Delays selected channels to align arrival times.
 
 | Semantic name | Python constructor keyword | Type / count | Default | Unit | Range or values |
 |---|---|---:|---|---|---|
-| `delay` | `delay` | number / 1 | `0` | ms | 0 … 100 |
+| `delay` | `delay` | number / 1 | `0` | ms | 0 … 500 |
 
 
 
@@ -38,7 +38,7 @@ Adjusts playback timing by a small amount, useful when you want to compensate fo
 - Checking whether a small delay makes the stereo image feel more stable or natural
 
 ### Parameters
-- **Delay** - Controls the delay time applied to the channels routed through this plugin (0 to 100 ms)
+- **Delay** - Controls the delay time applied to the channels routed through this plugin (0 to 500 ms)
   - 0 ms: No delay
   - Small values: Useful for compensating tiny arrival-time differences between speakers
   - Higher values: Creates a more noticeable timing shift

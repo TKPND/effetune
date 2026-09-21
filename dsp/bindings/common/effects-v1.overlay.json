@@ -53,6 +53,42 @@
       ]
     },
     {
+      "type": "BassManagement",
+      "internalType": "BassManagementPlugin",
+      "seeded": true,
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "phase",
+          "taps"
+        ]
+      },
+      "parameters": {
+        "slopes": {
+          "allowedValues": [
+            24,
+            48,
+            96
+          ]
+        },
+        "lfeSlope": {
+          "allowedValues": [
+            24,
+            48,
+            96
+          ]
+        }
+      },
+      "assets": [
+        {
+          "name": "impulseResponse",
+          "kind": "impulseResponse",
+          "slot": 0,
+          "required": false
+        }
+      ]
+    },
+    {
       "type": "ChannelDivider",
       "internalType": "ChannelDividerPlugin"
     },
@@ -115,6 +151,16 @@
     {
       "type": "TimeAlignment",
       "internalType": "TimeAlignmentPlugin"
+    },
+    {
+      "type": "AttackTonalBalance",
+      "internalType": "AttackTonalBalancePlugin",
+      "latency": {
+        "kind": "sampleRateDependent",
+        "dependsOn": [
+          "sampleRate"
+        ]
+      }
     },
     {
       "type": "AutoLeveler",
@@ -990,8 +1036,36 @@
       }
     },
     {
+      "type": "BassExtender",
+      "internalType": "BassExtenderPlugin",
+      "sampleRates": [
+        44100,
+        48000,
+        88200,
+        96000,
+        176400,
+        192000
+      ]
+    },
+    {
       "type": "DynamicSaturation",
-      "internalType": "DynamicSaturationPlugin"
+      "internalType": "DynamicSaturationPlugin",
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
+      },
+      "parameters": {
+        "oversampling": {
+          "allowedValues": [
+            1,
+            2,
+            4,
+            8
+          ]
+        }
+      }
     },
     {
       "type": "Exciter",
@@ -1013,24 +1087,103 @@
               "public": 12
             }
           ]
+        },
+        "oversampling": {
+          "allowedValues": [
+            1,
+            2,
+            4,
+            8
+          ]
         }
+      },
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
       }
     },
     {
       "type": "HardClipping",
-      "internalType": "HardClippingPlugin"
+      "internalType": "HardClippingPlugin",
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
+      },
+      "parameters": {
+        "oversampling": {
+          "allowedValues": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ]
+        }
+      }
     },
     {
       "type": "HarmonicDistortion",
-      "internalType": "HarmonicDistortionPlugin"
+      "internalType": "HarmonicDistortionPlugin",
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
+      },
+      "parameters": {
+        "oversampling": {
+          "allowedValues": [
+            1,
+            2,
+            4,
+            8
+          ]
+        }
+      }
     },
     {
       "type": "MultibandSaturation",
-      "internalType": "MultibandSaturationPlugin"
+      "internalType": "MultibandSaturationPlugin",
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
+      },
+      "parameters": {
+        "oversampling": {
+          "allowedValues": [
+            1,
+            2,
+            4,
+            8
+          ]
+        }
+      }
     },
     {
       "type": "Saturation",
-      "internalType": "SaturationPlugin"
+      "internalType": "SaturationPlugin",
+      "latency": {
+        "kind": "dynamic",
+        "dependsOn": [
+          "oversampling"
+        ]
+      },
+      "parameters": {
+        "oversampling": {
+          "allowedValues": [
+            1,
+            2,
+            4,
+            8
+          ]
+        }
+      }
     },
     {
       "type": "SubSynth",
@@ -1127,7 +1280,7 @@
     }
   ],
   "contractDigests": {
-    "publicCatalogSha256": "ddd6609f70b55274f872ece7b2f8fca57b0f8c42736307748a276fee8d7ef0fb",
-    "privateLayoutSha256": "bf3475e88d0983c14c97bf3eee4f3d09b4f85e52de3b5caefda85c2affe85789"
+    "publicCatalogSha256": "5aa43b67d131e45ead6b23301fe587bdd36c97fa22eec5e6eeb45f4e4d1724c5",
+    "privateLayoutSha256": "dcc0f7b37b351e1bf8e87084d9887d238b0179d45b78425a96d9823e66348d67"
   }
 }

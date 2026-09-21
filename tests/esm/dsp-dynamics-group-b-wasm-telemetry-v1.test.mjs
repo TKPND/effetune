@@ -124,10 +124,10 @@ for (const artifact of ['effetune-dsp.wasm', 'effetune-dsp.simd.wasm']) {
       };
       setLimiter(0, 1, 1);
       setLimiter(3, 1, 144);
-      setLimiter(0, 2, 32);
-      setLimiter(0, 4, 17);
-      setLimiter(0, 8, 9);
-      setLimiter(3, 8, 152);
+      setLimiter(0, 2, 65);
+      setLimiter(0, 4, 65);
+      setLimiter(0, 8, 65);
+      setLimiter(3, 8, 208);
       setLimiter(0, 1, 1);
       processBlocks(limiter, 1);
       frame = readSingleFrame(binding, packet, 20);

@@ -221,7 +221,8 @@ const COEFFICIENTS = Object.freeze({
 });
 
 export function assetSetup(effect, sampleRate = 48000, irVariant = 'a') {
-  if (!effect.assets.length) {
+  const requiredAssets = effect.assets.filter(asset => asset.required);
+  if (!requiredAssets.length) {
     return { channels: 2, references: undefined, assetResolver: undefined };
   }
   if (!ASSET_EFFECT_TYPES.includes(effect.type)) {
@@ -268,7 +269,7 @@ export function assetSetup(effect, sampleRate = 48000, irVariant = 'a') {
   return {
     channels: crossover ? 4 : 2,
     parameters,
-    references: Object.fromEntries(effect.assets.map(asset => [
+    references: Object.fromEntries(requiredAssets.map(asset => [
       asset.name,
       `memory:${effect.type}:${asset.name}`
     ])),
@@ -285,7 +286,9 @@ import { createChain, getEffectCatalog } from '@effetune/dsp';
 import { ASSET_EFFECT_TYPES, assetSetup } from './asset-fixtures.mjs';
 
 const sampleRate = 48000;
-const effects = getEffectCatalog().effects.filter(effect => effect.assets.length);
+const effects = getEffectCatalog().effects.filter(effect =>
+  effect.assets.some(asset => asset.required)
+);
 assert.deepEqual(effects.map(effect => effect.type), ASSET_EFFECT_TYPES);
 for (const variant of ['baseline', 'simd']) {
   for (const effect of effects) {

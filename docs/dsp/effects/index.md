@@ -7,7 +7,7 @@ permalink: /dsp/effects/
 ---
 # Effects
 
-Browse all 103 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
+Browse all 106 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
 
 <label for="effect-filter">Filter effects</label>
 <input id="effect-filter" type="search" placeholder="Name, type, category, seeded, or asset" data-dsp-effect-filter>
@@ -25,6 +25,7 @@ Browse all 103 semantic types registered in the v1 binding catalog. The list rem
 
 ## Basics
 
+- [Bass Management](/dsp/effects/bass-management/) (`BassManagement`) — Routes managed main-channel bass and dedicated LFE inputs to selected subwoofer outputs. <span data-effect-tags="basics seeded asset"></span>
 - [Channel Divider](/dsp/effects/channel-divider/) (`ChannelDivider`) — Routes an input channel into selected output channels according to its semantic parameters. <span data-effect-tags="basics  "></span>
 - [DC Offset](/dsp/effects/dc-offset/) (`DCOffset`) — Adds a controllable constant offset to the signal. <span data-effect-tags="basics  "></span>
 - [FIR Crossover](/dsp/effects/fir-crossover/) (`FIRCrossover`) — Applies an externally prepared FIR crossover impulse response. <span data-effect-tags="basics seeded asset"></span>
@@ -42,6 +43,7 @@ Browse all 103 semantic types registered in the v1 binding catalog. The list rem
 
 ## Dynamics
 
+- [Attack Tonal Balance](/dsp/effects/attack-tonal-balance/) (`AttackTonalBalance`) — Balances short broadband attacks and sustained tonal structure. <span data-effect-tags="dynamics  "></span>
 - [Auto Leveler](/dsp/effects/auto-leveler/) (`AutoLeveler`) — Adjusts gain gradually toward a configured target level. <span data-effect-tags="dynamics  "></span>
 - [Brickwall Limiter](/dsp/effects/brickwall-limiter/) (`BrickwallLimiter`) — Restricts peaks to a configured ceiling with look-ahead limiting. <span data-effect-tags="dynamics  "></span>
 - [Compressor](/dsp/effects/compressor/) (`Compressor`) — Reduces dynamic range above a configurable threshold. <span data-effect-tags="dynamics  "></span>
@@ -132,6 +134,7 @@ Browse all 103 semantic types registered in the v1 binding catalog. The list rem
 ## Saturation
 
 - [Bandwidth Extender](/dsp/effects/bandwidth-extender/) (`BandwidthExtender`) — Synthesizes upper-frequency content for bandwidth-limited recordings. <span data-effect-tags="saturation seeded "></span>
+- [Bass Extender](/dsp/effects/bass-extender/) (`BassExtender`) — Generates low bass one octave below suitable low-frequency input content. <span data-effect-tags="saturation  "></span>
 - [Dynamic Saturation](/dsp/effects/dynamic-saturation/) (`DynamicSaturation`) — Applies saturation whose drive responds to the input level. <span data-effect-tags="saturation  "></span>
 - [Exciter](/dsp/effects/exciter/) (`Exciter`) — Generates controlled high-frequency harmonics to emphasize detail. <span data-effect-tags="saturation  "></span>
 - [Hard Clipping](/dsp/effects/hard-clipping/) (`HardClipping`) — Limits waveform amplitude abruptly at a configurable threshold. <span data-effect-tags="saturation  "></span>

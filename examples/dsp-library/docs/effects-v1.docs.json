@@ -18,6 +18,7 @@
   "effects": {
     "PitchShifterHQ": {"displayName": "Pitch Shifter HQ", "category": "modulation", "summary": "Changes pitch in semitones and cents while preserving playback duration.", "sourceGenerating": false},
     "BandwidthExtender": {"displayName": "Bandwidth Extender", "category": "saturation", "summary": "Synthesizes upper-frequency content for bandwidth-limited recordings.", "sourceGenerating": false},
+    "BassExtender": {"displayName": "Bass Extender", "category": "saturation", "summary": "Generates low bass one octave below suitable low-frequency input content.", "sourceGenerating": false},
     "ClickRemover": {"displayName": "Click Remover", "category": "restoration", "summary": "Reduces short clicks in playback.", "sourceGenerating": false},
     "ClipRestorer": {"displayName": "Clip Restorer", "category": "restoration", "summary": "Reconstructs clipped waveform peaks.", "sourceGenerating": false},
     "HumRemover": {"displayName": "Hum Remover", "category": "restoration", "summary": "Reduces mains hum and its harmonics.", "sourceGenerating": false},
@@ -30,6 +31,7 @@
     "Spectrogram": { "displayName": "Spectrogram", "category": "analyzer", "summary": "Passes audio through while the host-side EffeTune app can display frequency content over time.", "sourceGenerating": false },
     "SpectrumAnalyzer": { "displayName": "Spectrum Analyzer", "category": "analyzer", "summary": "Passes audio through while the host-side EffeTune app can display its frequency spectrum.", "sourceGenerating": false },
     "StereoMeter": { "displayName": "Stereo Meter", "category": "analyzer", "summary": "Passes audio through while the host-side EffeTune app can display stereo level and phase relationships.", "sourceGenerating": false },
+    "BassManagement": { "displayName": "Bass Management", "category": "basics", "summary": "Routes managed main-channel bass and dedicated LFE inputs to selected subwoofer outputs.", "sourceGenerating": false },
     "ChannelDivider": { "displayName": "Channel Divider", "category": "basics", "summary": "Routes an input channel into selected output channels according to its semantic parameters.", "sourceGenerating": false },
     "DCOffset": { "displayName": "DC Offset", "category": "basics", "summary": "Adds a controllable constant offset to the signal.", "sourceGenerating": true },
     "FIRCrossover": { "displayName": "FIR Crossover", "category": "basics", "summary": "Applies an externally prepared FIR crossover impulse response.", "sourceGenerating": false },
@@ -41,6 +43,7 @@
     "Volume": { "displayName": "Volume", "category": "basics", "summary": "Applies a precise gain in decibels.", "sourceGenerating": false },
     "Delay": { "displayName": "Delay", "category": "delay", "summary": "Adds a delayed signal with controllable feedback and mix.", "sourceGenerating": false },
     "TimeAlignment": { "displayName": "Time Alignment", "category": "delay", "summary": "Delays selected channels to align arrival times.", "sourceGenerating": false },
+    "AttackTonalBalance": { "displayName": "Attack Tonal Balance", "category": "dynamics", "summary": "Balances short broadband attacks and sustained tonal structure.", "sourceGenerating": false },
     "AutoLeveler": { "displayName": "Auto Leveler", "category": "dynamics", "summary": "Adjusts gain gradually toward a configured target level.", "sourceGenerating": false },
     "BrickwallLimiter": { "displayName": "Brickwall Limiter", "category": "dynamics", "summary": "Restricts peaks to a configured ceiling with look-ahead limiting.", "sourceGenerating": false },
     "Compressor": { "displayName": "Compressor", "category": "dynamics", "summary": "Reduces dynamic range above a configurable threshold.", "sourceGenerating": false },

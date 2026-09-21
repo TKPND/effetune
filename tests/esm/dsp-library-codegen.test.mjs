@@ -103,12 +103,12 @@ test('frozen catalog selects every approved source-backed effect in canonical or
   const catalog = buildCatalog();
   assert.equal(catalog.version, 1);
   assert.deepEqual(catalog.effects.map(effect => effect.type), [...PUBLIC_EFFECT_TYPES]);
-  assert.equal(catalog.effects.length, 103);
+  assert.equal(catalog.effects.length, 106);
 
   const specs = new Map(Object.values(FROZEN_PARAM_DIRECTORIES).flatMap(directory =>
     loadParamSpecs(path.join(repoRoot, directory))
   ).map(spec => [spec.type, spec]));
-  assert.equal(specs.size, 103);
+  assert.equal(specs.size, 106);
   const registry = fs.readFileSync(path.join(repoRoot, 'dsp/registry.inc'), 'utf8');
   const registeredTypes = [...registry.matchAll(/^EFFETUNE_PLUGIN\((\w+),/gm)]
     .map(match => match[1]).sort();
@@ -261,8 +261,8 @@ test('v0.1 named convenience exports exactly match the canonical catalog', () =>
   const expectedTypes = catalog.effects.map(effect => effect.type);
 
   assert.deepEqual(manifest.exports.map(entry => entry.type), expectedTypes);
-  assert.equal(catalog.effects.length, 103);
-  assert.equal(manifest.exports.length, 103);
+  assert.equal(catalog.effects.length, 106);
+  assert.equal(manifest.exports.length, 106);
   for (const entry of manifest.exports) {
     assert.equal(entry.class, entry.type);
     assert.equal(entry.factory, `create${entry.type}`);
@@ -320,7 +320,7 @@ test('public metadata is separated from the frozen private implementation mappin
   assert.equal(privateCatalog.contractDigest, publicCatalog.contractDigests.privateLayoutSha256);
   assert.equal(privateCatalog.channelMapping.stereo, null);
   assert.equal(privateCatalog.channelMapping.all, 'A');
-  assert.equal(Object.keys(privateCatalog.frozenGoldenIndexes).length, 103);
+  assert.equal(Object.keys(privateCatalog.frozenGoldenIndexes).length, 106);
   for (const effect of buildCatalog().effects) {
     const source = effect.implementation.source;
     assert.equal(
@@ -368,7 +368,7 @@ test('public chain and bundle schemas exclude legacy representations', () => {
   assert.deepEqual(chain.required, ['version', 'chain']);
   assert.equal(chain.properties.version.const, 1);
   assert.deepEqual(chain.$defs.channel.enum, [...EFFECT_CHANNELS]);
-  assert.equal(chain.$defs.effect.oneOf.length, 103);
+  assert.equal(chain.$defs.effect.oneOf.length, 106);
   for (const type of [
     'CrosstalkCancellation',
     'FIRCrossover',
@@ -471,6 +471,10 @@ test('generated language surfaces expose all approved thin classes and typed fac
     pythonStub,
     /class IRReverb\(Effect\):[\s\S]*assets: IRReverbAssets,\s+\) -> None/
   );
+  assert.match(
+    pythonStub,
+    /class BassManagement\(Effect\):[\s\S]*assets: IRReverbAssets \| None = \.\.\.,\s+\) -> None/
+  );
   assert.match(pythonStub, /frequencies: tuple\[float, float, float,/);
   assert.match(declarations, /readonly filterTypes\?: readonly \[/);
   assert.match(
@@ -484,6 +488,15 @@ test('generated language surfaces expose all approved thin classes and typed fac
   );
   assert.match(
     declarations,
+    /export interface BassManagementOptions[\s\S]*readonly assets\?: IRReverbAssets;/
+  );
+  assert.match(declarations, /constructor\(options\?: BassManagementOptions\);/);
+  assert.match(
+    declarations,
+    /createBassManagement\(options\?: BassManagementOptions\): BassManagement;/
+  );
+  assert.match(
+    declarations,
     /export interface VolumeOptions[\s\S]*readonly assets\?: never;/
   );
 });
@@ -492,7 +505,7 @@ test('generic JavaScript factory requires options for every asset-bearing effect
   const catalog = buildCatalog();
   const declarations = fs.readFileSync(declarationsPath, 'utf8');
   const requiredAssetTypes = catalog.effects
-    .filter(effect => effect.assets.length !== 0)
+    .filter(effect => effect.assets.some(asset => asset.required))
     .map(effect => effect.type);
   const union = declarations.match(/^type RequiredAssetEffectType = ([^;]+);$/m);
 
@@ -511,6 +524,7 @@ test('generic JavaScript factory requires options for every asset-bearing effect
     'CrosstalkCancellation'
   ]);
   assert.equal(requiredAssetTypes.includes('Volume'), false);
+  assert.equal(requiredAssetTypes.includes('BassManagement'), false);
   assert.match(
     declarations,
     /T extends RequiredAssetEffectType\s+\? \[options: EffectOptionsByType\[T\]\]\s+: \[options\?: EffectOptionsByType\[T\]\]/

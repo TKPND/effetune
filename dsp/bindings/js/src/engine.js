@@ -2,7 +2,7 @@ import { instantiateDspBinding, ET_OK } from './internal/dsp-engine-binding.js';
 import { getEffectImplementation } from './catalog.js';
 import { prepareConvolutionAsset } from './assets.js';
 import { EffeTuneError, EffeTuneRuntimeError } from './errors.js';
-import { channelRange, packEffect } from './semantics.js';
+import { channelRange, packEffect, validateBassManagement } from './semantics.js';
 import {
   decodeTelemetryPacket,
   TELEMETRY_RATE_HZ,
@@ -36,6 +36,7 @@ export async function createEngineSession(artifact, effects, resolvedAssets, {
     let tapId = 1;
     for (const [effectIndex, effect] of effects.entries()) {
       if (!effect.enabled) continue;
+      validateBassManagement(effect, channels);
       const packed = packEffect(effect);
       const instanceId = binding.createInstance(packed.internalType);
       if (!instanceId) throw new EffeTuneRuntimeError(`Unable to create ${effect.type}.`);
@@ -52,7 +53,7 @@ export async function createEngineSession(artifact, effects, resolvedAssets, {
         );
       }
       const implementation = getEffectImplementation(effect.type);
-      if (implementation.assets?.length) {
+      if (implementation.assets?.length && effect.assets?.impulseResponse) {
         const prepared = prepareConvolutionAsset(effect, resolvedAssets, {
           sampleRate,
           engineChannels: channels

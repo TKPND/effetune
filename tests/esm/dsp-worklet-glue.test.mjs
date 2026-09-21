@@ -1352,6 +1352,7 @@ test('Room EQ replacement staging waits for one dry-ramp quantum before switchin
 
 test('FIR plugin replacements use the shared replacement handshake', async () => {
   for (const [type, params] of [
+    ['BassManagementPlugin', new Float32Array(89)],
     ['FIRCrossoverPlugin', Float32Array.of(1, 0, 0)],
     ['FiveBandFIRPEQPlugin', Float32Array.of(1, 0)]
   ]) {

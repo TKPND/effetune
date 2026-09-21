@@ -35,65 +35,68 @@ class LevelMeterPlugin extends PluginBase {
             const numChannels = parameters.channelCount;
             const blockSize = parameters.blockSize;
             const sampleRate = parameters.sampleRate;
-            const blocksPerWindow = Math.floor(sampleRate / 30 / blockSize); // Number of blocks in ~1/30 second
+            const windowBins = 32;
+            const desiredFramesPerBin = sampleRate / 30 / windowBins;
+            const framesPerBin = desiredFramesPerBin > 1 ? Math.ceil(desiredFramesPerBin) : 1;
 
-            // Initialize context state for block-based peak tracking
-            if (!context.initialized) {
+            // Fixed time bins keep the window stable when the host block size changes.
+            if (!context.initialized ||
+                context.peakBuffers.length !== numChannels ||
+                context.peakSampleRate !== sampleRate) {
                 context.peakBuffers = new Array(numChannels)
                     .fill()
-                    .map(() => new Float32Array(blocksPerWindow).fill(0));
-                context.blockIndex = 0;
-                context.blocksPerWindow = blocksPerWindow;
+                    .map(() => new Float32Array(windowBins));
+                context.windowPeaks = new Float32Array(numChannels);
+                context.currentPeakBin = 0;
+                context.currentPeakBinFrames = 0;
+                context.framesPerPeakBin = framesPerBin;
+                context.peakSampleRate = sampleRate;
                 context.initialized = true;
             }
-            
-            // Reset state if channel count or window size changes
-            if (context.peakBuffers.length !== numChannels || context.blocksPerWindow !== blocksPerWindow) {
-                context.peakBuffers = new Array(numChannels)
-                    .fill()
-                    .map(() => new Float32Array(blocksPerWindow).fill(0));
-                context.blockIndex = 0;
-                context.blocksPerWindow = blocksPerWindow;
-            }
-            
-            // Calculate current block peaks and store in circular buffers
-            const peaks = new Float32Array(numChannels);
-            
-            for (let ch = 0; ch < numChannels; ch++) {
-                const offset = ch * blockSize;
-                const end = offset + blockSize;
-                let blockPeak = 0.0;
-                
-                // Find peak in current block
-                for (let i = offset; i < end; i++) {
-                    const sample = data[i];
-                    const absSample = sample < 0 ? -sample : sample;
-                    if (absSample > blockPeak) {
-                        blockPeak = absSample;
+
+            let processedFrames = 0;
+            while (processedFrames < blockSize) {
+                if (context.currentPeakBinFrames >= context.framesPerPeakBin) {
+                    context.currentPeakBin = (context.currentPeakBin + 1) % windowBins;
+                    context.currentPeakBinFrames = 0;
+                    for (let ch = 0; ch < numChannels; ch++) {
+                        const peaks = context.peakBuffers[ch];
+                        const outgoingPeak = peaks[context.currentPeakBin];
+                        peaks[context.currentPeakBin] = 0;
+                        if (outgoingPeak === context.windowPeaks[ch]) {
+                            let windowPeak = 0;
+                            for (let bin = 0; bin < windowBins; bin++) {
+                                if (peaks[bin] > windowPeak) windowPeak = peaks[bin];
+                            }
+                            context.windowPeaks[ch] = windowPeak;
+                        }
                     }
                 }
-                
-                // Store block peak in circular buffer
-                context.peakBuffers[ch][context.blockIndex] = blockPeak;
-                
-                // Find maximum peak across the stored blocks (~1/30 second window)
-                let windowPeak = 0.0;
-                for (let i = 0; i < blocksPerWindow; i++) {
-                    if (context.peakBuffers[ch][i] > windowPeak) {
-                        windowPeak = context.peakBuffers[ch][i];
+
+                const availableFrames = context.framesPerPeakBin - context.currentPeakBinFrames;
+                const remainingFrames = blockSize - processedFrames;
+                const segmentFrames = remainingFrames < availableFrames ?
+                    remainingFrames : availableFrames;
+                for (let ch = 0; ch < numChannels; ch++) {
+                    const offset = ch * blockSize + processedFrames;
+                    const end = offset + segmentFrames;
+                    let binPeak = context.peakBuffers[ch][context.currentPeakBin];
+                    for (let i = offset; i < end; i++) {
+                        const sample = data[i];
+                        const absolute = sample < 0 ? -sample : sample;
+                        if (absolute > binPeak) binPeak = absolute;
                     }
+                    context.peakBuffers[ch][context.currentPeakBin] = binPeak;
+                    if (binPeak > context.windowPeaks[ch]) context.windowPeaks[ch] = binPeak;
                 }
-                
-                peaks[ch] = windowPeak;
+                context.currentPeakBinFrames += segmentFrames;
+                processedFrames += segmentFrames;
             }
-            
-            // Advance block index for next processing call
-            context.blockIndex = (context.blockIndex + 1) % blocksPerWindow;
-            
+
             // Create measurements object
             const channelMeasurements = new Array(numChannels);
             for (let ch = 0; ch < numChannels; ch++) {
-                channelMeasurements[ch] = { peak: peaks[ch] };
+                channelMeasurements[ch] = { peak: context.windowPeaks[ch] };
             }
             
             // Attach measurements to the data buffer for the main thread

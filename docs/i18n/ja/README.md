@@ -341,6 +341,7 @@ Effect Pipelineヘッダーの **パイプラインプリセット** ボタン�
 | Basics    | Volume              | 基本的なボリューム制御                                                       | [詳細](plugins/basics.md#volume)                      |
 | Delay     | Delay          | 標準的なディレイエフェクト                                   | [詳細](plugins/delay.md#delay) |
 | Delay     | Time Alignment | スピーカーやリスニング位置の調整に使う再生タイミングを微調整 | [詳細](plugins/delay.md#time-alignment) |
+| Dynamics  | Attack Tonal Balance | 短いアタックと持続する音程感のバランスを調整 | [詳細](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics  | Auto Leveler | 一貫したリスニング体験のためにLUFS測定に基づいて自動的に音量を調整 | [詳細](plugins/dynamics.md#auto-leveler) |
 | Dynamics  | Brickwall Limiter | 信号ピークを抑えてデジタルクリッピングを防ぐ | [詳細](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics  | Compressor | 急に大きくなる部分をなめらかにし、より聴きやすくする | [詳細](plugins/dynamics.md#compressor) |
@@ -410,6 +411,7 @@ Effect Pipelineヘッダーの **パイプラインプリセット** ボタン�
 | Reverb    | IR Reverb | 取り込んだ部屋や機器のインパルス応答を使うコンボリューションリバーブ | [詳細](plugins/reverb.md#ir-reverb) |
 | Reverb    | RS Reverb | 自然な拡散を伴うランダム散乱リバーブ | [詳細](plugins/reverb.md#rs-reverb) |
 | Saturation| Bandwidth Extender | 検出または指定したカットオフより上に高域成分を生成 | [詳細](plugins/saturation.md#bandwidth-extender) |
+| Saturation| Bass Extender | 適した低域成分から1オクターブ下の低音を生成 | [詳細](plugins/saturation.md#bass-extender) |
 | Saturation| Dynamic Saturation | スピーカーコーンの非線形変位をシミュレート | [詳細](plugins/saturation.md#dynamic-saturation) |
 | Saturation| Exciter | 明瞭さと存在感を高める倍音成分を追加 | [詳細](plugins/saturation.md#exciter) |
 | Saturation| Hard Clipping | デジタルハードクリッピング効果 | [詳細](plugins/saturation.md#hard-clipping) |

@@ -339,6 +339,7 @@ Effect Pipeline 헤더의 **효과 체인 프리셋** 버튼을 클릭하면 프
 | Basics | Volume | 기본 볼륨 제어 | [세부 정보](plugins/basics.md#volume) |
 | Delay | Delay | 표준 딜레이 이펙트 | [세부 정보](plugins/delay.md#delay) |
 | Delay | Time Alignment | 스피커와 청취 위치 정렬을 위한 재생 타이밍 미세 조정 | [세부 정보](plugins/delay.md#time-alignment) |
+| Dynamics | Attack Tonal Balance | 짧은 어택과 지속되는 음정 성분의 균형을 조정 | [세부 정보](plugins/dynamics.md#attack-tonal-balance) |
 | Dynamics | Auto Leveler | LUFS 측정을 바탕으로 볼륨을 자동 조정해 일관된 청취 경험 제공 | [세부 정보](plugins/dynamics.md#auto-leveler) |
 | Dynamics | Brickwall Limiter | 다이내믹스를 유지하는 디지털 피크 제어 | [세부 정보](plugins/dynamics.md#brickwall-limiter) |
 | Dynamics | Compressor | 갑자기 큰 구간을 부드럽게 눌러 더 편안하게 들리도록 조정 | [세부 정보](plugins/dynamics.md#compressor) |
@@ -408,6 +409,7 @@ Effect Pipeline 헤더의 **효과 체인 프리셋** 버튼을 클릭하면 프
 | Reverb | IR Reverb | 가져온 공간·장비 임펄스 응답을 사용하는 컨볼루션 리버브 | [세부 정보](plugins/reverb.md#ir-reverb) |
 | Reverb | RS Reverb | 자연스러운 확산을 갖춘 랜덤 스캐터링 리버브 | [세부 정보](plugins/reverb.md#rs-reverb) |
 | Saturation | Bandwidth Extender | 감지하거나 지정한 컷오프 위에 고주파 성분 생성 | [세부 정보](plugins/saturation.md#bandwidth-extender) |
+| Saturation | Bass Extender | 적합한 저역 성분에서 한 옥타브 낮은 베이스를 생성 | [세부 정보](plugins/saturation.md#bass-extender) |
 | Saturation | Dynamic Saturation | 스피커 콘의 비선형 변위를 시뮬레이션 | [세부 정보](plugins/saturation.md#dynamic-saturation) |
 | Saturation | Exciter | 명료도와 존재감을 높이는 하모닉 성분 추가 | [세부 정보](plugins/saturation.md#exciter) |
 | Saturation | Hard Clipping | 디지털 하드 클리핑 이펙트 | [세부 정보](plugins/saturation.md#hard-clipping) |

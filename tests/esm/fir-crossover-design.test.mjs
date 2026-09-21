@@ -3,10 +3,22 @@ import test from 'node:test';
 
 import FFT from '../../js/utils/measurement-dsp/fft.js';
 import {
+  analyzeFIRAtFrequencies,
   crossoverBandMagnitudes,
   crossoverLowWeight,
   designFIRCrossover
 } from '../../js/fir-crossover/design-core.js';
+
+test('FIR response analysis interpolates off-bin magnitudes without bin steps', () => {
+  const impulse = Float32Array.of(0.5, 0.5);
+  const frequencies = [3000, 5000];
+  const response = analyzeFIRAtFrequencies(impulse, 48000, frequencies);
+  assert.ok(response[0] > response[1]);
+  for (let index = 0; index < frequencies.length; index += 1) {
+    const exact = Math.abs(Math.cos(Math.PI * frequencies[index] / 48000));
+    assert.ok(Math.abs(response[index] - exact) < 0.08);
+  }
+});
 
 const baseConfig = {
   sampleRate: 48000,

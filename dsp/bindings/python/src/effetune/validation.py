@@ -269,7 +269,8 @@ def validate_assets(
             ),
             "assets",
         )
-    missing = sorted(name for name in definitions if name not in source)
+    missing = sorted(name for name, definition in definitions.items()
+                     if definition.get("required", True) and name not in source)
     if missing:
         raise set_validation_detail(
             AssetError(
@@ -308,13 +309,48 @@ def validate_effect_options(
         raise set_validation_detail(
             ValidationError(f"effect channel must be one of: {values}"), "channel"
         )
+    validated_parameters = validate_parameters(effect_type, parameters)
+    validated_assets = validate_assets(effect_type, assets)
+    if effect_type == "BassManagement":
+        validate_bass_management(validated_parameters, channel, validated_assets)
     return (
-        validate_parameters(effect_type, parameters),
+        validated_parameters,
         id,
         enabled,
         channel,
-        validate_assets(effect_type, assets),
+        validated_assets,
     )
+
+
+def validate_bass_management(parameters, channel, assets, channels=16):
+    """Validate the channel-role contract before a native instance can process."""
+    p = parameters
+    if channel != "all":
+        raise ValidationError("BassManagement requires channel all")
+    if p["subs"] & ~((1 << channels) - 1):
+        raise ValidationError("BassManagement Sub output is outside the processing bus")
+    if p["lfeSlope"] not in (24, 48, 96) or any(v not in (24, 48, 96) for v in p["slopes"]):
+        raise ValidationError("BassManagement slopes must be 24, 48, or 96 dB/oct")
+    if p["subs"] != 0:
+        for ch, (role, route) in enumerate(zip(p["roles"], p["routes"])):
+            if (
+                (ch >= channels and (role in (1, 2) or route != 0))
+                or (ch < channels and role <= 1 and p["subs"] & (1 << ch))
+                or route & ~p["subs"]
+                or p["routeInversions"][ch] & ~route
+                or (role in (1, 2) and route == 0)
+            ):
+                raise ValidationError(
+                    "BassManagement requires separate Main/Sub outputs and valid "
+                    "destinations for every Managed/LFE input"
+                )
+    needs_asset = p["subs"] != 0 and p["phase"] == "Linear" and any(
+        role == 1 or (role == 2 and p["lfeLowpass"]) for role in p["roles"]
+    )
+    if needs_asset and not assets.get("impulseResponse"):
+        raise AssetError("BassManagement Linear processing requires its low-pass filter asset")
+    if not needs_asset and assets.get("impulseResponse"):
+        raise AssetError("BassManagement does not use a filter asset for this configuration")
 
 
 def _encode_internal(value: Any, definition: Mapping[str, Any]) -> float:

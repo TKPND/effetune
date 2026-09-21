@@ -464,7 +464,7 @@ document.querySelector('#numeric').addEventListener('click', async () => {
 
   const convolution = [];
   const convolutionEffects = getEffectCatalog().effects.filter(
-    effect => effect.assets.length
+    effect => effect.assets.some(asset => asset.required)
   );
   for (const variant of ['baseline', 'simd']) {
     for (const effect of convolutionEffects) {

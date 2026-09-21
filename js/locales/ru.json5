@@ -398,6 +398,7 @@
   "library.job.phase.ready": "Готово к фиксации",
   "library.job.phase.cancel_requested": "Запрошена отмена",
   "library.job.phase.committing": "Фиксация",
+  "library.job.phase.starting_playback": "Запуск воспроизведения",
   "library.job.terminal.succeeded": "Завершено",
   "library.job.terminal.failed": "Ошибка",
   "library.job.terminal.cancelled": "Отменено",
@@ -444,6 +445,8 @@
   "library.confirm.mergeFolders": "Выбранная папка содержит папки, уже добавленные в библиотеку. Заменить их выбранной родительской папкой?",
   "library.confirm.deletePlaylist": "Удалить этот плейлист? Треки останутся в библиотеке.",
   "library.error.actionFailed": "Музыкальной библиотеке не удалось выполнить это действие. Повторите попытку.",
+  "library.error.playbackStartTimeout": "Не удалось начать воспроизведение: загрузка композиции остановилась. Повторите попытку.",
+  "library.error.playbackStartFailed": "Не удалось начать воспроизведение. Повторите попытку.",
   "library.error.folderAlreadyAdded": "{name} уже есть в вашей библиотеке.",
   "library.error.folderInsideExisting": "{name} уже входит в {existing}.",
   "library.recovery.initializing.title": "Запуск музыкальной библиотеки",
@@ -804,6 +807,7 @@
 
   // FIR filters
   "crosstalkCancellation.error.design": "Не удалось подготовить фильтры Crosstalk Cancellation. Проверьте четыре выбранных измерения и настройки, затем повторите попытку.",
+  "bassManagement.error.design": "Не удалось подготовить фильтры Bass Management. Уменьшите Taps и повторите попытку.",
   "firCrossover.error.design": "Не удалось рассчитать фильтры FIR Crossover. Уменьшите Taps или смягчите настройки.",
   "fiveBandFirPeq.error.design": "Не удалось рассчитать фильтр 5Band FIR PEQ. Уменьшите Taps или смягчите настройки.",
   "fiveBandFirPeq.graph.target": "Цель",

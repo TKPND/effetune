@@ -5,22 +5,22 @@
   "stimulus": "imp",
   "sampleRate": 44100,
   "channels": 4,
-  "frameCount": 4413,
+  "frameCount": 22053,
   "blockSize": 63,
   "channelMode": "all4",
   "channel": "A",
   "caseIndex": 4,
   "seed": "0xeffe7a5a",
   "params": {
-    "dl": 100
+    "dl": 500
   },
   "events": [],
   "tolerance": {
     "abs": 0.000001,
     "policy": "per-sample"
   },
-  "jsEngineHash": "6b742f960a331aa41c40be83a5cc82bd459f844d2e7e855f266292a4e32522c8",
-  "outputFloats": 17652,
-  "byteLength": 70608,
+  "jsEngineHash": "acafa3e0a877dd20f984d64e85920acb0e95d31a79cb410ac8aee171f5e92a21",
+  "outputFloats": 88212,
+  "byteLength": 352848,
   "binary": "case-005.f32"
 }

@@ -37,8 +37,8 @@ public:
   void prepare(const PrepareInfo &info) override {
     sample_rate_ = info.sampleRate;
     ring_.resize(kRingSamples);
-    capture_.resize(kRingSamples);
     payload_.resize(kMaxPayloadBytes);
+    building_payload_.resize(kMaxPayloadBytes);
     reset();
   }
 
@@ -46,10 +46,10 @@ public:
     for (float &sample : ring_) {
       sample = 0.0F;
     }
-    for (float &sample : capture_) {
-      sample = 0.0F;
-    }
     for (std::uint8_t &byte : payload_) {
+      byte = 0u;
+    }
+    for (std::uint8_t &byte : building_payload_) {
       byte = 0u;
     }
     buffer_position_ = 0u;
@@ -63,6 +63,8 @@ public:
     capture_target_samples_ = 0u;
     capture_samples_ = 0u;
     capture_buffer_position_ = 0u;
+    capture_bucket_ = 0u;
+    capture_bucket_initialized_ = false;
     capture_triggered_ = false;
     has_snapshot_ = false;
     payload_bytes_ = 0u;
@@ -73,7 +75,7 @@ public:
   void process(float *audio, std::uint32_t channel_count, std::uint32_t frame_count,
                const ProcessInfo &info) noexcept override {
     if (audio == nullptr || channel_count == 0u || frame_count == 0u || ring_.empty() ||
-        capture_.empty() || payload_.empty()) {
+        payload_.empty() || building_payload_.empty()) {
       return;
     }
 
@@ -90,7 +92,7 @@ public:
 
     detectTrigger(frame_count, info.timeSeconds);
     startCaptureIfNeeded();
-    appendAvailableCapture();
+    appendAvailableCapture(frame_count);
   }
 
   void writeTelemetry(TelemetryWriter &writer) noexcept override {
@@ -137,8 +139,8 @@ private:
     capture_target_samples_ = 0u;
     capture_samples_ = 0u;
     capture_buffer_position_ = buffer_position_;
-    has_snapshot_ = false;
-    payload_bytes_ = 0u;
+    capture_bucket_ = 0u;
+    capture_bucket_initialized_ = false;
   }
 
   void detectTrigger(std::uint32_t frame_count, double time_seconds) noexcept {
@@ -197,90 +199,108 @@ private:
     capture_target_samples_ = displaySampleCount();
     capture_samples_ = 0u;
     capture_buffer_position_ = trigger_index_;
+    capture_bucket_ = 0u;
+    capture_bucket_initialized_ = false;
     capture_triggered_ = trigger_is_real_;
+    writePayloadHeader(
+        building_payload_,
+        capture_target_samples_ <= kMaxRawSamples ? 0u : static_cast<std::uint16_t>(kM4BucketCount),
+        capture_target_samples_ <= kMaxRawSamples ? kRawEncoding : kM4Encoding);
   }
 
-  void appendRange(std::uint32_t begin, std::uint32_t end) noexcept {
-    for (std::uint32_t index = begin; index < end && capture_samples_ < capture_target_samples_;
-         ++index) {
-      capture_[capture_samples_++] = ring_[index];
+  void appendCaptureSample(float sample) noexcept {
+    const std::uint32_t capture_index = capture_samples_;
+    if (capture_target_samples_ <= kMaxRawSamples) {
+      writeF32(building_payload_.data() + kPayloadHeaderBytes + capture_index * 4u, sample);
+    } else {
+      const std::uint32_t bucket_begin = static_cast<std::uint32_t>(
+          (static_cast<std::uint64_t>(capture_bucket_) * capture_target_samples_) / kM4BucketCount);
+      const std::uint32_t bucket_end = static_cast<std::uint32_t>(
+          (static_cast<std::uint64_t>(capture_bucket_ + 1u) * capture_target_samples_) /
+          kM4BucketCount);
+      if (!capture_bucket_initialized_) {
+        capture_bucket_first_ = sample;
+        capture_bucket_minimum_ = sample;
+        capture_bucket_maximum_ = sample;
+        capture_bucket_minimum_index_ = 0u;
+        capture_bucket_maximum_index_ = 0u;
+        capture_bucket_initialized_ = true;
+      } else {
+        const std::uint32_t bucket_index = capture_index - bucket_begin;
+        if (sample < capture_bucket_minimum_) {
+          capture_bucket_minimum_ = sample;
+          capture_bucket_minimum_index_ = static_cast<std::uint8_t>(bucket_index);
+        }
+        if (sample > capture_bucket_maximum_) {
+          capture_bucket_maximum_ = sample;
+          capture_bucket_maximum_index_ = static_cast<std::uint8_t>(bucket_index);
+        }
+      }
+      capture_bucket_last_ = sample;
+      if (capture_index + 1u == bucket_end) {
+        const std::uint32_t offset = kPayloadHeaderBytes + capture_bucket_ * kM4BucketBytes;
+        writeF32(building_payload_.data() + offset, capture_bucket_first_);
+        writeF32(building_payload_.data() + offset + 4u, capture_bucket_minimum_);
+        writeF32(building_payload_.data() + offset + 8u, capture_bucket_maximum_);
+        writeF32(building_payload_.data() + offset + 12u, capture_bucket_last_);
+        building_payload_[offset + 16u] = capture_bucket_minimum_index_;
+        building_payload_[offset + 17u] = capture_bucket_maximum_index_;
+        ++capture_bucket_;
+        capture_bucket_initialized_ = false;
+      }
     }
+    ++capture_samples_;
   }
 
-  void appendAvailableCapture() noexcept {
+  void appendAvailableCapture(std::uint32_t frame_count) noexcept {
     if (!capture_active_) {
       return;
     }
-    if (buffer_position_ >= capture_buffer_position_) {
-      appendRange(capture_buffer_position_, buffer_position_);
-    } else {
-      appendRange(capture_buffer_position_, kRingSamples);
-      appendRange(0u, buffer_position_);
+
+    const std::uint32_t available = (buffer_position_ - capture_buffer_position_) & kRingMask;
+    // Consume faster than samples arrive so a delayed trigger catches up without one large call.
+    const std::uint32_t budget = frame_count < kRingSamples / 2u ? frame_count * 2u : kRingSamples;
+    std::uint32_t append_count = available < budget ? available : budget;
+    const std::uint32_t remaining = capture_target_samples_ - capture_samples_;
+    if (append_count > remaining) {
+      append_count = remaining;
     }
-    capture_buffer_position_ = buffer_position_;
+    for (std::uint32_t offset = 0u; offset < append_count; ++offset) {
+      appendCaptureSample(ring_[(capture_buffer_position_ + offset) & kRingMask]);
+    }
+    capture_buffer_position_ = (capture_buffer_position_ + append_count) & kRingMask;
 
     if (capture_samples_ >= capture_target_samples_) {
-      buildSnapshotPayload();
+      publishSnapshotPayload();
       capture_active_ = false;
     }
   }
 
-  void writePayloadHeader(std::uint16_t bucket_count, std::uint8_t encoding) noexcept {
-    writeF32(payload_.data(), sample_rate_);
-    writeU32(payload_.data() + 4u, capture_target_samples_);
-    writeU32(payload_.data() + 8u, 0u);
-    writeU16(payload_.data() + 12u, bucket_count);
-    payload_[14u] = encoding;
-    payload_[15u] = capture_triggered_ ? kTriggeredFlag : 0u;
+  void writePayloadHeader(std::vector<std::uint8_t> &payload, std::uint16_t bucket_count,
+                          std::uint8_t encoding) noexcept {
+    writeF32(payload.data(), sample_rate_);
+    writeU32(payload.data() + 4u, capture_target_samples_);
+    writeU32(payload.data() + 8u, 0u);
+    writeU16(payload.data() + 12u, bucket_count);
+    payload[14u] = encoding;
+    payload[15u] = capture_triggered_ ? kTriggeredFlag : 0u;
   }
 
-  void buildSnapshotPayload() noexcept {
+  void publishSnapshotPayload() noexcept {
     if (capture_target_samples_ <= kMaxRawSamples) {
-      writePayloadHeader(0u, kRawEncoding);
-      for (std::uint32_t index = 0u; index < capture_target_samples_; ++index) {
-        writeF32(payload_.data() + kPayloadHeaderBytes + index * 4u, capture_[index]);
-      }
       payload_bytes_ =
           static_cast<std::uint16_t>(kPayloadHeaderBytes + capture_target_samples_ * 4u);
     } else {
-      writePayloadHeader(static_cast<std::uint16_t>(kM4BucketCount), kM4Encoding);
-      for (std::uint32_t bucket = 0u; bucket < kM4BucketCount; ++bucket) {
-        const std::uint32_t begin = static_cast<std::uint32_t>(
-            (static_cast<std::uint64_t>(bucket) * capture_target_samples_) / kM4BucketCount);
-        const std::uint32_t end = static_cast<std::uint32_t>(
-            (static_cast<std::uint64_t>(bucket + 1u) * capture_target_samples_) / kM4BucketCount);
-        float minimum = capture_[begin];
-        float maximum = minimum;
-        std::uint32_t minimum_index = begin;
-        std::uint32_t maximum_index = begin;
-        for (std::uint32_t index = begin + 1u; index < end; ++index) {
-          const float sample = capture_[index];
-          if (sample < minimum) {
-            minimum = sample;
-            minimum_index = index;
-          }
-          if (sample > maximum) {
-            maximum = sample;
-            maximum_index = index;
-          }
-        }
-        const std::uint32_t offset = kPayloadHeaderBytes + bucket * kM4BucketBytes;
-        writeF32(payload_.data() + offset, capture_[begin]);
-        writeF32(payload_.data() + offset + 4u, minimum);
-        writeF32(payload_.data() + offset + 8u, maximum);
-        writeF32(payload_.data() + offset + 12u, capture_[end - 1u]);
-        payload_[offset + 16u] = static_cast<std::uint8_t>(minimum_index - begin);
-        payload_[offset + 17u] = static_cast<std::uint8_t>(maximum_index - begin);
-      }
       payload_bytes_ =
           static_cast<std::uint16_t>(kPayloadHeaderBytes + kM4BucketCount * kM4BucketBytes);
     }
+    payload_.swap(building_payload_);
     has_snapshot_ = true;
   }
 
   std::vector<float> ring_;
-  std::vector<float> capture_;
   std::vector<std::uint8_t> payload_;
+  std::vector<std::uint8_t> building_payload_;
   float sample_rate_ = 0.0F;
   float active_display_time_ = 0.01F;
   float active_trigger_level_ = 0.0F;
@@ -291,6 +311,13 @@ private:
   std::uint32_t capture_target_samples_ = 0u;
   std::uint32_t capture_samples_ = 0u;
   std::uint32_t capture_buffer_position_ = 0u;
+  std::uint32_t capture_bucket_ = 0u;
+  float capture_bucket_first_ = 0.0F;
+  float capture_bucket_minimum_ = 0.0F;
+  float capture_bucket_maximum_ = 0.0F;
+  float capture_bucket_last_ = 0.0F;
+  std::uint8_t capture_bucket_minimum_index_ = 0u;
+  std::uint8_t capture_bucket_maximum_index_ = 0u;
   std::uint16_t payload_bytes_ = 0u;
   double last_trigger_time_ = 0.0;
   double last_auto_sweep_time_ = 0.0;
@@ -299,6 +326,7 @@ private:
   bool trigger_is_real_ = false;
   bool has_processed_trigger_ = false;
   bool capture_active_ = false;
+  bool capture_bucket_initialized_ = false;
   bool capture_triggered_ = false;
   bool has_snapshot_ = false;
   bool parameter_state_initialized_ = false;

@@ -11,6 +11,7 @@ test('Web folder services select an FSA directory and reconnect its persisted pe
   const clientCalls = [];
   let persisted = 0;
   let permissionRequests = 0;
+  const interactionStates = [];
   const handle = {
     kind: 'directory',
     name: 'Music',
@@ -52,11 +53,16 @@ test('Web folder services select an FSA directory and reconnect its persisted pe
   });
   const store = new WebFolderHandleStore({ indexedDB });
   await store.put({ folderId: 'folder-fsa', handle });
-  await services.folderService.requestFolderAccess('folder-fsa');
+  await services.folderService.requestFolderAccess('folder-fsa', {
+    onUserInteractionChange(active) {
+      interactionStates.push(active);
+    }
+  });
   store.close();
 
   assert.deepEqual(pickerRequests, [{ mode: 'read', startIn: 'music', id: 'effetune-library-v2' }]);
   assert.equal(permissionRequests, 1);
+  assert.deepEqual(interactionStates, [true, false]);
   assert.equal(persisted, 2);
   assert.deepEqual(clientCalls, [
     ['addFolder', {
@@ -68,6 +74,80 @@ test('Web folder services select an FSA directory and reconnect its persisted pe
     }],
     ['requestFolderAccess', { folderId: 'folder-fsa', handle, displayName: 'Music' }]
   ]);
+});
+
+test('Web folder access continues when the best-effort persistence request does not settle', async () => {
+  const handle = { kind: 'directory', name: 'Music' };
+  const calls = [];
+  const services = createWebLibraryServices({
+    client: {
+      async requestFolderAccess(request) {
+        calls.push(request);
+        return { folder: { id: request.folderId } };
+      }
+    },
+    windowRef: {
+      navigator: { storage: { persist: () => new Promise(() => {}) } }
+    },
+    persistTimeoutMs: 0
+  });
+
+  const result = await services.folderService.requestFolderAccess('folder-1', { handle });
+
+  assert.equal(result.folder.id, 'folder-1');
+  assert.deepEqual(calls, [{ folderId: 'folder-1', handle, displayName: 'Music' }]);
+});
+
+test('cancelled Web folder access does not request permission after a saved-handle lookup settles', async () => {
+  let resolveHandle;
+  const handleRead = new Promise(resolve => { resolveHandle = resolve; });
+  let permissionQueries = 0;
+  let permissionRequests = 0;
+  let pickerRequests = 0;
+  const interactionStates = [];
+  const handle = {
+    kind: 'directory',
+    name: 'Music',
+    queryPermission() {
+      permissionQueries += 1;
+      return 'prompt';
+    },
+    requestPermission() {
+      permissionRequests += 1;
+      return 'granted';
+    }
+  };
+  const services = createWebLibraryServices({
+    client: {
+      requestFolderAccess() {
+        throw new Error('Cancelled folder access reached the client');
+      }
+    },
+    handleStore: { get: () => handleRead },
+    windowRef: {
+      showDirectoryPicker() {
+        pickerRequests += 1;
+        return handle;
+      }
+    }
+  });
+  const controller = new AbortController();
+  const cancellation = new Error('Folder access cancelled');
+  const access = services.folderService.requestFolderAccess('folder-1', {
+    signal: controller.signal,
+    onUserInteractionChange(active) {
+      interactionStates.push(active);
+    }
+  });
+
+  controller.abort(cancellation);
+  resolveHandle(handle);
+
+  await assert.rejects(access, error => error === cancellation);
+  assert.equal(permissionQueries, 0);
+  assert.equal(permissionRequests, 0);
+  assert.equal(pickerRequests, 0);
+  assert.deepEqual(interactionStates, []);
 });
 
 test('Web folder services connect non-FSA directory files as a bounded session source', async () => {

@@ -16,7 +16,7 @@ Applies saturation whose drive responds to the input level.
 - Seeded: **no**
 - Catalog sample rates: **not declared; this does not mean unsupported**
 - Assets: **none**
-- Catalog-declared latency: **zero**
+- Catalog-declared latency: **dynamic**; depends on oversampling
 
 | Semantic name | Python constructor keyword | Type / count | Default | Unit | Range or values |
 |---|---|---:|---|---|---|
@@ -29,6 +29,7 @@ Applies saturation whose drive responds to the input level.
 | `distortionMix` | `distortion_mix` | number / 1 | `100` | % | 0 … 100 |
 | `coneMotionMix` | `cone_motion_mix` | number / 1 | `20` | % | 0 … 100 |
 | `outputGain` | `output_gain` | number / 1 | `0` | dB | -18 … 18 |
+| `oversampling` | `oversampling` | integer / 1 | `1` | Not declared in catalog | `1`, `2`, `4`, `8` |
 
 
 
@@ -39,6 +40,8 @@ Applies saturation whose drive responds to the input level.
 ## Dynamic Saturation
 
 A physics-based effect that simulates the nonlinear displacement of speaker cones under different conditions. By modeling the mechanical behavior of a speaker and then applying saturation to that displacement, it creates a unique form of distortion that responds dynamically to your music.
+
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
 
 ### Listening Enhancement Guide
 - **Subtle Enhancement:**

@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "type": "HarmonicDistortionPlugin",
+  "id": "oversampling-4x",
+  "stimulus": "noise",
+  "sampleRate": 48000,
+  "channels": 2,
+  "frameCount": 257,
+  "blockSize": 63,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 9,
+  "seed": "0xeffe7a57",
+  "params": {
+    "h2": 2,
+    "h3": 3,
+    "h4": 0.5,
+    "h5": 0.3,
+    "sn": 0.5,
+    "os": 4
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.00001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "91118cdaac28b706a21388771dd3fbdc8320c364063714c0bbea2e3576c04f0b",
+  "outputFloats": 514,
+  "byteLength": 2056,
+  "binary": "case-010.f32"
+}

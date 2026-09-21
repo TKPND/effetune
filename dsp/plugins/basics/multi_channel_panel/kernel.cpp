@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 namespace effetune::plugins::basics {
@@ -16,6 +17,8 @@ namespace {
 constexpr std::uint16_t kTapMultiChannelLevels = 10u;
 constexpr std::uint16_t kTelemetryVersion = 1u;
 constexpr std::uint32_t kMaximumChannels = 16u;
+constexpr std::uint32_t kWindowBins = 32u;
+constexpr double kWindowRateHz = 30.0;
 constexpr std::uint32_t kPayloadHeaderBytes = 4u;
 constexpr std::uint32_t kPayloadRecordBytes = 8u;
 constexpr std::uint32_t kMaximumPayloadBytes =
@@ -34,26 +37,33 @@ public:
         std::isfinite(info.sampleRate) && info.sampleRate > 0.0F ? info.sampleRate : 48000.0F;
     const double requested_delay = std::ceil(static_cast<double>(sample_rate_) * 0.03);
     delay_capacity_ = requested_delay < 1.0 ? 1u : static_cast<std::uint32_t>(requested_delay);
-    const double requested_peaks = std::floor(static_cast<double>(sample_rate_) / 30.0);
-    peak_capacity_ = requested_peaks < 1.0 ? 1u : static_cast<std::uint32_t>(requested_peaks);
+    const double desired_bin_frames =
+        static_cast<double>(sample_rate_) / (kWindowRateHz * kWindowBins);
+    if (desired_bin_frames >= static_cast<double>(std::numeric_limits<std::uint32_t>::max())) {
+      frames_per_bin_ = std::numeric_limits<std::uint32_t>::max();
+    } else {
+      frames_per_bin_ =
+          desired_bin_frames > 1.0 ? static_cast<std::uint32_t>(desired_bin_frames) : 1u;
+      if (static_cast<double>(frames_per_bin_) < desired_bin_frames)
+        ++frames_per_bin_;
+    }
     ramp_frames_ = std::max(
         1u, static_cast<std::uint32_t>(std::ceil(static_cast<double>(sample_rate_) * 0.005)));
     delay_lines_.resize(static_cast<std::size_t>(kMaximumChannels) * delay_capacity_);
-    peak_windows_.resize(static_cast<std::size_t>(kMaximumChannels) * peak_capacity_);
     reset();
   }
 
   void reset() noexcept override {
     for (float &sample : delay_lines_)
       sample = 0.0F;
-    for (float &peak : peak_windows_)
-      peak = 0.0F;
+    for (auto &bin : peak_bins_)
+      bin.fill(0.0F);
     write_indices_.fill(0u);
     window_peaks_.fill(0.0F);
     effectively_muted_.fill(0u);
     active_channels_ = 0u;
-    blocks_per_window_ = 0u;
-    block_index_ = 0u;
+    current_bin_ = 0u;
+    current_bin_frames_ = 0u;
     telemetry_channels_ = 0u;
     control_initialized_.fill(0u);
     ramp_remaining_.fill(0u);
@@ -65,21 +75,10 @@ public:
       return;
     const std::uint32_t channels =
         channel_count < kMaximumChannels ? channel_count : kMaximumChannels;
-    std::uint32_t blocks_per_window = static_cast<std::uint32_t>(
-        std::floor(static_cast<double>(sample_rate_) / 30.0 / static_cast<double>(frame_count)));
-    if (blocks_per_window == 0u)
-      blocks_per_window = 1u;
-    if (blocks_per_window > peak_capacity_)
-      blocks_per_window = peak_capacity_;
-
     if (active_channels_ != channels) {
       clearDelayState();
       clearPeakState();
       active_channels_ = channels;
-    }
-    if (blocks_per_window_ != blocks_per_window) {
-      clearPeakState();
-      blocks_per_window_ = blocks_per_window;
     }
 
     bool any_solo = false;
@@ -110,14 +109,23 @@ public:
       float *channel_audio = audio + static_cast<std::size_t>(channel) * frame_count;
       float *delay_line = delay_lines_.data() + static_cast<std::size_t>(channel) * delay_capacity_;
       std::uint32_t write_index = write_indices_[channel];
-      float block_peak = 0.0F;
+      std::uint32_t peak_bin = current_bin_;
+      std::uint32_t peak_bin_frames = current_bin_frames_;
+      float bin_peak = peak_bins_[peak_bin][channel];
 
       for (std::uint32_t frame = 0u; frame < frame_count; ++frame) {
+        if (peak_bin_frames >= frames_per_bin_) {
+          peak_bins_[peak_bin][channel] = bin_peak;
+          peak_bin = (peak_bin + 1u) % kWindowBins;
+          peak_bin_frames = 0u;
+          bin_peak = 0.0F;
+        }
         advanceChannel(channel);
         const float input = channel_audio[frame];
         const float absolute = input < 0.0F ? -input : input;
-        if (absolute > block_peak)
-          block_peak = absolute;
+        if (absolute > bin_peak)
+          bin_peak = absolute;
+        ++peak_bin_frames;
         const float processed =
             effectively_muted ? 0.0F
                               : static_cast<float>(static_cast<double>(input) * gains_[channel]);
@@ -127,21 +135,10 @@ public:
           write_index = 0u;
       }
       write_indices_[channel] = write_index;
-
-      float *peak_window =
-          peak_windows_.data() + static_cast<std::size_t>(channel) * peak_capacity_;
-      peak_window[block_index_] = block_peak;
-      float window_peak = 0.0F;
-      for (std::uint32_t index = 0u; index < blocks_per_window_; ++index) {
-        if (peak_window[index] > window_peak)
-          window_peak = peak_window[index];
-      }
-      window_peaks_[channel] = window_peak;
+      peak_bins_[peak_bin][channel] = bin_peak;
     }
 
-    ++block_index_;
-    if (block_index_ == blocks_per_window_)
-      block_index_ = 0u;
+    advancePeakTimeline(frame_count);
     telemetry_channels_ = channels;
   }
 
@@ -151,8 +148,15 @@ public:
     payload_.fill(0u);
     payload_[0] = static_cast<std::uint8_t>(telemetry_channels_);
     for (std::uint32_t channel = 0u; channel < telemetry_channels_; ++channel) {
+      float window_peak = 0.0F;
+      for (std::uint32_t bin = 0u; bin < kWindowBins; ++bin) {
+        const float bin_peak = peak_bins_[bin][channel];
+        if (bin_peak > window_peak)
+          window_peak = bin_peak;
+      }
+      window_peaks_[channel] = window_peak;
       const std::uint32_t offset = kPayloadHeaderBytes + channel * kPayloadRecordBytes;
-      writeF32(payload_.data() + offset, window_peaks_[channel]);
+      writeF32(payload_.data() + offset, window_peak);
       payload_[offset + 4u] = effectively_muted_[channel];
     }
     const std::uint16_t payload_bytes =
@@ -210,15 +214,31 @@ private:
   }
 
   void clearPeakState() noexcept {
-    for (float &peak : peak_windows_)
-      peak = 0.0F;
+    for (auto &bin : peak_bins_)
+      bin.fill(0.0F);
     window_peaks_.fill(0.0F);
-    block_index_ = 0u;
+    current_bin_ = 0u;
+    current_bin_frames_ = 0u;
+  }
+
+  void advancePeakTimeline(std::uint32_t frame_count) noexcept {
+    std::uint32_t remaining_frames = frame_count;
+    while (remaining_frames > 0u) {
+      if (current_bin_frames_ >= frames_per_bin_) {
+        current_bin_ = (current_bin_ + 1u) % kWindowBins;
+        current_bin_frames_ = 0u;
+      }
+      const std::uint32_t available_frames = frames_per_bin_ - current_bin_frames_;
+      const std::uint32_t segment_frames =
+          remaining_frames < available_frames ? remaining_frames : available_frames;
+      current_bin_frames_ += segment_frames;
+      remaining_frames -= segment_frames;
+    }
   }
 
   float sample_rate_ = 48000.0F;
   std::vector<float> delay_lines_;
-  std::vector<float> peak_windows_;
+  std::array<std::array<float, kMaximumChannels>, kWindowBins> peak_bins_{};
   std::array<std::uint32_t, kMaximumChannels> write_indices_{};
   std::array<float, kMaximumChannels> window_peaks_{};
   std::array<std::uint8_t, kMaximumChannels> effectively_muted_{};
@@ -232,10 +252,10 @@ private:
   std::array<std::uint32_t, kMaximumChannels> ramp_remaining_{};
   std::array<std::uint8_t, kMaximumPayloadBytes> payload_{};
   std::uint32_t delay_capacity_ = 1u;
-  std::uint32_t peak_capacity_ = 1u;
+  std::uint32_t frames_per_bin_ = 1u;
   std::uint32_t active_channels_ = 0u;
-  std::uint32_t blocks_per_window_ = 0u;
-  std::uint32_t block_index_ = 0u;
+  std::uint32_t current_bin_ = 0u;
+  std::uint32_t current_bin_frames_ = 0u;
   std::uint32_t telemetry_channels_ = 0u;
   std::uint32_t ramp_frames_ = 240u;
 };

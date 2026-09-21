@@ -40,6 +40,7 @@ import {
 } from './rolling-pcm-policy.js';
 
 const MEDIA_CANDIDATE_READY_TIMEOUT_MS = 15000;
+const MEDIA_START_TIMEOUT_MS = 15000;
 const FULL_DECODE_RESERVATION_PROFILE = Object.freeze({
   compressedSourceByteCap: ROLLING_COMPRESSED_SOURCE_BYTE_CAP,
   currentPcmByteCap: FULL_BUFFER_PCM_BYTE_CAP,
@@ -1593,6 +1594,7 @@ export class AudioContextManager {
     const prepared = { playableTrack, descriptor: playbackDescriptor };
     let candidate = null;
     let preflight = null;
+    let mediaStart = null;
     try {
       candidate = await this.prepareMediaTransitionCandidate(
         prepared,
@@ -1623,8 +1625,16 @@ export class AudioContextManager {
       };
 
       let commitIntent = applyTransportIntent();
-      if (commitIntent.transportIntent.isPlaying) await candidate.element.play();
-      if (isStale?.() || candidate.element.error) return false;
+      if (commitIntent.transportIntent.isPlaying) {
+        mediaStart = this.startMediaElementPlayback(candidate.element, {
+          isCurrent: () => isStale?.() !== true,
+          forcePauseOnLateResolution: true
+        });
+        await mediaStart.finished;
+      }
+      if (isStale?.() || candidate.element.error || candidate.mediaObservation?.failure || mediaStart?.failed) {
+        return false;
+      }
       commitIntent = applyTransportIntent();
 
       preflight = this.prepareMutedCandidateCommit(candidate, true);
@@ -1678,6 +1688,8 @@ export class AudioContextManager {
       if (preflight && !candidate?.committed) {
         this.rollbackPlayerSourceOwnership(preflight.ownership);
       }
+      mediaStart?.dispose();
+      candidate?.mediaObservation?.dispose();
       if (candidate && !candidate.committed) this.cleanupPreparedTransitionCandidate(candidate);
     }
   }
@@ -2916,6 +2928,7 @@ export class AudioContextManager {
     const intendedPosition = Number.isFinite(audioElement.currentTime) ? audioElement.currentTime : 0;
     let stage = null;
     let pendingActivation = null;
+    let mediaStart = null;
 
     try {
       stage = await this.stagePlaybackActivation('html-media', sourceGeneration, intendedPosition);
@@ -2939,7 +2952,13 @@ export class AudioContextManager {
         invalid: false
       };
       this.pendingMediaActivation = pendingActivation;
-      await audioElement.play();
+      mediaStart = this.startMediaElementPlayback(audioElement, {
+        isCurrent: () => this.stopRequestToken === stopToken &&
+          this.audioPlayer.audioElement === audioElement &&
+          this.mediaSource === mediaSource &&
+          this.mediaSourceGeneration === mediaSourceGeneration
+      });
+      await mediaStart.finished;
       if (this.stopRequestToken !== stopToken || this.audioPlayer.audioElement !== audioElement) {
         if (this.pendingMediaActivation === pendingActivation) {
           this.pendingMediaActivation = null;
@@ -2964,6 +2983,7 @@ export class AudioContextManager {
             this.mediaSourceGeneration === mediaSourceGeneration &&
             audioElement.paused === false &&
             audioElement.ended !== true &&
+            mediaStart?.failed !== true &&
             this.isPipelineSourceConnected(mediaSource),
           commit: () => {
             if (!this.setPrivatePipelineSourceMuted(mediaSource, false)) {
@@ -2984,9 +3004,9 @@ export class AudioContextManager {
             }
           }
         });
-        if (!result.activated) return false;
+        if (!result.activated || mediaStart?.failed) return false;
       } else {
-        if (this.pendingMediaActivation !== pendingActivation) return false;
+        if (this.pendingMediaActivation !== pendingActivation || mediaStart?.failed) return false;
         if (!this.ensurePipelineSourceConnected(mediaSource)) {
           this.pendingMediaActivation = null;
           try { audioElement.pause(); } catch (_) { /* ignore */ }
@@ -3023,6 +3043,7 @@ export class AudioContextManager {
       }, 'Audio element playback failed');
       return false;
     } finally {
+      mediaStart?.dispose();
       this.releasePlaybackActivationStage(stage);
     }
   }
@@ -4850,7 +4871,8 @@ export class AudioContextManager {
     targetIndex = null,
     userInitiated = true,
     preparedRequest = null,
-    automaticMovePlan = null
+    automaticMovePlan = null,
+    transitionOptions = null
   ) {
     const nextTrackIndex = this.getTrackIndexForPlaybackEntry(nextTrack, targetIndex, -1);
     const plan = automaticMovePlan ?? preparedRequest?.automaticMovePlan ?? null;
@@ -4871,7 +4893,8 @@ export class AudioContextManager {
         this.nextBuffer = null;
         this.activeNextBufferRequest = null;
       }
-      const isStale = () => !this.isActiveTransitionRequest(transitionRequest) ||
+      const isStale = () => transitionOptions?.signal?.aborted === true ||
+        !this.isActiveTransitionRequest(transitionRequest) ||
         (plan && this.audioPlayer.playbackManager?.isPlannedAutomaticMoveCurrent?.(plan) !== true);
       const prepared = await this.prepareTrackTransitionRequest(
         nextTrack,
@@ -4882,11 +4905,13 @@ export class AudioContextManager {
         transitionRequest
       );
       if (!prepared || isStale()) return false;
+      transitionOptions?.onStage?.('mediaReady');
       const activated = await this.activatePreparedTrackTransition(
         prepared,
         transitionRequest,
         userInitiated,
-        plan
+        plan,
+        transitionOptions
       );
       if (activated === false && !isStale()) {
         if (plan) {
@@ -4984,18 +5009,27 @@ export class AudioContextManager {
       if (!candidate || isStale()) return false;
       return this.commitPreparedTrackCandidate(candidate, prepared, null, isStale, false);
     } finally {
+      candidate?.mediaObservation?.dispose();
       if (candidate && !candidate.committed) this.cleanupPreparedTransitionCandidate(candidate);
     }
   }
 
-  async activatePreparedTrackTransition(prepared, transitionRequest, userInitiated, plan) {
-    const isStale = () => !this.isActiveTransitionRequest(transitionRequest) ||
+  async activatePreparedTrackTransition(
+    prepared,
+    transitionRequest,
+    userInitiated,
+    plan,
+    transitionOptions = null
+  ) {
+    const isStale = () => transitionOptions?.signal?.aborted === true ||
+      !this.isActiveTransitionRequest(transitionRequest) ||
       (plan && this.audioPlayer.playbackManager?.isPlannedAutomaticMoveCurrent?.(plan) !== true);
     const resumed = await this.resumePlaybackAudioContext(userInitiated);
     if (!resumed || isStale()) return false;
 
     let candidate = null;
     let stage = null;
+    let mediaStart = null;
     try {
       candidate = prepared.decisionRecord.committedMode === 'buffer'
         ? this.prepareBufferTransitionCandidate(prepared, transitionRequest.sourceGeneration)
@@ -5007,6 +5041,7 @@ export class AudioContextManager {
             isStale
           );
       if (!candidate || isStale()) return false;
+      transitionOptions?.onStage?.('activation');
       stage = await this.stagePlaybackActivation(
         candidate.backend,
         transitionRequest.sourceGeneration,
@@ -5014,14 +5049,22 @@ export class AudioContextManager {
         prepared
       );
       if (isStale()) return false;
+      if (candidate.mediaObservation?.failure) throw candidate.mediaObservation.failure;
 
       if (candidate.mode === 'bufferSource') {
         candidate.startTime = this.audioPlayer.audioContext.currentTime;
         candidate.source.start(candidate.startTime);
       } else if (candidate.mode === 'audioElement') {
-        await candidate.element.play();
+        transitionOptions?.onStage?.('mediaStart');
+        mediaStart = this.startMediaElementPlayback(candidate.element, {
+          ...(transitionOptions ?? {}),
+          isCurrent: () => !isStale(),
+          forcePauseOnLateResolution: true
+        });
+        await mediaStart.finished;
       }
-      if (isStale() || candidate.ended === true || candidate.element?.error) return false;
+      if (isStale() || candidate.ended === true || candidate.element?.error ||
+          candidate.mediaObservation?.failure || mediaStart?.failed) return false;
 
       const commit = () => {
         if (!this.commitPreparedTrackCandidate(candidate, prepared, plan, isStale, true)) {
@@ -5035,6 +5078,7 @@ export class AudioContextManager {
           isCandidateCurrent: value => value === candidate && !candidate.cleaned && !isStale() &&
             candidate.ended !== true && candidate.element?.ended !== true &&
             !candidate.element?.error &&
+            mediaStart?.failed !== true &&
             (candidate.mode !== 'rollingPcm' ||
               (candidate.transport?.prepared === true && !candidate.transport.failed &&
                 !candidate.transport.disposed)) &&
@@ -5049,8 +5093,13 @@ export class AudioContextManager {
       if (!isStale()) {
         console.error('[AudioContextManager] Prepared track transition failed:', error);
       }
+      if (transitionOptions?.throwOnError === true && error?.mediaStartFailure === true && !isStale()) {
+        throw error;
+      }
       return false;
     } finally {
+      mediaStart?.dispose();
+      candidate?.mediaObservation?.dispose();
       if (candidate && !candidate.committed) this.cleanupPreparedTransitionCandidate(candidate);
       this.releasePlaybackActivationStage(stage);
     }
@@ -5159,6 +5208,8 @@ export class AudioContextManager {
         committed: false,
         cleaned: false
       };
+      candidate.mediaObservation = this.observeMediaCandidate(element, isStale);
+      if (candidate.mediaObservation.failure) throw candidate.mediaObservation.failure;
       if (!this.connectPrivatePipelineSource(source)) {
         this.releasePipelineSource(source);
         throw new Error('private-media-candidate-connect-failed');
@@ -5217,6 +5268,132 @@ export class AudioContextManager {
         settle(validate());
       }
     });
+  }
+
+  observeMediaCandidate(element, isCurrent) {
+    let closed = false;
+    let failure = null;
+    const fail = error => {
+      if (closed || failure) return;
+      failure = error;
+      if (isCurrent?.() !== false) {
+        try { element.pause(); } catch (_) { /* already stopped */ }
+      }
+    };
+    const onError = () => fail(mediaStartError(
+      'mediaStartFailed',
+      'Media playback could not be started'
+    ));
+    const onEnded = () => fail(mediaStartError(
+      'mediaStartFailed',
+      'Media playback ended before it could be started'
+    ));
+    const observation = {
+      get failure() { return failure; },
+      dispose() {
+        if (closed) return;
+        closed = true;
+        element.removeEventListener('error', onError);
+        element.removeEventListener('ended', onEnded);
+      }
+    };
+    element.addEventListener('error', onError);
+    element.addEventListener('ended', onEnded);
+    if (element.error) onError();
+    else if (element.ended === true) onEnded();
+    return observation;
+  }
+
+  startMediaElementPlayback(element, {
+    signal = null,
+    isCurrent = null,
+    forcePauseOnLateResolution = false
+  } = {}) {
+    let closed = false;
+    let settled = false;
+    let failure = null;
+    let timeoutId = null;
+    let resolveStart;
+    let rejectStart;
+    const removeListeners = () => {
+      element.removeEventListener('error', onError);
+      element.removeEventListener('ended', onEnded);
+      signal?.removeEventListener?.('abort', onAbort);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      timeoutId = null;
+    };
+    const fail = (error, forcePause = false) => {
+      if (closed || failure) return;
+      failure = error;
+      if (forcePause || isCurrent?.() !== false) {
+        try { element.pause(); } catch (_) { /* already stopped */ }
+      }
+      if (!settled) {
+        settled = true;
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        timeoutId = null;
+        rejectStart(error);
+      }
+    };
+    const onError = () => fail(mediaStartError(
+      'mediaStartFailed',
+      'Media playback could not be started'
+    ));
+    const onEnded = () => fail(mediaStartError(
+      'mediaStartFailed',
+      'Media playback ended before it could be started'
+    ));
+    const onAbort = () => fail(mediaStartAbortError(signal?.reason), true);
+    const finished = new Promise((resolve, reject) => {
+      resolveStart = resolve;
+      rejectStart = reject;
+    });
+    const attempt = {
+      finished,
+      get failed() { return failure !== null; },
+      dispose() {
+        if (closed) return;
+        closed = true;
+        removeListeners();
+      }
+    };
+
+    element.addEventListener('error', onError);
+    element.addEventListener('ended', onEnded);
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return attempt;
+    }
+    if (element.error) {
+      onError();
+      return attempt;
+    }
+    if (element.ended === true) {
+      onEnded();
+      return attempt;
+    }
+    timeoutId = setTimeout(() => fail(mediaStartError(
+      'mediaStartTimeout',
+      'Media playback did not start before the deadline'
+    )), MEDIA_START_TIMEOUT_MS);
+    try {
+      Promise.resolve(element.play()).then(() => {
+        if (closed || settled || failure) {
+          if (failure && (forcePauseOnLateResolution || isCurrent?.() !== false)) {
+            try { element.pause(); } catch (_) { /* already stopped */ }
+          }
+          return;
+        }
+        settled = true;
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        timeoutId = null;
+        resolveStart();
+      }, error => fail(normalizeMediaStartError(error)));
+    } catch (error) {
+      fail(normalizeMediaStartError(error));
+    }
+    return attempt;
   }
 
   prepareMutedCandidateCommit(candidate, startPlayback) {
@@ -5278,7 +5455,7 @@ export class AudioContextManager {
 
   commitPreparedTrackCandidate(candidate, prepared, plan, isStale, startPlayback) {
     const playbackManager = this.audioPlayer.playbackManager;
-    if (isStale() || candidate.cleaned || candidate.element?.error ||
+    if (isStale() || candidate.cleaned || candidate.element?.error || candidate.mediaObservation?.failure ||
         (candidate.mode === 'rollingPcm' &&
           (!candidate.transport?.prepared || candidate.transport.failed ||
             candidate.transport.disposed)) ||
@@ -5431,6 +5608,7 @@ export class AudioContextManager {
   cleanupPreparedTransitionCandidate(candidate) {
     if (!candidate || candidate.cleaned || candidate.committed) return;
     candidate.cleaned = true;
+    candidate.mediaObservation?.dispose();
     if (candidate.mode === 'bufferSource') {
       candidate.source.onended = null;
       this.releasePipelineSource(candidate.source, true);
@@ -5566,8 +5744,8 @@ export class AudioContextManager {
   /**
    * Seamless transition to a track (for previous/next track functionality)
    */
-  async seamlessTransition(track, targetIndex = null, userInitiated = true) {
-    return this.transitionToNextTrack(track, targetIndex, userInitiated);
+  async seamlessTransition(track, targetIndex = null, userInitiated = true, transitionOptions = null) {
+    return this.transitionToNextTrack(track, targetIndex, userInitiated, null, null, transitionOptions);
   }
   
   // ===== CLEANUP =====
@@ -5855,6 +6033,27 @@ function isBlobObject(value) {
   if (typeof Blob !== 'undefined' && value instanceof Blob) return true;
   if (typeof File !== 'undefined' && value instanceof File) return true;
   return Number.isFinite(value.size) && typeof value.arrayBuffer === 'function';
+}
+
+function mediaStartError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  error.mediaStartFailure = true;
+  return error;
+}
+
+function mediaStartAbortError(reason) {
+  const error = mediaStartError('mediaStartAborted', 'Media playback start was canceled');
+  error.name = 'AbortError';
+  if (reason !== undefined) error.cause = reason;
+  return error;
+}
+
+function normalizeMediaStartError(error) {
+  if (error?.mediaStartFailure === true) return error;
+  const normalized = mediaStartError('mediaStartFailed', 'Media playback could not be started');
+  if (error !== undefined) normalized.cause = error;
+  return normalized;
 }
 
 function toOwnedArrayBuffer(value) {

@@ -373,10 +373,9 @@ test('catalog onTrackEnded identifies the command as an ended transition', async
   });
 });
 
-test('an offline provisional first occurrence waits for the published sequence and starts the next playable track', async () => {
+test('an offline provisional first occurrence fails without starting a later track', async () => {
   await withPlaybackHarness(async ({ audioPlayer, calls, manager }) => {
     const sourceCalls = [];
-    let provisionalResolutionScope;
     const receipt = {
       operationId: 'offline-first',
       provisionalEntry: {
@@ -385,17 +384,14 @@ test('an offline provisional first occurrence waits for the published sequence a
         title: 'Offline'
       }
     };
-    const provisional = await manager.installBulkPlayProvisional({
+    await assert.rejects(manager.installBulkPlayProvisional({
       receipt,
       service: {},
-      async resolveSource(entry, resolutionScope) {
-        provisionalResolutionScope = resolutionScope;
+      async resolveSource(entry) {
         sourceCalls.push(`provisional:${entry.trackUid}`);
         throw Object.assign(new Error('offline'), { code: 'sourceUnavailable' });
       }
-    });
-    assert.equal(provisional.accepted, true);
-    assert.equal(provisional.deferred, true);
+    }), error => error.code === 'sourceUnavailable');
     assert.equal(calls.some(call => call[0] === 'seamlessTransition'), false);
 
     const sequence = new CatalogSequence({
@@ -406,7 +402,6 @@ test('an offline provisional first occurrence waits for the published sequence a
         provisionalOrdinal: 0
       }),
       async resolveSource(request) {
-        assert.equal(request.resolutionScope, provisionalResolutionScope);
         sourceCalls.push(`published:${request.trackUid}`);
         if (request.trackUid === 'track-0') {
           throw Object.assign(new Error('offline'), { code: 'sourceUnavailable' });
@@ -421,17 +416,13 @@ test('an offline provisional first occurrence waits for the published sequence a
       currentOrdinal: 0
     });
 
-    assert.equal(published.accepted, true);
-    assert.equal(published.playbackAccepted, true);
-    assert.equal(published.skippedCount, 1);
-    assert.deepEqual(sourceCalls, [
-      'provisional:track-0',
-      'published:track-0',
-      'published:track-1'
-    ]);
-    assert.equal(audioPlayer.stateManager.state.currentTrackIndex, 1);
-    assert.equal(audioPlayer.stateManager.state.currentTrack.libraryTrackId, 'track-1');
-    assert.deepEqual(calls.filter(call => call[0] === 'loadTrack').map(call => call[2]), [1]);
+    assert.deepEqual(published, { accepted: false, reason: 'playbackStartFailed' });
+    assert.deepEqual(sourceCalls, ['provisional:track-0']);
+    assert.equal(audioPlayer.stateManager.state.currentTrack, null);
+    assert.equal(calls.some(call => call[0] === 'loadTrack'), false);
+    assert.equal(manager.canUndoSessionTransport(), false);
+    assert.equal(await manager.finishBulkPlayTerminal('offline-first'), true);
+    assert.equal(manager.activeBulkPlay.phase, 'terminal');
   });
 });
 
@@ -941,7 +932,52 @@ test('empty-queue Play Next and Queue share one folder prompt per action', async
   });
 });
 
-test('bulk Play keeps its provisional singleton on cancel and publishes without position reset', async () => {
+test('cancelling an uncommitted bulk candidate preserves the old media position with the real StateManager', async () => {
+  await withPlaybackHarness(async ({ audioPlayer, calls, manager }) => {
+    manager.loadFiles(['/music/previous.flac']);
+    const previousTrack = audioPlayer.stateManager.state.currentTrack;
+    audioPlayer.audioElement.currentTime = 37;
+    audioPlayer.stateManager.updateState({
+      currentTrackPosition: 37, isPlaying: true, isPaused: false, isStopped: false
+    }, 'previous track playing');
+    let releaseTransition;
+    let transitionStarted;
+    const started = new Promise(resolve => { transitionStarted = resolve; });
+    audioPlayer.contextManager.seamlessTransition = async (track, ordinal) => {
+      calls.push(['seamlessTransition', track.entryInstanceId, ordinal]);
+      transitionStarted();
+      await new Promise(resolve => { releaseTransition = resolve; });
+      return true;
+    };
+    const controller = new AbortController();
+    const pending = manager.installBulkPlayProvisional({
+      receipt: {
+        operationId: 'held-transition',
+        provisionalEntry: { entryInstanceId: 'candidate', trackUid: 'candidate-track' }
+      },
+      signal: controller.signal,
+      resolveSource: async () => ({ path: '/music/candidate.flac' })
+    });
+    const rejected = assert.rejects(pending, error => error.name === 'AbortError');
+    await started;
+    assert.equal(audioPlayer.stateManager.state.currentTrack.entryInstanceId, 'candidate');
+    assert.equal(manager.activeBulkPlay.provisionalLoaded, false);
+    controller.abort();
+    await rejected;
+    assert.equal(calls.filter(call => call[0] === 'seamlessTransition').length, 1);
+    assert.equal(audioPlayer.stateManager.state.currentTrack, previousTrack);
+    assert.equal(audioPlayer.stateManager.state.currentTrackPosition, 37);
+    assert.equal(audioPlayer.audioElement.currentTime, 37);
+    assert.equal(audioPlayer.stateManager.state.isPlaying, true);
+    assert.equal(audioPlayer.stateManager.state.isPlaybackPending, false);
+    releaseTransition();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(audioPlayer.stateManager.state.currentTrack, previousTrack);
+    assert.equal(audioPlayer.audioElement.currentTime, 37);
+  });
+});
+
+test('bulk Play restores its previous queue on cancel and publishes without position reset', async () => {
   await withPlaybackHarness(async ({ audioPlayer, calls, manager }) => {
     const serviceCalls = [];
     let operationNumber = 0;
@@ -976,11 +1012,11 @@ test('bulk Play keeps its provisional singleton on cancel and publishes without 
 
     assert.deepEqual(await manager.cancelBulkPlay('bulk-1'), {
       accepted: true,
-      phase: 'cancel-requested'
+      phase: 'cancelled'
     });
-    assert.equal(manager.playlist[0].entryInstanceId, 'clicked-instance');
-    assert.deepEqual(serviceCalls, [['cancel', 'bulk-1']]);
-    assert.equal(await manager.finishBulkPlayTerminal('bulk-1'), true);
+    assert.equal(manager.playlist.length, 0);
+    assert.deepEqual(serviceCalls, []);
+    assert.equal(await manager.finishBulkPlayTerminal('bulk-1'), false);
     assert.equal(manager.activeBulkPlay.phase, 'terminal');
     assert.equal(manager.playlist.length, 0);
 

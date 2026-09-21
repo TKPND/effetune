@@ -280,6 +280,7 @@ function frozenReferenceOrigin() {
   const counts = {
     javascriptDerived: 0,
     nativeDirectDouble: 0,
+    nativeIndependent: 0,
     productionNativePromoted: 0
   };
   for (const source of sources) {
@@ -290,6 +291,8 @@ function frozenReferenceOrigin() {
     if (reference === null) counts.javascriptDerived++;
     else if (reference === 'production-native-promoted-v1') {
       counts.productionNativePromoted++;
+    } else if (reference === 'native-bass-management-independent-v1') {
+      counts.nativeIndependent++;
     } else if (nativeDirectDoublePattern.test(reference)) {
       counts.nativeDirectDouble++;
     } else {
@@ -690,6 +693,19 @@ function parameterTable(effect) {
 }
 
 function effectContractDetails(effect) {
+  if (effect.type === 'BassManagement') {
+    return `### Bass Management route polarity
+
+\`routes\` and \`routeInversions\` are 16-entry integer bit-mask arrays. Entry \`n\`
+applies to input channel \`n\`, and bit \`m\` selects output channel \`m\`, with both
+indices zero-based. A set bit in \`routeInversions[n]\` reverses only that input's
+bass or LFE contribution on the corresponding enabled route; it does not affect
+the matching main output.
+
+When \`subs\` is nonzero, \`routeInversions[n]\` must be a subset of \`routes[n]\`,
+and both route masks must target only output channels selected by \`subs\`. A
+configuration that violates either condition raises \`ValidationError\`.`;
+  }
   if (effect.type !== 'Matrix') return '';
   return `### Matrix route grammar
 
@@ -785,9 +801,13 @@ function contractBadges(effect) {
 function effectPage(effect, docsEntry, appSection) {
   const slug = docsEntry.slug ?? slugForType(effect.type);
   const conceptNotices = [];
-  if (effect.assets.length) {
+  if (effect.assets.some(asset => asset.required)) {
     conceptNotices.push(
       'See [Assets and bundles](/dsp/concepts/assets-and-bundles/#asset-required-effects) before using this effect.'
+    );
+  } else if (effect.assets.length) {
+    conceptNotices.push(
+      'Some configurations use an external asset. See [Assets and bundles](/dsp/concepts/assets-and-bundles/) for resolver and bundle contracts.'
     );
   }
   if (publicTelemetryTypes.has(effect.type)) {
@@ -2455,7 +2475,7 @@ R128, true peak, and dynamics gain-reduction observations are not part of this A
 
   add('verification', `
 The frozen wrapper reference origin is ${referenceOrigin.javascriptDerived} JavaScript-derived effect suites,
-${referenceOrigin.nativeDirectDouble} native direct-double suites, and ${referenceOrigin.productionNativePromoted} production-native-promoted suites. Maintainers run:
+${referenceOrigin.nativeDirectDouble} native direct-double suites, ${referenceOrigin.nativeIndependent} independent native-reference suites, and ${referenceOrigin.productionNativePromoted} production-native-promoted suites. The independent native reference validates IIR filtering with RBJ biquads in direct form I and linear-phase filtering with direct FIR convolution. Maintainers run:
 
 ${codeBlock('console', 'node tools/verify-dsp-library-goldens.mjs')}
 

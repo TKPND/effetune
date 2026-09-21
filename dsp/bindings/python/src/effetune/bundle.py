@@ -217,7 +217,7 @@ class Bundle:
             raise AssetError(f"bundle asset {reference!r} contains a non-finite sample")
         topology = format_data["topology"]
         input_count = (
-            len({path_data["inputSlot"] for path_data in paths})
+            max(path_data["inputSlot"] for path_data in paths) + 1
             if topology == "matrix"
             else None
         )
@@ -352,12 +352,6 @@ class Bundle:
                         or not 0 <= value <= maximum
                     ):
                         raise AssetError("matrix bundle paths contain an invalid slot")
-            input_slots = {path["inputSlot"] for path in paths}
-            if input_slots != set(range(len(input_slots))):
-                raise AssetError(
-                    "matrix bundle inputSlot values must form a contiguous range "
-                    "starting at 0"
-                )
         elif path_count != 0 or "paths" in fmt:
             raise AssetError("bundle asset paths are only valid for matrix topology")
         expected_bytes = (

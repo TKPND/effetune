@@ -2,18 +2,21 @@ import { createRepositoryError } from '../repository/contract-errors.js';
 import { normalizeRelativePath } from '../constants.js';
 import { WebFolderHandleStore } from './web-folder-handle-store.js';
 
+const STORAGE_PERSIST_TIMEOUT_MS = 2_000;
+
 export function createWebLibraryServices({
   client,
   windowRef = globalThis.window,
   handleStore = null,
-  translate = null
+  translate = null,
+  persistTimeoutMs = STORAGE_PERSIST_TIMEOUT_MS
 } = {}) {
   const storedHandles = handleStore ?? createStoredHandleStore(windowRef);
   const folderService = {
     async addFolder(options = {}) {
       const selection = await pickLibraryFolder(windowRef, options);
       if (!selection) return null;
-      await persistStorage(windowRef);
+      await persistStorage(windowRef, persistTimeoutMs);
       const request = {
         ...selection,
         displayName: options.displayName ?? selection.displayName,
@@ -41,22 +44,29 @@ export function createWebLibraryServices({
       const request = typeof folderIdOrOptions === 'object'
         ? folderIdOrOptions
         : options;
+      throwIfAborted(request.signal);
       let selection = selectionFrom(request);
       if (!selection && typeof windowRef?.showDirectoryPicker === 'function') {
-        const stored = await restoreStoredHandleAccess(storedHandles, folderId);
+        const stored = await restoreStoredHandleAccess(storedHandles, folderId, request);
+        throwIfAborted(request.signal);
         if (stored.handle) {
           selection = { handle: stored.handle, displayName: stored.handle.name };
         } else if (stored.attempted) {
           return null;
         } else {
-          const handle = await pickDirectory(windowRef);
+          const handle = await pickDirectory(windowRef, request);
+          throwIfAborted(request.signal);
           if (handle) selection = { handle, displayName: handle.name };
         }
       }
       selection ??= await pickLibraryFolder(windowRef, request);
+      throwIfAborted(request.signal);
       if (!selection) return null;
-      await persistStorage(windowRef);
-      return client.requestFolderAccess({ folderId, ...selection });
+      await persistStorage(windowRef, persistTimeoutMs);
+      throwIfAborted(request.signal);
+      const result = await client.requestFolderAccess({ folderId, ...selection });
+      throwIfAborted(request.signal);
+      return result;
     },
 
     async removeFolder(folderIdOrOptions) {
@@ -82,14 +92,16 @@ function createStoredHandleStore(windowRef) {
   return new WebFolderHandleStore({ indexedDB: windowRef.indexedDB });
 }
 
-async function restoreStoredHandleAccess(handleStore, folderId) {
+async function restoreStoredHandleAccess(handleStore, folderId, request = {}) {
   if (!handleStore || typeof folderId !== 'string' || folderId.length === 0) {
     return { attempted: false, handle: null };
   }
   let handle;
   try {
     handle = await handleStore.get(folderId);
+    throwIfAborted(request.signal);
   } catch (error) {
+    throwIfAborted(request.signal);
     console.warn('Unable to read the saved library folder handle.', error);
     return { attempted: false, handle: null };
   }
@@ -97,29 +109,34 @@ async function restoreStoredHandleAccess(handleStore, folderId) {
   try {
     if (typeof handle.queryPermission === 'function') {
       const current = await handle.queryPermission({ mode: 'read' });
+      throwIfAborted(request.signal);
       if (current === 'granted') return { attempted: true, handle };
     }
     if (typeof handle.requestPermission !== 'function') {
       return { attempted: false, handle: null };
     }
-    const permission = await handle.requestPermission({ mode: 'read' });
+    const permission = await runUserInteraction(
+      request,
+      () => handle.requestPermission({ mode: 'read' })
+    );
     return { attempted: true, handle: permission === 'granted' ? handle : null };
   } catch (error) {
+    throwIfAborted(request.signal);
     console.warn('Unable to restore access to the saved library folder.', error);
     return { attempted: true, handle: null };
   }
 }
 
-async function pickDirectory(windowRef) {
+async function pickDirectory(windowRef, request = {}) {
   if (typeof windowRef?.showDirectoryPicker !== 'function') {
     throw createRepositoryError('folderPickerUnavailable', 'File System Access folder selection is unavailable');
   }
   try {
-    return await windowRef.showDirectoryPicker({
+    return await runUserInteraction(request, () => windowRef.showDirectoryPicker({
       mode: 'read',
       startIn: 'music',
       id: 'effetune-library-v2'
-    });
+    }));
   } catch (error) {
     if (error?.name === 'AbortError') return null;
     throw error;
@@ -146,10 +163,10 @@ async function pickLibraryFolder(windowRef, options = {}) {
   const supplied = selectionFrom(options);
   if (supplied) return supplied;
   if (typeof windowRef?.showDirectoryPicker === 'function') {
-    const handle = await pickDirectory(windowRef);
+    const handle = await pickDirectory(windowRef, options);
     return handle ? { handle, displayName: handle.name } : null;
   }
-  const files = await pickDirectoryFiles(windowRef);
+  const files = await pickDirectoryFiles(windowRef, options);
   const sessionFiles = sessionFilesFrom(files);
   return sessionFiles?.length
     ? { sessionFiles, displayName: inferRootName(files) }
@@ -174,11 +191,11 @@ function inferRootName(files) {
   return String(raw).split(/[\\/]/)[0] || 'Imported Folder';
 }
 
-function pickDirectoryFiles(windowRef) {
+function pickDirectoryFiles(windowRef, request = {}) {
   if (!windowRef?.document?.createElement || !windowRef.document.body) {
     return Promise.reject(createRepositoryError('folderPickerUnavailable', 'Folder selection is unavailable'));
   }
-  return new Promise(resolve => {
+  return runUserInteraction(request, () => new Promise(resolve => {
     const input = windowRef.document.createElement('input');
     input.type = 'file';
     input.multiple = true;
@@ -203,15 +220,40 @@ function pickDirectoryFiles(windowRef) {
     windowRef.addEventListener?.('focus', onFocus, { once: true });
     windowRef.document.body.appendChild(input);
     input.click();
-  });
+  }));
 }
 
-async function persistStorage(windowRef) {
+async function persistStorage(windowRef, timeoutMs) {
+  let timeoutId = null;
   try {
-    await windowRef?.navigator?.storage?.persist?.();
+    const persistPromise = windowRef?.navigator?.storage?.persist?.();
+    if (!persistPromise) return;
+    await Promise.race([
+      persistPromise,
+      new Promise(resolve => {
+        timeoutId = setTimeout(resolve, timeoutMs);
+      })
+    ]);
   } catch {
     // Persistence is a best-effort browser hint.
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
   }
+}
+
+async function runUserInteraction(request, action) {
+  throwIfAborted(request.signal);
+  request.onUserInteractionChange?.(true);
+  try {
+    return await action();
+  } finally {
+    request.onUserInteractionChange?.(false);
+  }
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  throw signal.reason ?? createRepositoryError('cancelled', 'Operation cancelled');
 }
 
 function confirmParentFolderMerge(windowRef, translate) {

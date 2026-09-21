@@ -93,7 +93,8 @@ list(
 if(NOT EMSCRIPTEN)
   # Golden parity requires separate multiply-add rounding in these kernels.
   set_property(
-    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/plugins/dynamics/auto_leveler/kernel.cpp"
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/plugins/dynamics/attack_tonal_balance/kernel.cpp"
+           "${CMAKE_CURRENT_SOURCE_DIR}/plugins/dynamics/auto_leveler/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/bluetooth_sbc_simulator/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/cassette_artifacts/kernel.cpp"
            "${CMAKE_CURRENT_SOURCE_DIR}/plugins/lofi/tape_artifacts/kernel.cpp"
@@ -301,6 +302,11 @@ if((BUILD_TESTING AND NOT EMSCRIPTEN) OR ET_NATIVE_TEST_WARNING_CHECK)
     SOURCES plugins/basics/fir_crossover/native_test.cpp
     INCLUDE_DIRS core generated/cpp
     WRAP_MALLOC)
+  et_add_dsp_test(
+    effetune_dsp_bass_management_tests
+    SOURCES plugins/basics/bass_management/native_test.cpp
+    INCLUDE_DIRS core generated/cpp
+    WRAP_MALLOC)
   et_add_dsp_test(effetune_dsp_primitives_tests SOURCES test/primitives_test.cpp)
   et_add_dsp_test(
     effetune_dsp_dynamics_group_a_tests
@@ -484,6 +490,11 @@ if((BUILD_TESTING AND NOT EMSCRIPTEN) OR ET_NATIVE_TEST_WARNING_CHECK)
     INCLUDE_DIRS core generated/cpp
     WRAP_MALLOC)
   et_add_dsp_test(
+    effetune_dsp_attack_tonal_balance_tests
+    SOURCES plugins/dynamics/attack_tonal_balance/native_test.cpp
+    INCLUDE_DIRS core generated/cpp
+    WRAP_MALLOC)
+  et_add_dsp_test(
     effetune_dsp_noise_reduction_tests
     SOURCES plugins/restoration/noise_reduction/native_test.cpp
     INCLUDE_DIRS core generated/cpp
@@ -526,6 +537,11 @@ if((BUILD_TESTING AND NOT EMSCRIPTEN) OR ET_NATIVE_TEST_WARNING_CHECK)
   et_add_dsp_test(
     effetune_dsp_bandwidth_extender_tests
     SOURCES plugins/saturation/bandwidth_extender/native_test.cpp
+    INCLUDE_DIRS core generated/cpp
+    WRAP_MALLOC)
+  et_add_dsp_test(
+    effetune_dsp_bass_extender_tests
+    SOURCES plugins/saturation/bass_extender/native_test.cpp
     INCLUDE_DIRS core generated/cpp
     WRAP_MALLOC)
   et_add_dsp_test(

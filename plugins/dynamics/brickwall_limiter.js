@@ -80,8 +80,6 @@ class BrickwallLimiterPlugin extends PluginBase {
                 context.thresholdLookupScale = undefined;
                 context.inputGainCurrent = undefined;
                 context.thresholdCurrent = undefined;
-                context.phaseIndices = undefined; // Precalculated indices for downsampling
-                context.phaseRemainders = undefined; // Precalculated phases for downsampling
                 context.prevTime = undefined; // Reset time tracking
             }
 
@@ -362,9 +360,9 @@ class BrickwallLimiterPlugin extends PluginBase {
                 context.upsampleState = undefined; // Reset dependent states
                 context.downsampleState = undefined;
 
-                const N = 63; // Filter order (must be odd for Type 1 Linear Phase FIR)
+                const N = 64 * L + 1; // Filter order (must be odd for Type 1 Linear Phase FIR)
                 const halfN = (N - 1) * 0.5; // Center index (float)
-                const beta = 5.0; // Kaiser window beta parameter
+                const beta = 8.6; // Kaiser window beta parameter
 
                 // --- Optimized Kaiser window I0 function (Bessel function of the first kind, order 0) ---
                 // This is a direct implementation based on standard approximations, potentially more stable/predictable than the lookup version
@@ -411,13 +409,13 @@ class BrickwallLimiterPlugin extends PluginBase {
                 const invL = 1.0 / L;
                 for (let n = 0; n < N; n++) {
                     // Design low-pass filter using Sinc * Kaiser Window
-                    const sincArg = (n - halfN) * invL;
+                    const sincArg = 0.95 * (n - halfN) * invL;
                     const hn = sinc(sincArg) * kaiser(n, N, beta);
                     h[n] = hn; // Store coefficient before scaling
                     sumH += hn; // Accumulate sum for normalization
                 }
 
-                // Normalize filter coefficients for desired gain (L for upsampling/downsampling)
+                // Normalize interpolation gain to L; decimation divides by L.
                 // Optimization: Calculate normalization factor once
                 const normFactor = L / sumH;
                 for (let n = 0; n < N; n++) {
@@ -601,7 +599,8 @@ class BrickwallLimiterPlugin extends PluginBase {
                         delayBufferOS[circBufferPos] = oversampled[osBufferOffset + sampleIndex]; // Write current OS sample
 
                         const absSample = delayedSample >= 0 ? delayedSample : -delayedSample; // Use delayed sample for gain calc
-                        const targetGain = fastThresholdDiv(absSample, thresholdAt(sampleIndex)); // Calculate target gain
+                        const threshold = thresholdAt(sampleIndex);
+                        const targetGain = absSample > threshold ? threshold / absSample : 1.0;
 
                         // Apply gain smoothing (attack/release) using OS coefficients
                         const newGain = (targetGain < currentGain)
@@ -620,7 +619,8 @@ class BrickwallLimiterPlugin extends PluginBase {
                     const delayedSample = delayBufferOS[circBufferPos];
                     delayBufferOS[circBufferPos] = oversampled[osBufferOffset + k_os];
                     const absSample = delayedSample >= 0 ? delayedSample : -delayedSample;
-                    const targetGain = fastThresholdDiv(absSample, thresholdAt(k_os));
+                    const threshold = thresholdAt(k_os);
+                    const targetGain = absSample > threshold ? threshold / absSample : 1.0;
                     const newGain = (targetGain < currentGain)
                                    ? targetGain
                                    : (releaseCoeffSampleOS * currentGain + oneMinusReleaseCoeffSampleOS * targetGain);
@@ -657,27 +657,6 @@ class BrickwallLimiterPlugin extends PluginBase {
             }
             const downsampledOutput = context.downsampledOutput; // Local ref
 
-            // --- Pre-calculate Indices for Downsampling --- (Original Optimization Maintained)
-            // Avoids repeated calculations inside the sample loop
-            if (!context.phaseIndices || context.phaseIndices.length !== blockSize) {
-                context.phaseIndices = new Uint32Array(blockSize); // Index into the combined Z buffer
-                context.phaseRemainders = new Uint32Array(blockSize); // Which polyphase filter to use (0 to L-1)
-                const d_state = downsampleStateLength; // Use calculated state length
-
-                for (let out_idx = 0; out_idx < blockSize; out_idx++) {
-                    // n_index: Input sample index (in Z) corresponding to the i-th output sample
-                    // This index depends on the filter delay (d_state) and the output sample index (out_idx * L)
-                    const n_index = out_idx * L + d_state;
-                    context.phaseIndices[out_idx] = n_index;
-                    // r: Polyphase filter index for the i-th output sample, determined by the input index modulo L
-                    context.phaseRemainders[out_idx] = n_index % L;
-                }
-            }
-            // Cache pre-calculated indices locally
-            const phaseIndices_cache = context.phaseIndices;
-            const phaseRemainders_cache = context.phaseRemainders;
-
-
             // Reuse or create intermediate buffer Z (State + Processed Oversampled Input)
             const combinedDownsampleLength = downsampleStateLength + oversampledBlockSize;
             if (!context.Z || context.Z.length < combinedDownsampleLength) {
@@ -700,54 +679,17 @@ class BrickwallLimiterPlugin extends PluginBase {
 
                 // Iterate through each OUTPUT sample index (0 to blockSize-1)
                 for (let i_out = 0; i_out < blockSize; i_out++) {
-                    // Get pre-calculated index into Z and polyphase filter index
-                    const n_index_z = phaseIndices_cache[i_out]; // Input index in Z for this output sample
-                    const r_phase = phaseRemainders_cache[i_out]; // Polyphase filter index
-
-                    const h_poly = polyphase_cache[r_phase]; // Get the r-th phase filter coefficients
-                    const h_len = h_poly.length; // Length of this specific phase filter
-
-                    let acc = 0.0; // Accumulator for the convolution sum
-
-                    // Perform convolution for decimation: y[i_out] = sum( h_poly[k] * Z[ n_index_z - k*L ] )
-                    // Optimization: Unroll convolution loop (original factor 8)
-                    const h_len_mod_8 = h_len - (h_len % 8);
-                    let k = 0;
-                    for (; k < h_len_mod_8; k += 8) {
-                        // Calculate all 8 indices into Z first
-                        const idx1 = n_index_z - L * k;
-                        const idx2 = n_index_z - L * (k+1);
-                        const idx3 = n_index_z - L * (k+2);
-                        const idx4 = n_index_z - L * (k+3);
-                        const idx5 = n_index_z - L * (k+4);
-                        const idx6 = n_index_z - L * (k+5);
-                        const idx7 = n_index_z - L * (k+6);
-                        const idx8 = n_index_z - L * (k+7);
-
-                        // Optimization: Check the last index first. If it's invalid (< 0), break unrolled loop.
-                        if (idx8 < 0) { break; }
-
-                        // Indices seem valid, perform accumulation
-                        acc += h_poly[k]   * Z_downsample[idx1];
-                        acc += h_poly[k+1] * Z_downsample[idx2];
-                        acc += h_poly[k+2] * Z_downsample[idx3];
-                        acc += h_poly[k+3] * Z_downsample[idx4];
-                        acc += h_poly[k+4] * Z_downsample[idx5];
-                        acc += h_poly[k+5] * Z_downsample[idx6];
-                        acc += h_poly[k+6] * Z_downsample[idx7];
-                        acc += h_poly[k+7] * Z_downsample[idx8];
+                    // Full FIR decimation must combine every oversampled phase.
+                    const inputIndex = downsampleStateLength + i_out * L;
+                    let acc = 0;
+                    for (let tap = 0; tap < N_filt; tap++) {
+                        acc += context.filterCoeffs[tap] * Z_downsample[inputIndex - tap];
                     }
-
-                    // Handle remaining taps (or taps skipped by the early break in unrolled loop)
-                    for (; k < h_len; k++) {
-                        const idx = n_index_z - L * k;
-                        // Check index validity for each remaining tap
-                        if (idx < 0) { break; } // Stop processing taps once index is out of bounds
-                        acc += h_poly[k] * Z_downsample[idx];
-                    }
-
-                    // Store the computed downsampled value
-                    downsampledOutput[outOffset + i_out] = acc;
+                    // Reconstruction can overshoot even when oversampled peaks were limited.
+                    const output = acc / L;
+                    const ceiling = thresholdAt(i_out * L);
+                    downsampledOutput[outOffset + i_out] =
+                        output > ceiling ? ceiling : output < -ceiling ? -ceiling : output;
                 }
 
                 // Update the state for the next block: copy the last 'downsampleStateLength' samples from Z_downsample

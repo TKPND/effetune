@@ -284,6 +284,142 @@ function createDeferred() {
   return { promise, resolve };
 }
 
+test('bulk Play source failure does not defer to automatic skipping', async () => {
+  await withPlaybackGlobals({}, async () => {
+    const audioPlayer = createAudioPlayer();
+    const manager = makeManager(audioPlayer);
+    setPlaylist(manager, ['Previous']);
+    const error = Object.assign(new Error('source unavailable'), { code: 'folderPermissionRequired' });
+    await assert.rejects(manager.installBulkPlayProvisional({
+      receipt: { operationId: 'source-failed', provisionalEntry: { entryInstanceId: 'new-entry', trackUid: 'new-track' } },
+      resolveSource: async () => { throw error; }
+    }), candidate => candidate === error);
+    assert.deepEqual(manager.playlist.map(track => track.name), ['Previous']);
+    assert.equal(audioPlayer.calls.some(call => call[0] === 'seamlessTransition'), false);
+    assert.equal(audioPlayer.state.isPlaybackPending, false);
+    await manager.cancelBulkPlay('source-failed');
+  });
+});
+
+test('bulk Play abort releases a stalled media chain and late playback cannot replace the next session', async () => {
+  await withPlaybackGlobals({}, async () => {
+    const audioPlayer = createAudioPlayer({ isPlaying: true });
+    const manager = makeManager(audioPlayer);
+    setPlaylist(manager, ['Previous']);
+    audioPlayer.state.currentTrack = manager.playlist[0];
+    const previousTrack = audioPlayer.state.currentTrack;
+    const controller = new AbortController();
+    const media = createDeferred();
+    const entered = createDeferred();
+    let invalidations = 0;
+    audioPlayer.contextManager.invalidatePendingTransitionRequests = () => { invalidations += 1; };
+    audioPlayer.contextManager.seamlessTransition = async (_track, _index, _gesture, options) => {
+      assert.equal(options.signal, controller.signal);
+      assert.equal(options.throwOnError, true);
+      entered.resolve();
+      return media.promise;
+    };
+    const pending = manager.installBulkPlayProvisional({
+      receipt: { operationId: 'media-stall', provisionalEntry: { entryInstanceId: 'stalled-entry', trackUid: 'stalled-track' } },
+      signal: controller.signal,
+      resolveSource: async () => ({ path: 'stalled.wav' })
+    });
+    const rejection = assert.rejects(pending, error => error.name === 'AbortError');
+    await entered.promise;
+    controller.abort();
+    await rejection;
+    assert.equal(invalidations, 1);
+    assert.deepEqual(manager.playlist.map(track => track.name), ['Previous']);
+    assert.equal(audioPlayer.state.currentTrack, previousTrack);
+    assert.equal(audioPlayer.state.isPlaybackPending, false);
+    assert.equal(audioPlayer.calls.some(call => call[0] === 'contextLoadTrack'), false);
+    audioPlayer.contextManager.seamlessTransition = async () => true;
+    const next = await manager.installBulkPlayProvisional({
+      receipt: { operationId: 'next-operation', provisionalEntry: { entryInstanceId: 'next-entry', trackUid: 'next-track' } },
+      resolveSource: async () => ({ path: 'next.wav' })
+    });
+    assert.equal(next.accepted, true);
+    const nextChain = manager.transportMediaChain;
+    media.resolve(true);
+    await flushMicrotasks();
+    assert.equal(manager.activeBulkPlay.operationId, 'next-operation');
+    assert.equal(manager.playlist[0].path, 'next.wav');
+    assert.equal(manager.transportMediaChain, nextChain);
+    await manager.cancelBulkPlay('next-operation');
+  });
+});
+
+test('bulk Play abort invalidates an unresolved source before any late provisional installation', async () => {
+  await withPlaybackGlobals({}, async () => {
+    const audioPlayer = createAudioPlayer();
+    const manager = makeManager(audioPlayer);
+    setPlaylist(manager, ['Previous']);
+    const source = createDeferred();
+    const entered = createDeferred();
+    const controller = new AbortController();
+    let transportSignal;
+    const pending = manager.installBulkPlayProvisional({
+      receipt: { operationId: 'source-stall', provisionalEntry: { entryInstanceId: 'stalled-entry', trackUid: 'stalled-track' } },
+      signal: controller.signal,
+      resolveSource: (_entry, _scope, signal) => {
+        transportSignal = signal;
+        entered.resolve();
+        return source.promise;
+      }
+    });
+    const rejection = assert.rejects(pending, error => error.name === 'AbortError');
+    await entered.promise;
+    controller.abort();
+    await rejection;
+    assert.equal(transportSignal.aborted, true);
+    source.resolve({ path: 'stalled.wav' });
+    await flushMicrotasks();
+    assert.deepEqual(manager.playlist.map(track => track.name), ['Previous']);
+    assert.equal(manager.activeBulkPlay.phase, 'terminal');
+    assert.equal(audioPlayer.state.isPlaybackPending, false);
+  });
+});
+
+test('cancelled bulk publication cannot restore undo or overwrite a newer session when its await resolves', async () => {
+  await withPlaybackGlobals({}, async () => {
+    const audioPlayer = createAudioPlayer();
+    const manager = makeManager(audioPlayer);
+    const firstEntry = { entryInstanceId: 'first-entry', trackUid: 'first-track' };
+    await manager.installBulkPlayProvisional({
+      receipt: { operationId: 'publish-stall', provisionalEntry: firstEntry },
+      resolveSource: async () => ({ path: 'first.wav' })
+    });
+    const sequence = new CatalogSequence({
+      sequenceId: 'published-sequence', itemCount: 1,
+      readPage: async () => [firstEntry],
+      resolveSource: async () => ({ path: 'first.wav' })
+    });
+    const entered = createDeferred();
+    const release = createDeferred();
+    const load = manager.loadCatalogSequence.bind(manager);
+    manager.loadCatalogSequence = async (...args) => {
+      await load(...args);
+      entered.resolve();
+      await release.promise;
+    };
+    const publish = manager.publishBulkPlaySequence({ operationId: 'publish-stall', sequence, firstEntry });
+    await entered.promise;
+    await manager.cancelBulkPlay('publish-stall');
+    assert.equal(audioPlayer.calls.some(call => call[0] === 'contextStop'), true);
+    assert.equal(manager.playlist.length, 0);
+    await manager.installBulkPlayProvisional({
+      receipt: { operationId: 'new-session', provisionalEntry: { entryInstanceId: 'new-entry', trackUid: 'new-track' } },
+      resolveSource: async () => ({ path: 'new.wav' })
+    });
+    release.resolve();
+    assert.deepEqual(await publish, { accepted: false, reason: 'stale' });
+    assert.equal(manager.activeBulkPlay.operationId, 'new-session');
+    assert.equal(manager.playlist[0].path, 'new.wav');
+    assert.equal(manager.canUndoSessionTransport(), false);
+    await manager.cancelBulkPlay('new-session');
+  });
+});
+
 test('playback queue snapshots restore catalog and materialized sequence ownership', async () => {
   await withPlaybackGlobals({}, async () => {
     const audioPlayer = createAudioPlayer({ currentTrackIndex: 1 });

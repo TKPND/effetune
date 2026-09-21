@@ -78,12 +78,6 @@ class AssetData:
                     raise AssetError("matrix path input_slot exceeds input_count")
                 if path.ir_channel >= samples.shape[0]:
                     raise AssetError("matrix path ir_channel exceeds asset channels")
-            input_slots = {path.input_slot for path in paths}
-            if input_slots != set(range(int(self.input_count))):
-                raise AssetError(
-                    "matrix path input_slot values must form a contiguous range "
-                    "starting at 0"
-                )
         elif paths or self.input_count is not None:
             raise AssetError("paths and input_count are only valid for matrix topology")
 

@@ -18,10 +18,10 @@ import {
 } from '../../tools/verify-dsp-library-goldens.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const GOLDEN_CASE_COUNT = 960;
-const EFFECT_COUNT = 103;
-const WORKLET_GOLDEN_CASE_COUNT = 105;
-const NON_IDENTITY_EFFECT_COUNT = 96;
+const GOLDEN_CASE_COUNT = 1007;
+const EFFECT_COUNT = 106;
+const WORKLET_GOLDEN_CASE_COUNT = 108;
+const NON_IDENTITY_EFFECT_COUNT = 99;
 
 test('MCP acceptance preserves eight-channel aggregates and defaults only their extended slots', async () => {
   const { cases } = await discoverFrozenGoldenCases(repoRoot);
@@ -359,7 +359,7 @@ test('golden discovery reads only the generated frozen index paths', async t => 
   const temporary = await fs.realpath(await fs.mkdtemp(
     path.join(os.tmpdir(), 'effetune-frozen-goldens-')
   ));
-  t.after(() => fs.rm(temporary, { recursive: true, force: true }));
+  t.after(() => fs.rm(temporary, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }));
   const generated = path.join(temporary, 'dsp', 'bindings', 'generated');
   const included = path.join(
     temporary, 'dsp', 'plugins', 'included', 'golden'
@@ -450,7 +450,7 @@ test('frozen DSP library acceptance inventory stays complete', async () => {
   const inventory = summarizeInventory(cases);
   assert.equal(inventory.effects, EFFECT_COUNT);
   assert.equal(inventory.total, GOLDEN_CASE_COUNT);
-  assert.equal(inventory.assetCases, 30);
+  assert.equal(inventory.assetCases, 31);
   // Tube Simulator's power-6l6gc-pentode, power-kt88-distributed and minimum-drive-12ax7 used to
   // reach their configuration with a mid-stream event, but each of those events changes a
   // reset-class parameter, and the fade and warmup that follows outlasts the frames left in the
@@ -462,8 +462,8 @@ test('frozen DSP library acceptance inventory stays complete', async () => {
   // cases, including one event case with two boundary changes.
   // Multiband crossover normalization regression cases add sixteen parameter events.
   // Spatial Mapper adds one event case with four routing and analysis changes.
-  assert.equal(inventory.eventCases, 154);
-  assert.equal(inventory.eventCount, 538);
+  assert.equal(inventory.eventCases, 161);
+  assert.equal(inventory.eventCount, 559);
   assert.deepEqual(inventory.sampleRates, [
     32000,
     44100,

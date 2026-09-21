@@ -1,5 +1,6 @@
 #include "effetune/kernel.h"
 #include "HarmonicDistortionPluginParams.h"
+#include "effetune/dsp/oversampled_shaper.h"
 
 #include <algorithm>
 #include <array>
@@ -14,15 +15,20 @@ class HarmonicDistortionKernel final : public PluginKernel {
 
 public:
   void prepare(const PrepareInfo &info) override {
+    shaper_.prepare(info.maxChannels * 1u);
     max_channels_ = info.maxChannels;
     ramp_frames_ = std::max(
         1u, static_cast<std::uint32_t>(std::ceil(static_cast<double>(info.sampleRate) * 0.005)));
   }
 
-  void reset() noexcept override { initialized_ = false; }
+  void reset() noexcept override {
+    shaper_.reset();
+    initialized_ = false;
+  }
 
   void process(float *audio, std::uint32_t channel_count, std::uint32_t frame_count,
                const ProcessInfo &) noexcept override {
+    shaper_.configure(dsp::OversampledShaper::factor(params_.oversampling, 8u), channel_count * 1u);
     if (audio == nullptr || channel_count == 0u || channel_count > max_channels_) {
       return;
     }
@@ -53,19 +59,29 @@ public:
       const double inverse_sensitivity = 1.0 / (current_[4] + 1.0e-9);
       for (std::uint32_t channel = 0u; channel < channel_count; ++channel) {
         const std::size_t index = static_cast<std::size_t>(channel) * frame_count + frame;
-        const double scaled = static_cast<double>(audio[index]) * current_[4];
-        const double squared = scaled * scaled;
-        const double cubed = squared * scaled;
-        const double fourth_power = squared * squared;
-        const double fifth_power = fourth_power * scaled;
-        const double nonlinear = scaled + current_[0] * squared + current_[1] * cubed +
-                                 current_[2] * fourth_power + current_[3] * fifth_power;
-        audio[index] = static_cast<float>(nonlinear * inverse_sensitivity);
+        audio[index] = static_cast<float>(shaper_.process(channel, audio[index], [&](double input) {
+          const double scaled = input * current_[4];
+          const double squared = scaled * scaled;
+          const double cubed = squared * scaled;
+          const double fourth_power = squared * squared;
+          const double fifth_power = fourth_power * scaled;
+          const double nonlinear = scaled + current_[0] * squared + current_[1] * cubed +
+                                   current_[2] * fourth_power + current_[3] * fifth_power;
+          return nonlinear * inverse_sensitivity;
+        }));
       }
     }
   }
 
+  [[nodiscard]] std::uint32_t latencySamples() const noexcept override {
+    const auto &parameters = params_pending_ ? staged_params_ : params_;
+    return dsp::OversampledShaper::factor(parameters.oversampling, 8u) == 1u
+               ? 0u
+               : dsp::OversampledShaper::kLatency;
+  }
+
 private:
+  dsp::OversampledShaper shaper_;
   std::uint32_t max_channels_ = 0u;
   std::array<double, 5u> current_{};
   std::array<double, 5u> target_{};

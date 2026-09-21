@@ -20,23 +20,24 @@ const ports = [
   {
     directory: 'saturation/harmonic_distortion',
     type: 'HarmonicDistortionPlugin',
-    hash: 0x04f4b5e0,
+    hash: 0x0c982ce6,
     fields: [
       ['secondHarmonic', 'h2', 'float'],
       ['thirdHarmonic', 'h3', 'float'],
       ['fourthHarmonic', 'h4', 'float'],
       ['fifthHarmonic', 'h5', 'float'],
-      ['sensitivity', 'sn', 'float']
+      ['sensitivity', 'sn', 'float'],
+      ['oversampling', 'os', 'int']
     ],
-    caseCount: 8,
-    goldenBytes: 399872,
-    jsEngineHash: '17c0bc2d2cfd33692351ec5a92a6ca57d1e7a78af9c85ae05ebb4798906a2cc2',
+    caseCount: 12,
+    goldenBytes: 411045,
+    jsEngineHash: '91118cdaac28b706a21388771dd3fbdc8320c364063714c0bbea2e3576c04f0b',
     activeParams: { h2: 20, h3: -15, h4: 10, h5: -5, sn: 1.5 }
   },
   {
     directory: 'saturation/dynamic_saturation',
     type: 'DynamicSaturationPlugin',
-    hash: 0xc8929bf3,
+    hash: 0x022a0917,
     fields: [
       ['speakerDrive', 'sd', 'float'],
       ['speakerStiffness', 'ss', 'float'],
@@ -46,26 +47,28 @@ const ports = [
       ['distortionBias', 'db', 'float'],
       ['distortionMix', 'dm', 'float'],
       ['coneMotionMix', 'cm', 'float'],
-      ['outputGain', 'og', 'float']
+      ['outputGain', 'og', 'float'],
+      ['oversampling', 'os', 'int']
     ],
-    caseCount: 9,
-    goldenBytes: 161408,
+    caseCount: 13,
+    goldenBytes: 172803,
     activeParams: { sd: 7, ss: 4, sp: 3, sm: 0.7, dd: 6, db: -0.2, dm: 73, cm: 81, og: -3 }
   },
   {
     directory: 'saturation/exciter',
     type: 'ExciterPlugin',
-    hash: 0xfc6e6a7a,
+    hash: 0x27629114,
     fields: [
       ['highPassFrequency', 'hf', 'float'],
       ['highPassSlope', 'hs', 'int'],
       ['drive', 'dr', 'float'],
       ['bias', 'bs', 'float'],
-      ['mix', 'mx', 'float']
+      ['mix', 'mx', 'float'],
+      ['oversampling', 'os', 'int']
     ],
-    caseCount: 9,
-    goldenBytes: 146054,
-    jsEngineHash: 'b5db744b676bc8819ee65b46b19cf1d83287fd60ae197b387e9e8baf08d1cf31',
+    caseCount: 13,
+    goldenBytes: 157197,
+    jsEngineHash: '75526fdf864920aee369868facb22dc41ee4a4e14417849224ac2cd3064f2ee7',
     activeParams: { hf: 3500, hs: 2, dr: 7, bs: -0.2, mx: 73 }
   },
   {

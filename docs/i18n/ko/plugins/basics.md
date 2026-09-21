@@ -1,6 +1,6 @@
 ---
 title: "기본 플러그인 - EffeTune"
-description: "Volume, Mute, Stereo Balance, FIR Crossover, Matrix 라우팅 등을 포함한 기본 오디오 플러그인입니다."
+description: "Bass Management, Volume, Mute, Stereo Balance, FIR Crossover, Matrix 라우팅 등을 포함한 기본 오디오 플러그인입니다."
 lang: ko
 ---
 
@@ -15,6 +15,7 @@ lang: ko
 
 ## 플러그인 목록
 
+* [Bass Management](#bass-management) - 관리되는 저음과 LFE를 선택한 서브우퍼 출력으로 보냄
 * [Channel Divider](#channel-divider) - 스테레오 신호를 주파수 대역으로 나누어 별도 스테레오 출력 쌍으로 라우팅
 * [DC Offset](#dc-offset) - 파형이 0 라인에서 벗어난 신호를 보정
 * [FIR Crossover](#fir-crossover) - FIR 필터로 스테레오 신호를 급경사 대역으로 분할
@@ -24,6 +25,38 @@ lang: ko
 * [Polarity Inversion](#polarity-inversion) - 보정이나 특수 라우팅 상황을 위해 신호 극성을 반전
 * [Stereo Balance](#stereo-balance) - 음악의 좌우 밸런스를 조정
 * [Volume](#volume) - 음악 재생 볼륨을 제어
+
+## Bass Management
+
+Bass Management는 선택한 메인 채널의 저음과 전용 LFE 입력을 선택한 서브우퍼 출력으로 보냅니다. **Managed** 채널은 고음을 같은 메인 출력에 남기고 저음만 서브우퍼로 보냅니다. 메인 스피커와 하나 이상의 서브우퍼를 사용하는 멀티채널 버스용이며 WASM DSP 엔진이 필요합니다.
+
+**Sub Outputs**를 하나도 선택하지 않으면 Bass Management는 저음을 분리하거나 서브우퍼로 보내지 않으며 입력 채널은 crossover 없이 통과합니다. 새 인스턴스에서는 실제 버스 채널이 **Managed**이고 **Sub Outputs**는 선택되지 않습니다.
+
+이펙트 버스 라우팅에서 **All**을 선택하고 모든 메인 및 서브우퍼에 맞는 출력 채널 수를 설정하세요. 표에는 입력 역할과 서브우퍼 출력이 표시됩니다. 서브우퍼 출력은 **Full Range** 또는 **Managed** 메인이 될 수 없습니다. **LFE** 입력은 서브우퍼 출력과 같은 채널 번호를 쓸 수 있으며, 출력을 만들기 전에 수집되므로 한 번만 전송됩니다.
+
+### 사운드 조정 가이드
+
+- 스테레오와 두 서브우퍼에는 4채널을 사용합니다. 1/2를 **Managed**로 설정하고 3/4를 **Sub Outputs**로 선택합니다. 이 채널들의 역할은 자동으로 **LFE**가 됩니다. 각 메인-서브우퍼 경로는 Matrix에서 유지하거나 **OFF**로 바꿉니다.
+- 서라운드 소스에서는 실제 메인만 **Managed**, 소스 LFE 채널은 **LFE**로 설정하고 서브우퍼 출력을 명시적으로 선택합니다.
+- 관리 채널마다 80 Hz, 24 dB/oct에서 시작합니다. 메인 스피커의 저음 재생이 제한되면 주파수를 높이고, 겹침을 줄여야 하면 더 큰 Slope를 사용합니다. 레벨을 올리기 전에 스피커의 사용 가능한 대역을 확인하세요.
+- 여러 서브우퍼로 보내는 입력은 전기적으로 균등 분배되지만 합쳐진 신호의 피크를 막지는 않습니다. 필요하면 **Headroom**을 낮추고 뒤의 미터를 확인하며, 피크 제어에는 체인 마지막에 Brickwall Limiter를 둡니다. **LFE Gain**은 소스가 의도한 LFE 보정을 아직 적용하지 않은 경우에만 사용합니다.
+- Bass Management 뒤에 서브우퍼별 HP/EQ/극성 조정을 두고, 이후 MultiChannel Panel에서 trim, mute/solo, 최대 30 ms delay를 조정합니다.
+
+### 파라미터
+
+- **Phase**: **IIR**은 지연이 작고 크로스오버 부근의 위상을 바꿉니다. **Linear**는 분리를 시간적으로 맞추지만 표시되는 지연과 pre-ringing이 생길 수 있습니다.
+- **Taps**: Linear용 8192, 16384, 32768을 고릅니다. Taps가 많으면 저음과 급경사 정확도가 높아지지만 준비 시간과 지연도 증가합니다. 초기값은 16384입니다.
+- **Headroom**은 모든 출력을 같은 만큼 감쇠합니다. **Bass Gain**은 **Managed**에서 분리된 저음을, **LFE Gain**은 **LFE** 입력을 서브우퍼로 믹스하기 전에 조절합니다.
+- **Channel Role**: **Full Range**는 소스를 메인 출력에 그대로 둡니다. **Managed**는 고음을 메인에 남기고 저음을 보냅니다. **LFE**는 소스를 서브우퍼로만 보냅니다. **Unused**는 보통 서브우퍼 출력용 입력을 예약합니다.
+- **Crossover Frequency**는 **Managed**별로 20~300 Hz를 설정합니다. 높을수록 더 많은 저음이 서브우퍼로 갑니다. **Slope**는 24/48/96 dB/oct이고 높을수록 겹침이 줄어듭니다.
+- **Sub Outputs**는 **Managed** 또는 **LFE**에 필요한 출력을 고릅니다. 채널을 선택하면 그 **Channel Role**은 **LFE**가 됩니다. 새로 선택한 출력에는 현재 버스의 모든 입력에서 일반 극성의 **ON** 경로가 만들어집니다. 개별 경로는 Matrix에서 **OFF**로 바꾸세요. **Sub Outputs**를 하나도 선택하지 않으면 저음 분리와 서브우퍼 라우팅이 멈추고 입력 채널은 crossover 없이 통과합니다. **LFE Low-pass**, **LFE Frequency**, **LFE Slope**는 20~300 Hz와 24/48/96 dB/oct로 LFE를 선택적으로 제한하며, 이미 분리된 메인 저음에는 다시 적용되지 않습니다.
+- **ON** 및 **Ø**: 채널 표의 각 셀에서 **ON**은 해당 **Managed** 또는 **LFE** 입력을 선택한 서브우퍼 출력으로 보냅니다. **Ø**는 그 입력에서 서브우퍼로 가는 경로만 극성을 반전하여 측정 또는 청취 결과에 맞추는 데 사용할 수 있습니다. **Ø**는 **ON**을 선택한 동안에만 사용할 수 있고, **ON**을 끄면 **Ø**도 해제됩니다. 입력의 메인 출력은 바뀌지 않습니다.
+
+### 표시, 상태 및 보정
+
+- 라우팅 요약에서 각 서브우퍼로 가는 입력을 레벨을 올리기 전에 확인하세요. **Managed**를 선택하면 이상적인 곡선이 아니라 활성 HP/LP 응답이 보입니다.
+- 상태에는 모드, Linear 준비, samples/ms 단위의 실제 지연이 표시됩니다. Linear 변경 중에는 잠시 소리가 작아지거나 멈출 수 있습니다. 준비에 실패하면 **Taps**를 줄여 다시 시도하세요. 이전 구성을 쓸 수 없으면 일반 메인은 동일 지연 원음, 예약 서브 출력은 무음, LFE는 준비 완료까지 재생되지 않습니다.
+- 호스트 bypass는 원래 채널 할당과 오디오로 돌아가므로 라우팅/보호/지연 정렬은 유지되지 않습니다. 배선을 유지한 비교나 mute에는 뒤의 MultiChannel Panel을 사용하세요. 이후 IIR HP/EQ 또는 상대 delay는 전체 Linear 시스템의 위상을 바꾸므로 보정 체인은 하나의 preset으로 저장하세요.
 
 ## Channel Divider
 

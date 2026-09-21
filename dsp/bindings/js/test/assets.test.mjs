@@ -128,12 +128,6 @@ test('encodeEta1 rejects invalid public payload shapes with AssetError', () => {
       channels: [channel],
       sampleRate: 48000,
       topology: 'matrix',
-      paths: [{ inputSlot: 1, outputSlot: 0, irChannel: 0 }]
-    },
-    {
-      channels: [channel],
-      sampleRate: 48000,
-      topology: 'matrix',
       paths: [{ inputSlot: 0, outputSlot: 16, irChannel: 0 }]
     }
   ];
@@ -527,7 +521,7 @@ test('matrix assets accept all sixteen path indices and reject index sixteen', a
   }
 });
 
-test('matrix input routes follow the shared contiguous and processing-channel contract', async () => {
+test('matrix input routes follow the shared processing-channel contract', async () => {
   const fixture = JSON.parse(await readFile(
     new URL('../../common/matrix-routes-v1.fixture.json', import.meta.url),
     'utf8'
@@ -550,17 +544,13 @@ test('matrix input routes follow the shared contiguous and processing-channel co
       pathCount: entry.paths.length,
       paths: entry.paths
     };
-    if (entry.name === 'input-gap') {
-      await assert.rejects(
-        createChain(bundle, { assetResolver: () => payload }),
-        AssetError
-      );
-    } else {
-      const chain = await createChain(bundle, { assetResolver: () => payload });
+    const chain = await createChain(bundle, { assetResolver: () => payload });
+    try {
       await assert.rejects(
         chain.prewarm({ sampleRate: 48000, channels: entry.processingChannels }),
         AssetError
       );
+    } finally {
       chain.close();
     }
   }
@@ -785,7 +775,7 @@ test('non-bundle ETA1 inference rejects malformed headers and path slots', async
     topology: IR_ASSET_TOPOLOGY.matrix,
     paths: [{ inputSlot: 0, outputSlot: 0, irChannel: 0 }]
   });
-  new DataView(matrix).setUint32(32, 8, true);
+  new DataView(matrix).setUint32(32, 16, true);
   await assert.rejects(
     createChain([
       new IRReverb({ assets: { impulseResponse: 'bad-slot' } })

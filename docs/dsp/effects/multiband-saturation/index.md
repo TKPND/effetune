@@ -16,7 +16,7 @@ Applies independent saturation to multiple frequency bands.
 - Seeded: **no**
 - Catalog sample rates: **not declared; this does not mean unsupported**
 - Assets: **none**
-- Catalog-declared latency: **zero**
+- Catalog-declared latency: **dynamic**; depends on oversampling
 
 | Semantic name | Python constructor keyword | Type / count | Default | Unit | Range or values |
 |---|---|---:|---|---|---|
@@ -26,6 +26,7 @@ Applies independent saturation to multiple frequency bands.
 | `bias` | `bias` | number / 3 | `[0.1,0.1,0.1]` | Not declared in catalog | -0.3 … 0.3 |
 | `mix` | `mix` | number / 3 | `[100,100,100]` | % | 0 … 100 |
 | `gain` | `gain` | number / 3 | `[0,0,0]` | dB | -18 … 18 |
+| `oversampling` | `oversampling` | integer / 1 | `1` | Not declared in catalog | `1`, `2`, `4`, `8` |
 
 
 
@@ -36,6 +37,8 @@ Applies independent saturation to multiple frequency bands.
 ## Multiband Saturation
 
 A versatile effect that lets you add warmth and character to specific frequency ranges of the whole playback signal. By splitting the sound into low, mid, and high bands, you can shape each range independently for precise sound enhancement.
+
+**Oversampling**: Choose 1x (default), 2x, 4x, 8x. Higher settings reduce unwanted tones caused by high-frequency harmonics folding back into the audible range, but use more CPU. Start with 2x or 4x; use 8x for stronger suppression at 48 kHz. 1x preserves the original processing. Settings above 1x add 64 samples of delay (about 1.33 ms at 48 kHz).
 
 ### Listening Enhancement Guide
 - Low-Frequency Warmth:

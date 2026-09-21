@@ -284,6 +284,30 @@ test('LevelMeter keeps legacy processBuffer measurements active alongside teleme
   assert.match(plugin.processorString, /data\.measurements/);
 });
 
+test('LevelMeter keeps a fixed peak window across irregular block sizes', () => {
+  const runtime = loadLevelMeter();
+  const plugin = new runtime.LevelMeterPlugin();
+  const process = new Function('data', 'parameters', 'context', 'time', plugin.processorString);
+  const context = {};
+  const blockSizes = [5, 3, 7, 17];
+  let firstSample = true;
+  let measurements;
+  for (const blockSize of blockSizes) {
+    const data = new Float32Array(blockSize).fill(0.25);
+    if (firstSample) {
+      data[0] = 1;
+      firstSample = false;
+    }
+    process(data, { channelCount: 1, blockSize, sampleRate: 960 }, context, 0);
+    measurements = data.measurements;
+  }
+  assert.equal(measurements.channels[0].peak, 1);
+
+  const next = Float32Array.of(0.1);
+  process(next, { channelCount: 1, blockSize: 1, sampleRate: 960 }, context, 0);
+  assert.equal(next.measurements.channels[0].peak, 0.25);
+});
+
 test('LevelMeter prevents duplicate subscriptions across message and UI rebuilds', () => {
   const firstHub = createHub();
   const runtime = loadLevelMeter({ hub: firstHub });

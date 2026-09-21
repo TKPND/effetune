@@ -1,6 +1,6 @@
 ---
 title: "基础音频插件 - EffeTune"
-description: "包含 Volume、Mute、Stereo Balance、FIR Crossover、Matrix 路由等基础音频插件。"
+description: "包含 Bass Management、Volume、Mute、Stereo Balance、FIR Crossover、Matrix 路由等基础音频插件。"
 lang: zh
 ---
 
@@ -15,6 +15,7 @@ lang: zh
 
 ## 插件列表
 
+- [Bass Management](#bass-management) - 将管理的低音和 LFE 发送到选定的低音炮输出
 - [Channel Divider](#channel-divider) - 将立体声分成多个频段，并分配到立体声输出对
 - [DC Offset](#dc-offset) - 添加或校正常量 DC 偏移
 - [FIR Crossover](#fir-crossover) - 使用 FIR 滤波器将立体声信号分为陡峭的频段
@@ -24,6 +25,38 @@ lang: zh
 - [Polarity Inversion](#polarity-inversion) - 为校正或特殊路由反转信号极性
 - [Stereo Balance](#stereo-balance) - 调整音乐的左右平衡
 - [Volume](#volume) - 控制音乐播放音量
+
+## Bass Management
+
+Bass Management 会将选定主声道的低频部分和专用 LFE 输入发送到所选低音炮输出。每个 **Managed** 声道会在原主输出保留高频，并把低频发送到低音炮。它适用于连接主扬声器和一个或多个低音炮的多声道总线，并需要 WASM DSP 引擎。
+
+在选择任何 **Sub Outputs** 之前，Bass Management 不会分离低频或将其分配到低音炮；输入声道会不经过 crossover 直接通过。新实例会将实际总线声道设为 **Managed**，并且不选择任何 **Sub Outputs**。
+
+在效果总线路由中选择 **All**，并为所有主扬声器和低音炮设置足够的输出声道。表格会显示输入角色和低音炮输出。低音炮输出不能同时是 **Full Range** 或 **Managed** 主声道。**LFE** 输入可以与低音炮输出使用相同声道号；它会在组装输出前收集，因此只发送一次。
+
+### 声音调节指南
+
+- 对于立体声加两个低音炮，使用四声道：将 1/2 设为 **Managed**，然后将 3/4 选择为 **Sub Outputs**。它们的角色会自动变为 **LFE**；在 Matrix 中保留或关闭每条从主声道到低音炮的路径。
+- 对于环绕声内容，只将实际主声道设为 **Managed**，将源 LFE 声道设为 **LFE**，然后明确选择低音炮输出。
+- 每个管理声道从 80 Hz、24 dB/oct 开始。主扬声器低频延伸有限时提高频率；需要减少重叠时使用更大的 Slope。提高音量前请确认扬声器的可用频段。
+- 发送到多个低音炮的输入会在电平上均分，但无法防止组合信号的峰值。需要时降低 **Headroom**，查看后级电平表，并在链路末端使用 Brickwall Limiter 控制峰值。仅当源链路尚未应用预期 LFE 调整时才使用 **LFE Gain**。
+- 在 Bass Management 后对每个低音炮应用高通、EQ 或极性调整；随后用 MultiChannel Panel 调节 trim、mute/solo 和最多 30 ms 的 delay。
+
+### 参数
+
+- **Phase**：**IIR** 延迟较低，会改变分频点附近的相位。**Linear** 会在时间上对齐分频，但会增加可见延迟，并可能产生 pre-ringing。
+- **Taps**：为 Linear 选择 8192、16384 或 32768。更多 Taps 可提高低频和陡峭 Slope 的精度，但会增加准备时间和延迟。初始值为 16384。
+- **Headroom** 对所有输出施加相同衰减。**Bass Gain** 调节 **Managed** 分离出的低频，**LFE Gain** 调节 **LFE** 输入，二者均在混合到低音炮前生效。
+- **Channel Role**：**Full Range** 保留源信号在主输出；**Managed** 保留高频并发送低频；**LFE** 仅发送到低音炮；**Unused** 通常为低音炮输出保留输入。
+- **Crossover Frequency** 为各 **Managed** 声道设置 20–300 Hz；值越高，发送到低音炮的低频越多。**Slope** 提供 24、48、96 dB/oct；值越高重叠越少。
+- **Sub Outputs** 选择每个 **Managed** 或 **LFE** 的输出。选择声道会将其 **Channel Role** 改为 **LFE**。新选择的输出会从总线的所有输入开始，以正常极性建立 **ON** 路径；使用 Matrix 关闭单条路径。没有 **Sub Outputs** 时，低频分离和低音炮路由会停止，输入声道会不经过 crossover 直接通过。**LFE Low-pass**、**LFE Frequency**、**LFE Slope** 可选择以 20–300 Hz 和 24/48/96 dB/oct 限制 LFE，不会再次过滤已分离的主声道低频。
+- **ON** 和 **Ø**：在声道表的每个单元格中，**ON** 将该 **Managed** 或 **LFE** 输入发送到所选低音炮输出。**Ø** 只反转该输入到低音炮这一条路径的极性，可用于配合测量结果或听感调整。只有选择 **ON** 时才能使用 **Ø**；关闭 **ON** 也会关闭 **Ø**。它不会改变该输入的主输出。
+
+### 显示、状态与校准
+
+- 路由摘要显示每个低音炮由哪些输入供给。提高电平前请检查，尤其是在改变声道数后。选择 **Managed** 声道可查看实际启用的高通和低通响应，而非理想曲线。
+- 状态显示模式、Linear 准备过程和以 samples/ms 表示的有效延迟。更改 Linear 设置时声音可能短暂减小或停止。若无法准备滤波器，请减少 **Taps** 后重试。若旧配置不可用，普通主声道会以匹配延迟原样通过，保留的低音炮输出静音，LFE 会在准备完成前不播放。
+- 主机 bypass 会恢复原始音频和声道分配，因此路由、保护和延迟对齐不会保留。若要在保持连接的情况下比较或静音，请使用后级 MultiChannel Panel。后级 IIR 高通/EQ 或相对 delay 会改变完整 Linear 系统的相位，因此请将校准链保存为一个 preset。
 
 ## Channel Divider
 

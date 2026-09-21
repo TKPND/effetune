@@ -43,7 +43,7 @@ const ports = [
     fields: [['delay', 'dl', 'float']],
     caseCount: 7,
     identityCase: 'zero-delay-identity',
-    jsEngineHash: '6b742f960a331aa41c40be83a5cc82bd459f844d2e7e855f266292a4e32522c8',
+    jsEngineHash: 'acafa3e0a877dd20f984d64e85920acb0e95d31a79cb410ac8aee171f5e92a21',
     activeParams: { dl: 1 }
   },
   {
@@ -171,7 +171,7 @@ test('delay goldens preserve exact extrema and stereo feedback modes', async () 
   );
   const longest = alignmentGoldens.find(item => item.metadata.id === 'maximum-delay');
   assert.equal(longest.expected[0], 0);
-  assert.equal(longest.expected[19200], 1);
+  assert.equal(longest.expected[96000], 1);
 });
 
 test('Tremolo distinguishes deterministic sine from stochastic stereo modulation', async () => {

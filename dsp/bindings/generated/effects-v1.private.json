@@ -325,6 +325,264 @@
       ],
       "assets": []
     },
+    "BassManagement": {
+      "internalType": "BassManagementPlugin",
+      "layoutHash": 3385775306,
+      "floatCount": 89,
+      "packedParameters": [
+        {
+          "publicName": "phase",
+          "field": "phase",
+          "keys": [
+            "ph"
+          ],
+          "offset": 0,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "taps",
+          "field": "taps",
+          "keys": [
+            "tp"
+          ],
+          "offset": 1,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "roles",
+          "field": "roles",
+          "keys": [
+            "ro0",
+            "ro1",
+            "ro2",
+            "ro3",
+            "ro4",
+            "ro5",
+            "ro6",
+            "ro7",
+            "ro8",
+            "ro9",
+            "ro10",
+            "ro11",
+            "ro12",
+            "ro13",
+            "ro14",
+            "ro15"
+          ],
+          "offset": 2,
+          "count": 16,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "frequencies",
+          "field": "frequencies",
+          "keys": [
+            "fc0",
+            "fc1",
+            "fc2",
+            "fc3",
+            "fc4",
+            "fc5",
+            "fc6",
+            "fc7",
+            "fc8",
+            "fc9",
+            "fc10",
+            "fc11",
+            "fc12",
+            "fc13",
+            "fc14",
+            "fc15"
+          ],
+          "offset": 18,
+          "count": 16,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "slopes",
+          "field": "slopes",
+          "keys": [
+            "sl0",
+            "sl1",
+            "sl2",
+            "sl3",
+            "sl4",
+            "sl5",
+            "sl6",
+            "sl7",
+            "sl8",
+            "sl9",
+            "sl10",
+            "sl11",
+            "sl12",
+            "sl13",
+            "sl14",
+            "sl15"
+          ],
+          "offset": 34,
+          "count": 16,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "routes",
+          "field": "routes",
+          "keys": [
+            "rt0",
+            "rt1",
+            "rt2",
+            "rt3",
+            "rt4",
+            "rt5",
+            "rt6",
+            "rt7",
+            "rt8",
+            "rt9",
+            "rt10",
+            "rt11",
+            "rt12",
+            "rt13",
+            "rt14",
+            "rt15"
+          ],
+          "offset": 50,
+          "count": 16,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "subs",
+          "field": "subs",
+          "keys": [
+            "su"
+          ],
+          "offset": 66,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "lfeFrequency",
+          "field": "lfeFrequency",
+          "keys": [
+            "lf"
+          ],
+          "offset": 67,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "lfeSlope",
+          "field": "lfeSlope",
+          "keys": [
+            "ls"
+          ],
+          "offset": 68,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "lfeLowpass",
+          "field": "lfeLowpass",
+          "keys": [
+            "lo"
+          ],
+          "offset": 69,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "bassGain",
+          "field": "bassGain",
+          "keys": [
+            "bg"
+          ],
+          "offset": 70,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "lfeGain",
+          "field": "lfeGain",
+          "keys": [
+            "lg"
+          ],
+          "offset": 71,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "headroom",
+          "field": "headroom",
+          "keys": [
+            "hg"
+          ],
+          "offset": 72,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "routeInversions",
+          "field": "routeInversions",
+          "keys": [
+            "ri0",
+            "ri1",
+            "ri2",
+            "ri3",
+            "ri4",
+            "ri5",
+            "ri6",
+            "ri7",
+            "ri8",
+            "ri9",
+            "ri10",
+            "ri11",
+            "ri12",
+            "ri13",
+            "ri14",
+            "ri15"
+          ],
+          "offset": 73,
+          "count": 16,
+          "transform": {
+            "kind": "identity"
+          }
+        }
+      ],
+      "assets": [
+        {
+          "publicName": "impulseResponse",
+          "slot": 0,
+          "format": "ET_ASSET_F32_MULTICH",
+          "capacity": "32 MiB convolution cap"
+        }
+      ]
+    },
     "ChannelDivider": {
       "internalType": "ChannelDividerPlugin",
       "layoutHash": 3926343008,
@@ -814,6 +1072,62 @@
             "dl"
           ],
           "offset": 0,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        }
+      ],
+      "assets": []
+    },
+    "AttackTonalBalance": {
+      "internalType": "AttackTonalBalancePlugin",
+      "layoutHash": 559813305,
+      "floatCount": 4,
+      "packedParameters": [
+        {
+          "publicName": "attack",
+          "field": "attack",
+          "keys": [
+            "at"
+          ],
+          "offset": 0,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "tonal",
+          "field": "tonal",
+          "keys": [
+            "tn"
+          ],
+          "offset": 1,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "attackEnabled",
+          "field": "attackEnabled",
+          "keys": [
+            "ae"
+          ],
+          "offset": 2,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "tonalEnabled",
+          "field": "tonalEnabled",
+          "keys": [
+            "te"
+          ],
+          "offset": 3,
           "count": 1,
           "transform": {
             "kind": "identity"
@@ -7590,10 +7904,42 @@
       ],
       "assets": []
     },
+    "BassExtender": {
+      "internalType": "BassExtenderPlugin",
+      "layoutHash": 3177572667,
+      "floatCount": 2,
+      "packedParameters": [
+        {
+          "publicName": "amount",
+          "field": "amount",
+          "keys": [
+            "am"
+          ],
+          "offset": 0,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "outputGain",
+          "field": "outputGain",
+          "keys": [
+            "og"
+          ],
+          "offset": 1,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        }
+      ],
+      "assets": []
+    },
     "DynamicSaturation": {
       "internalType": "DynamicSaturationPlugin",
-      "layoutHash": 3365051379,
-      "floatCount": 9,
+      "layoutHash": 36309271,
+      "floatCount": 10,
       "packedParameters": [
         {
           "publicName": "speakerDrive",
@@ -7702,14 +8048,26 @@
           "transform": {
             "kind": "identity"
           }
+        },
+        {
+          "publicName": "oversampling",
+          "field": "oversampling",
+          "keys": [
+            "os"
+          ],
+          "offset": 9,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
         }
       ],
       "assets": []
     },
     "Exciter": {
       "internalType": "ExciterPlugin",
-      "layoutHash": 4235094650,
-      "floatCount": 5,
+      "layoutHash": 660771092,
+      "floatCount": 6,
       "packedParameters": [
         {
           "publicName": "highPassFrequency",
@@ -7784,14 +8142,26 @@
           "transform": {
             "kind": "identity"
           }
+        },
+        {
+          "publicName": "oversampling",
+          "field": "oversampling",
+          "keys": [
+            "os"
+          ],
+          "offset": 5,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
         }
       ],
       "assets": []
     },
     "HardClipping": {
       "internalType": "HardClippingPlugin",
-      "layoutHash": 837158957,
-      "floatCount": 2,
+      "layoutHash": 969627901,
+      "floatCount": 3,
       "packedParameters": [
         {
           "publicName": "threshold",
@@ -7816,14 +8186,26 @@
           "transform": {
             "kind": "identity"
           }
+        },
+        {
+          "publicName": "oversampling",
+          "field": "oversampling",
+          "keys": [
+            "os"
+          ],
+          "offset": 2,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
         }
       ],
       "assets": []
     },
     "HarmonicDistortion": {
       "internalType": "HarmonicDistortionPlugin",
-      "layoutHash": 83146208,
-      "floatCount": 5,
+      "layoutHash": 211299558,
+      "floatCount": 6,
       "packedParameters": [
         {
           "publicName": "secondHarmonic",
@@ -7884,14 +8266,26 @@
           "transform": {
             "kind": "identity"
           }
+        },
+        {
+          "publicName": "oversampling",
+          "field": "oversampling",
+          "keys": [
+            "os"
+          ],
+          "offset": 5,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
         }
       ],
       "assets": []
     },
     "MultibandSaturation": {
       "internalType": "MultibandSaturationPlugin",
-      "layoutHash": 698810406,
-      "floatCount": 14,
+      "layoutHash": 2760830064,
+      "floatCount": 15,
       "packedParameters": [
         {
           "publicName": "frequency1",
@@ -7972,14 +8366,26 @@
           "transform": {
             "kind": "identity"
           }
+        },
+        {
+          "publicName": "oversampling",
+          "field": "oversampling",
+          "keys": [
+            "os"
+          ],
+          "offset": 14,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
         }
       ],
       "assets": []
     },
     "Saturation": {
       "internalType": "SaturationPlugin",
-      "layoutHash": 1115003603,
-      "floatCount": 4,
+      "layoutHash": 2929709815,
+      "floatCount": 5,
       "packedParameters": [
         {
           "publicName": "drive",
@@ -8024,6 +8430,18 @@
             "gn"
           ],
           "offset": 3,
+          "count": 1,
+          "transform": {
+            "kind": "identity"
+          }
+        },
+        {
+          "publicName": "oversampling",
+          "field": "oversampling",
+          "keys": [
+            "os"
+          ],
+          "offset": 4,
           "count": 1,
           "transform": {
             "kind": "identity"
@@ -9849,6 +10267,7 @@
     "dsp/plugins/analyzer/spectrogram/params.json": "dsp/plugins/analyzer/spectrogram/golden/index.json",
     "dsp/plugins/analyzer/spectrum_analyzer/params.json": "dsp/plugins/analyzer/spectrum_analyzer/golden/index.json",
     "dsp/plugins/analyzer/stereo_meter/params.json": "dsp/plugins/analyzer/stereo_meter/golden/index.json",
+    "dsp/plugins/basics/bass_management/params.json": "dsp/plugins/basics/bass_management/golden/index.json",
     "dsp/plugins/basics/channel_divider/params.json": "dsp/plugins/basics/channel_divider/golden/index.json",
     "dsp/plugins/basics/dc_offset/params.json": "dsp/plugins/basics/dc_offset/golden/index.json",
     "dsp/plugins/basics/fir_crossover/params.json": "dsp/plugins/basics/fir_crossover/golden/index.json",
@@ -9860,6 +10279,7 @@
     "dsp/plugins/basics/volume/params.json": "dsp/plugins/basics/volume/golden/index.json",
     "dsp/plugins/delay/delay/params.json": "dsp/plugins/delay/delay/golden/index.json",
     "dsp/plugins/delay/time_alignment/params.json": "dsp/plugins/delay/time_alignment/golden/index.json",
+    "dsp/plugins/dynamics/attack_tonal_balance/params.json": "dsp/plugins/dynamics/attack_tonal_balance/golden/index.json",
     "dsp/plugins/dynamics/auto_leveler/params.json": "dsp/plugins/dynamics/auto_leveler/golden/index.json",
     "dsp/plugins/dynamics/brickwall_limiter/params.json": "dsp/plugins/dynamics/brickwall_limiter/golden/index.json",
     "dsp/plugins/dynamics/compressor/params.json": "dsp/plugins/dynamics/compressor/golden/index.json",
@@ -9930,6 +10350,7 @@
     "dsp/plugins/reverb/ir_reverb/params.json": "dsp/plugins/reverb/ir_reverb/golden/index.json",
     "dsp/plugins/reverb/rs_reverb/params.json": "dsp/plugins/reverb/rs_reverb/golden/index.json",
     "dsp/plugins/saturation/bandwidth_extender/params.json": "dsp/plugins/saturation/bandwidth_extender/golden/index.json",
+    "dsp/plugins/saturation/bass_extender/params.json": "dsp/plugins/saturation/bass_extender/golden/index.json",
     "dsp/plugins/saturation/dynamic_saturation/params.json": "dsp/plugins/saturation/dynamic_saturation/golden/index.json",
     "dsp/plugins/saturation/exciter/params.json": "dsp/plugins/saturation/exciter/golden/index.json",
     "dsp/plugins/saturation/hard_clipping/params.json": "dsp/plugins/saturation/hard_clipping/golden/index.json",
@@ -9946,5 +10367,5 @@
     "dsp/plugins/spatial/spatial_mapper/params.json": "dsp/plugins/spatial/spatial_mapper/golden/index.json",
     "dsp/plugins/spatial/stereo_blend/params.json": "dsp/plugins/spatial/stereo_blend/golden/index.json"
   },
-  "contractDigest": "bf3475e88d0983c14c97bf3eee4f3d09b4f85e52de3b5caefda85c2affe85789"
+  "contractDigest": "dcc0f7b37b351e1bf8e87084d9887d238b0179d45b78425a96d9823e66348d67"
 }

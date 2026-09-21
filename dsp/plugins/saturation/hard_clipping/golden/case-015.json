@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "type": "HardClippingPlugin",
+  "id": "oversampling-16x",
+  "stimulus": "noise",
+  "sampleRate": 48000,
+  "channels": 2,
+  "frameCount": 257,
+  "blockSize": 64,
+  "channelMode": "stereo",
+  "channel": null,
+  "caseIndex": 14,
+  "seed": "0xeffe7a50",
+  "params": {
+    "th": -18,
+    "md": "both",
+    "os": 16
+  },
+  "events": [],
+  "tolerance": {
+    "abs": 0.000001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "2a2b73550f3fb4bf7d77e2c5790774fad9f739ead89bd3654610b7cc3b4d1e4c",
+  "outputFloats": 514,
+  "byteLength": 2056,
+  "binary": "case-015.f32"
+}

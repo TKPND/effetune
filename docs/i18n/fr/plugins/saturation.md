@@ -16,6 +16,7 @@ Appuyez sur l’icône de spectre d’un graphique compatible pour passer succes
 ## Liste des Plugins
 
 - [Bandwidth Extender](#bandwidth-extender) - Génère des aigus au-dessus d'une coupure détectée ou définie
+- [Bass Extender](#bass-extender) - Génère des graves une octave sous un contenu adapté
 - [Dynamic Saturation](#dynamic-saturation) - Simule le déplacement non linéaire des cônes de haut-parleur
 - [Exciter](#exciter) - Ajoute du contenu harmonique pour améliorer la clarté et la présence
 - [Hard Clipping](#hard-clipping) - Ajoute de l'intensité et du mordant au son
@@ -46,9 +47,28 @@ La bande générée comprend deux composantes réglables séparément : une cont
 
 Bandwidth Extender ajoute environ 26,7-29,0 ms de latence, dont un saut de traitement supplémentaire : 1 280 échantillons à 48 kHz, 2 560 à 96 kHz ou 5 120 à 192 kHz. S'il ne peut pas fonctionner avec la fréquence d'échantillonnage, la configuration des canaux ou l'appareil actuels, son panneau indique qu'il est contourné et le son reste inchangé. Utilisez un réglage compatible ou désactivez le plugin.
 
+## Bass Extender
+
+Bass Extender renforce les enregistrements pauvres en graves en générant du contenu environ une octave sous les graves déjà présents. Il analyse l'entrée entre 60 et 200 Hz environ et ajoute des graves autour de 30 à 100 Hz tout en conservant le signal d'origine. Il ne reconstitue ni la fondamentale manquante, ni son niveau, ni sa phase d'origine.
+
+### Guide d'amélioration de l'écoute
+
+- Commencez avec **Amount** à sa valeur par défaut de 25 %, puis augmentez-le progressivement.
+- Comparez au bypass à un volume proche. Réduisez **Output** si les graves ajoutés rendent le signal traité plus fort.
+- Réduisez **Amount** si les notes de basse, la grosse caisse ou leur superposition deviennent troubles ou irrégulières.
+- Utilisez Spectrum Analyzer et Level Meter pour comparer la plage de graves ajoutée et le niveau de sortie.
+- L'effet restera faible si votre casque ou vos enceintes ne peuvent pas reproduire la plage générée de 30 à 100 Hz.
+
+### Paramètres
+
+- **Amount** (0–100 %, 25 % par défaut) règle le niveau des graves générés. À 0 %, aucun grave n'est ajouté ; une valeur plus élevée le rend plus présent sans modifier directement le signal d'origine.
+- **Output** (-24 à 0 dB, 0 dB par défaut) règle le niveau final après l'ajout des graves. Réduisez-le pour égaliser le volume avec le bypass ou conserver davantage de marge en sortie.
+
 ## Dynamic Saturation
 
 Un effet basé sur la physique qui simule le déplacement non linéaire des cônes de haut-parleur dans différentes conditions. En modélisant le comportement mécanique d'un haut-parleur, puis en appliquant une saturation à ce déplacement, il crée une forme unique de distorsion qui répond de manière dynamique à votre musique.
+
+**Oversampling** : Choisissez 1x (par défaut), 2x, 4x, 8x. Les valeurs élevées réduisent les sons indésirables dus au repliement des harmoniques aiguës dans la bande audible, mais sollicitent davantage le processeur. Commencez par 2x ou 4x ; choisissez 8x pour une réduction plus forte à 48 kHz. 1x conserve le traitement d’origine. Au-delà de 1x, un retard de 64 échantillons s’ajoute (environ 1,33 ms à 48 kHz).
 
 ### Préréglages système
 
@@ -142,6 +162,8 @@ Cliquez sur **Préréglages d’effet** dans l’en-tête de l’effet pour comp
 
 Un effet qui ajoute du contenu harmonique pour améliorer la clarté et la présence. En filtrant le contenu haute fréquence et en appliquant une saturation, il crée des harmoniques supplémentaires qui illuminent et améliorent votre musique.
 
+**Oversampling** : Choisissez 1x (par défaut), 2x, 4x, 8x. Les valeurs élevées réduisent les sons indésirables dus au repliement des harmoniques aiguës dans la bande audible, mais sollicitent davantage le processeur. Commencez par 2x ou 4x ; choisissez 8x pour une réduction plus forte à 48 kHz. 1x conserve le traitement d’origine. Au-delà de 1x, un retard de 64 échantillons s’ajoute (environ 1,33 ms à 48 kHz).
+
 ### Guide d'Amélioration de l'Écoute
 - **Amélioration Subtile :**
   - Ajoute de la clarté et de l'air aux voix
@@ -216,6 +238,8 @@ Un effet qui ajoute du contenu harmonique pour améliorer la clarté et la prés
 
 Un effet d'écrêtage numérique qui limite les crêtes au-dessus d'un seuil défini. Utilisez-le lorsque vous voulez plus de mordant, de densité ou de distorsion créative ; gardez le seuil haut pour un contrôle léger des crêtes et baissez-le progressivement pour un caractère plus fort.
 
+**Oversampling** : Choisissez 1x (par défaut), 2x, 4x, 8x, 16x. Les valeurs élevées réduisent les sons indésirables dus au repliement des harmoniques aiguës dans la bande audible, mais sollicitent davantage le processeur. Commencez par 2x ou 4x ; choisissez 16x pour une réduction plus forte à 48 kHz. 1x conserve le traitement d’origine. Au-delà de 1x, un retard de 64 échantillons s’ajoute (environ 1,33 ms à 48 kHz).
+
 ### Guide d'Amélioration de l'Écoute
 - Amélioration Subtile :
   - Ajoute un peu de mordant et de densité lorsque Threshold reste haut
@@ -258,6 +282,8 @@ Un effet d'écrêtage numérique qui limite les crêtes au-dessus d'un seuil dé
 ## Harmonic Distortion
 
 Le plugin Harmonic Distortion façonne la forme d'onde avec des termes non linéaires ajustables du 2e au 5e ordre. Il permet de régler le caractère des distorsions paires et impaires, d'une chaleur subtile à une coloration plus forte, ce qui peut rendre plus vivant un son trop propre, mince ou plat.
+
+**Oversampling** : Choisissez 1x (par défaut), 2x, 4x, 8x. Les valeurs élevées réduisent les sons indésirables dus au repliement des harmoniques aiguës dans la bande audible, mais sollicitent davantage le processeur. Commencez par 2x ou 4x ; choisissez 8x pour une réduction plus forte à 48 kHz. 1x conserve le traitement d’origine. Au-delà de 1x, un retard de 64 échantillons s’ajoute (environ 1,33 ms à 48 kHz).
 
 ### Guide d'amélioration de l'écoute
 
@@ -304,6 +330,8 @@ Le plugin Harmonic Distortion façonne la forme d'onde avec des termes non liné
 ## Multiband Saturation
 
 Un effet polyvalent qui permet d'ajouter de la chaleur et du caractère à des plages de fréquences spécifiques du signal de lecture entier. En divisant le son en bandes basses, moyennes et hautes, vous pouvez façonner chaque plage indépendamment pour une amélioration sonore précise.
+
+**Oversampling** : Choisissez 1x (par défaut), 2x, 4x, 8x. Les valeurs élevées réduisent les sons indésirables dus au repliement des harmoniques aiguës dans la bande audible, mais sollicitent davantage le processeur. Commencez par 2x ou 4x ; choisissez 8x pour une réduction plus forte à 48 kHz. 1x conserve le traitement d’origine. Au-delà de 1x, un retard de 64 échantillons s’ajoute (environ 1,33 ms à 48 kHz).
 
 ### Guide d'Amélioration de l'Écoute
 - Amélioration des Basses :
@@ -383,6 +411,8 @@ Comme ce traitement agit par bande de fréquences, il affecte tous les sons de l
 ## Saturation
 
 Un effet qui simule le son chaud et agréable des équipements à lampes vintage. Il peut ajouter de la richesse et du caractère à votre musique, lui donnant un son plus "analogique" et moins "numérique".
+
+**Oversampling** : Choisissez 1x (par défaut), 2x, 4x, 8x. Les valeurs élevées réduisent les sons indésirables dus au repliement des harmoniques aiguës dans la bande audible, mais sollicitent davantage le processeur. Commencez par 2x ou 4x ; choisissez 8x pour une réduction plus forte à 48 kHz. 1x conserve le traitement d’origine. Au-delà de 1x, un retard de 64 échantillons s’ajoute (environ 1,33 ms à 48 kHz).
 
 ### Guide d'Amélioration de l'Écoute
 - Ajout de Chaleur :

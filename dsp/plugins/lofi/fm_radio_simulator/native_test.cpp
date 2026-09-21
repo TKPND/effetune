@@ -6,6 +6,7 @@
 // corner-parameter torture stability.
 #include "FMRadioSimulatorPluginParams.h"
 #include "allocation_guard.h"
+#include "effetune/dsp/telemetry_spectrum.h"
 #include "effetune/kernel.h"
 #include "effetune/telemetry.h"
 #include "peak_controller.h"
@@ -1359,9 +1360,132 @@ void testDefaultLoudnessNeutrality() {
         "default parameters stay loudness-neutral on a music-like multitone");
 }
 
+void testDistributedTelemetrySpectrum() {
+  using Spectrum = effetune::dsp::TelemetrySpectrum;
+  std::array<float, Spectrum::kWindow> input{};
+  for (std::uint32_t index = 0u; index < input.size(); ++index) {
+    input[index] = static_cast<float>(0.4 * std::sin(kTwoPi * 19000.0 * index / 192000.0));
+  }
+  const auto reference = [&](double rate, double maximum) {
+    std::array<float, Spectrum::kWindow> windowed{};
+    std::array<float, Spectrum::kBins> result{};
+    double window_sum = 0.0;
+    for (std::uint32_t index = 0u; index < input.size(); ++index) {
+      const double window = 0.5 - 0.5 * std::cos(kTwoPi * index / (Spectrum::kWindow - 1u));
+      window_sum += window;
+      windowed[index] = input[index] * static_cast<float>(window);
+    }
+    const double ratio = std::log(maximum / 300.0) / (Spectrum::kBins - 1u);
+    for (std::uint32_t bin = 0u; bin < result.size(); ++bin) {
+      const double frequency = 300.0 * std::exp(ratio * bin);
+      const double coefficient = 2.0 * std::cos(kTwoPi * frequency / rate);
+      double s1 = 0.0, s2 = 0.0;
+      for (float sample : windowed) {
+        const double s0 = sample + coefficient * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+      }
+      const double power = s1 * s1 + s2 * s2 - coefficient * s1 * s2;
+      const double magnitude = std::sqrt(power > 0.0 ? power : 0.0) * (2.0 / window_sum);
+      const float db =
+          static_cast<float>(20.0 * std::log10(magnitude > 1.0e-7 ? magnitude : 1.0e-7));
+      result[bin] = db > 20.0F ? 20.0F : db;
+    }
+    return result;
+  };
+  const auto expected = reference(192000.0, 60000.0);
+  for (std::uint32_t quantum : {8u, 16u, 32u, 64u, 128u, 0u}) {
+    Spectrum spectrum;
+    spectrum.prepare(192000.0, 60000.0);
+    const auto empty = spectrum.values();
+    for (float sample : input) {
+      spectrum.capture(sample);
+    }
+    spectrum.process(4096u);
+    check(spectrum.values() == empty, "unrequested spectrum does no analysis");
+    spectrum.request();
+    for (float sample : input) {
+      spectrum.capture(sample);
+    }
+    constexpr std::array<std::uint32_t, 7> irregular{1u, 13u, 127u, 3u, 64u, 8u, 29u};
+    std::uint32_t elapsed = 0u, call = 0u;
+    while (elapsed < 768u) {
+      const std::uint32_t requested =
+          quantum != 0u ? quantum : irregular[call++ % irregular.size()];
+      const std::uint32_t frames = requested < 768u - elapsed ? requested : 768u - elapsed;
+      spectrum.request();
+      spectrum.capture(1000.0F);
+      spectrum.process(frames);
+      elapsed += frames;
+      if (elapsed < 768u) {
+        check(spectrum.values() == empty,
+              "only complete spectrum is published within frame budget");
+      }
+    }
+    for (std::uint32_t bin = 0u; bin < Spectrum::kBins; ++bin) {
+      check(std::abs(spectrum.values()[bin] - expected[bin]) < 1.0e-5F,
+            "fixed snapshot matches unsplit Hann/Goertzel reference");
+    }
+    const auto previous = spectrum.values();
+    spectrum.request();
+    for (std::uint32_t index = 0u; index < Spectrum::kWindow; ++index) {
+      spectrum.capture(0.0F);
+    }
+    spectrum.process(767u);
+    check(spectrum.values() == previous, "old completed spectrum survives partial next analysis");
+    spectrum.process(1u);
+    check(spectrum.values() == empty, "next completed silent window replaces previous spectrum");
+    spectrum.request();
+    for (float sample : input) {
+      spectrum.capture(sample);
+    }
+    spectrum.process(8u);
+    spectrum.configure(48000.0, 15000.0);
+    spectrum.process(4096u);
+    check(spectrum.values() == empty, "frequency-grid change cancels pending window");
+    spectrum.request();
+    for (float sample : input) {
+      spectrum.capture(sample);
+    }
+    spectrum.process(768u);
+    const auto reconfigured = reference(48000.0, 15000.0);
+    for (std::uint32_t bin = 0u; bin < Spectrum::kBins; ++bin) {
+      check(std::abs(spectrum.values()[bin] - reconfigured[bin]) < 1.0e-5F,
+            "new window uses only the new frequency grid");
+    }
+    spectrum.reset();
+    spectrum.process(4096u);
+    check(spectrum.values() == empty, "reset clears the completed spectrum");
+  }
+}
+
+void testSpectrumDoesNotChangeAudio() {
+  KernelHarness reference(48000.0F), observed(48000.0F);
+  reference.stage(defaultParams());
+  observed.stage(defaultParams());
+  constexpr std::array<std::uint32_t, 6> quanta{8u, 16u, 32u, 64u, 128u, 13u};
+  std::uint32_t absolute = 0u;
+  for (std::uint32_t block = 0u; block < 120u; ++block) {
+    const std::uint32_t frames = quanta[block % quanta.size()];
+    std::vector<float> original(2u * frames);
+    for (std::uint32_t frame = 0u; frame < frames; ++frame) {
+      original[frame] = original[frames + frame] =
+          static_cast<float>(0.2 * std::sin(kTwoPi * 1000.0 * (absolute + frame) / 48000.0));
+    }
+    auto actual = original;
+    reference.process(original, 2u, frames);
+    observed.process(actual, 2u, frames);
+    observed.telemetryClickCount();
+    check(actual == original, "telemetry requests and completed spectra leave audio bit-exact");
+    absolute += frames;
+  }
+}
+
 } // namespace
 
 int main() {
+  testDistributedTelemetrySpectrum();
+  testSpectrumDoesNotChangeAudio();
   testLatencyReportAndDryAlignment();
   testReportedLatencyTable();
   testPeakControllerUnit();
