@@ -114,6 +114,7 @@ Suit une fréquence fondamentale (F0) à la fois dans un piano roll défilant su
 - **Vertical** place les notes graves en bas et les aiguës en haut. La dernière estimation apparaît près du clavier à droite et l'historique avance vers la gauche.
 - La position de la ligne indique la hauteur entre les demi-tons. Une estimation plus fiable apparaît plus nettement ; la ligne s'interrompt si l'entrée est trop faible ou si aucune hauteur unique et stable n'est trouvée.
 - L'étiquette actuelle indique la note la plus proche et l'écart en cents. Une valeur positive est au-dessus de la note, une valeur négative en dessous. L'étiquette disparaît en l'absence d'estimation fiable.
+- Le nom de la note reprend les couleurs de Note Spectrogram. La taille du nom et de l'écart en cents s'adapte à la largeur disponible, et le point décimal des cents reste au même endroit.
 
 ### Guide d'utilisation
 

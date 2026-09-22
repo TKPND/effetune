@@ -79,6 +79,7 @@ function multiF0NoteName(midi) {
 }
 
 class NoteSpectrogramPlugin extends PluginBase {
+    static noteColors = MULTI_F0_NOTE_COLORS;
     static executionCapabilities = Object.freeze({ requiresWasm: true });
 
     constructor() {

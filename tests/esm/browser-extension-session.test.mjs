@@ -8,7 +8,7 @@ import { AudioIOManager } from '../../js/audio/audio-io-manager.js';
 
 const hostSource = (await readFile(new URL('../../extension/offscreen.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
 
-async function hostHarness(loaded = {}, { startStatus = () => 'processing' } = {}) {
+async function hostHarness(loaded = {}, { startStatus = () => 'processing', failSave = () => false } = {}) {
     const saves = [];
     let saving = 0;
     let maximumSaving = 0;
@@ -46,6 +46,7 @@ async function hostHarness(loaded = {}, { startStatus = () => 'processing' } = {
         chrome: { runtime: { getURL: value => value, onMessage: { addListener() {} } } },
         runtimeRequest: async (command, args) => {
             if (command === 'loadSettings') return loaded;
+            if (failSave()) throw new Error('Storage unavailable');
             saving++; maximumSaving = Math.max(maximumSaving, saving);
             const value = structuredClone(args.settings);
             await new Promise(resolve => setTimeout(resolve, 2));
@@ -63,6 +64,28 @@ async function hostHarness(loaded = {}, { startStatus = () => 'processing' } = {
     await run('getState');
     return { context, run, saves, frames, maximumSaving: () => maximumSaving };
 }
+
+test('backup presets are stored without applying or changing sessions, rules or unsupported parameters', async () => {
+    let rejectSave = false;
+    const host = await hostHarness({ plugins: [{ nm: 'Default' }], presets: {},
+        rules: [{ pattern: 'music.test/*', preset: 'Other', enabled: false }] }, { failSave: () => rejectSave });
+    await host.run('start', { tabId: 1, url: 'https://a.test/', streamId: 'a' });
+    const before = structuredClone(await host.run('getState'));
+    const preset = { outputChannels: 16, plugins: [{ nm: 'Unknown effect', ib: 3, ch: 9, arbitrary: { value: 7 } }] };
+    await host.run('appendBackupPreset', { name: 'Portable', preset });
+    const after = structuredClone(await host.run('getState'));
+    assert.deepEqual(after.plugins, before.plugins);
+    assert.deepEqual(after.sessions, before.sessions);
+    assert.deepEqual(after.rules, before.rules);
+    assert.deepEqual((await host.run('readBackupPresets')).Portable, preset);
+    for (const name of ['__proto__', 'constructor', 'prototype', 'Portable']) {
+        await assert.rejects(host.run('appendBackupPreset', { name, preset }));
+    }
+    rejectSave = true;
+    await assert.rejects(host.run('appendBackupPreset', { name: 'Failed', preset }));
+    assert.equal(Object.hasOwn(await host.run('readBackupPresets'), 'Failed'), false);
+    assert.deepEqual((await host.run('readBackupPresets')).Portable, preset);
+});
 
 test('host defaults, per-session edits and bypass keep settings writes serialized', async () => {
     const host = await hostHarness({ plugins: [{ nm: 'Default' }], presets: {}, masterBypass: false });

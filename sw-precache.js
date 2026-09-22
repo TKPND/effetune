@@ -1,4 +1,4 @@
-self.EFFECTUNE_CACHE_VERSION = "effetune-v2.11.0-6e25e3dfbb1046a6";
+self.EFFECTUNE_CACHE_VERSION = "effetune-v2.11.0-0a37a0448c18c5dd";
 self.EFFECTUNE_PRECACHE_URLS = [
   "./effetune-library.css",
   "./effetune-mobile.css",
@@ -8,6 +8,10 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./features/benchmark-score-reference.js",
   "./features/effetune-benchmark-score.js",
   "./features/effetune-benchmark.js",
+  "./features/measurement/audio-utils/channel-selection.js",
+  "./features/measurement/audio-utils/output-routing.js",
+  "./features/measurement/dataStorage.js",
+  "./features/measurement/measurement-model.js",
   "./images/bus_function.png",
   "./images/favicon.ico",
   "./images/icon.png",
@@ -83,6 +87,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/ir-library/ir-library-factory.js",
   "./js/ir-library/ir-library-id.js",
   "./js/ir-library/ir-library-limits.js",
+  "./js/ir-library/ir-library-name.js",
   "./js/ir-library/ir-library-store.js",
   "./js/ir-library/ir-pcm-cache.js",
   "./js/ir-library/ir-plugin-contract.js",
@@ -244,6 +249,11 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/ui/state-manager.js",
   "./js/ui/web-cue-source-resolver.js",
   "./js/update-notification.js",
+  "./js/user-data-backup/adapters.js",
+  "./js/user-data-backup/archive.js",
+  "./js/user-data-backup/dialog.js",
+  "./js/user-data-backup/portable.js",
+  "./js/user-data-backup/service.js",
   "./js/utils/classic-script-loader.js",
   "./js/utils/clipboard-utils.js",
   "./js/utils/measurement-dsp/fft.js",
@@ -466,5 +476,6 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./presets/spkr_sim/vintage_full_range.effetune_preset",
   "./presets/utils/bgm.effetune_preset",
   "./presets/visualize/all_analyzers.effetune_preset",
-  "./sw.js"
+  "./sw.js",
+  "./user-data-backup.css"
 ];

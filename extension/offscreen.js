@@ -180,6 +180,23 @@ async function pipelineEdit(session, preset, { unbind = false } = {}) {
 
 async function handle(command, args = {}, clientId = null) {
     if (command === 'getState') return snapshot();
+    if (command === 'readBackupPresets') return structuredClone(settings.presets);
+    if (command === 'appendBackupPreset') {
+        const name = presetName(args.name);
+        if (['__proto__', 'constructor', 'prototype'].includes(name) || Object.hasOwn(settings.presets, name)) {
+            throw new Error('Choose a different preset name.');
+        }
+        const states = getPresetPluginStates(args.preset);
+        if (states.length > 128 || states.some(state => !state || typeof state !== 'object' || typeof state.nm !== 'string')) {
+            throw new Error('This file does not contain a valid preset.');
+        }
+        const presets = { ...settings.presets };
+        Object.defineProperty(presets, name, { value: structuredClone(args.preset), enumerable: true, writable: true, configurable: true });
+        const nextSettings = { ...settings, presets };
+        await runtimeRequest('saveSettings', { settings: nextSettings });
+        settings = nextSettings;
+        return publish();
+    }
     if (command === 'start') return createSession(args);
     if (command === 'navigate' || command === 'removeTab') {
         const session = [...sessions.values()].find(item => item.state.tabId === args.tabId);

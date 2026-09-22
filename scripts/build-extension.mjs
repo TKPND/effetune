@@ -14,6 +14,12 @@ const output = path.join(root, 'out', 'extension');
 const define = { __EFFECTUNE_WASM_ONLY__: 'true' };
 
 function staticSource(source, filename) {
+    if (filename === 'js/vendor/jszip-3.10.1.min.js') {
+        const dynamicCallback = '"function"!=typeof e&&(e=new Function(""+e))';
+        if (!source.includes(dynamicCallback)) throw new Error('JSZip setImmediate compatibility code changed');
+        source = source.replace(dynamicCallback,
+            '"function"!=typeof e&&(e=function(){throw new TypeError("Callback must be a function")})');
+    }
     if (filename === 'plugins/lofi/cassette_artifacts.js') {
         const literal = source.match(/const CASSETTE_ARTIFACTS_REFERENCE_PROCESSOR = (`[\s\S]*?`);/);
         if (!literal) throw new Error('Cassette reference processor was not found');
@@ -89,6 +95,7 @@ export async function buildExtension() {
         ...(await walk('presets')),
         'plugins/plugins.txt', 'plugins/dsp/effetune-dsp.wasm', 'plugins/dsp/effetune-dsp.simd.wasm',
         'plugins/dsp/effetune-dsp.meta.json', 'effetune.css', 'effetune-theme.css', 'effetune-mobile.css', 'pipeline-analyzer.css',
+        'user-data-backup.css',
         'images/icon_128x128.png', 'images/icon_192x192.png', 'images/icon_64x64.png', 'LICENSE'
     ];
     for (const filename of materials) files.set(filename, await fs.readFile(path.join(root, filename)));

@@ -123,6 +123,7 @@ function createWindow(calls, options = {}) {
 
 function createPipelineCore(calls, options = {}) {
   return {
+    audioManager: options.audioManager,
     pipelineList: options.pipelineList,
     pipelineManager: options.pipelineManager,
     updateBusInfo(plugin) {
@@ -242,6 +243,20 @@ test('selectors render options and update plugin routing values', async () => {
     ['updateParameters', 4, 1, null]
   ]);
   assert.equal(calls.filter(call => call[0] === 'coreUpdateBusInfo').length, 6);
+});
+
+test('fixed stereo hosts offer supported channels and every audio bus', async () => {
+  const calls = [];
+  const handler = new PipelineRoutingDialog(createPipelineCore(calls, { audioManager: { outputChannelCount: 2 } }));
+  await withRoutingGlobals(calls, {}, async () => {
+    const plugin = createPlugin();
+    const channels = handler.createChannelSelector(plugin).children[1];
+    assert.deepEqual(channels.children.map(option => option.value), ['', 'A', 'L', 'R']);
+    for (const createSelector of ['createInputBusSelector', 'createOutputBusSelector']) {
+      const buses = handler[createSelector](plugin).children[1];
+      assert.deepEqual(buses.children.map(option => String(option.value)), ['0', '1', '2', '3', '4']);
+    }
+  });
 });
 
 test('positionDialog handles web zoom measurement and Electron CSS zoom correction', async () => {

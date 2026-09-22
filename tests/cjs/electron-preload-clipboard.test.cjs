@@ -346,6 +346,7 @@ test('preload exposes listener registration wrappers', () => {
     ['onSavePresetAs', 'save-preset-as'],
     ['onConfigAudio', 'config-audio'],
     ['onConfigApp', 'config-app'],
+    ['onBackupRestore', 'backup-restore'],
     ['onOpenFrequencyResponseMeasurement', 'open-frequency-response-measurement'],
     ['onReloadWithPipelineState', 'reload-with-pipeline-state'],
     ['onRequestPipelineStateForClose', 'request-pipeline-state-for-close']
@@ -416,6 +417,7 @@ test('preload exposes listener registration wrappers', () => {
     ['onSavePresetAs'],
     ['onConfigAudio'],
     ['onConfigApp'],
+    ['onBackupRestore'],
     ['onOpenFrequencyResponseMeasurement'],
     ['onReloadWithPipelineState'],
     ['onRequestPipelineStateForClose'],

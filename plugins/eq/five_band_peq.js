@@ -813,7 +813,7 @@ class FiveBandPEQPlugin extends PluginBase {
       });
     }
     // Scatter the freq/gain labels so they don't overlap markers/each other or
-    // spill outside the graph. Prefer left/right placement for this plugin.
+    // spill outside the graph. Prefer left/right when they cannot fit above.
     this.layoutMarkerLabels?.({ items: labelItems, width: graphWidth, height: graphHeight, axis: 'horizontal' });
   }
 

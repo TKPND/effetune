@@ -26,7 +26,7 @@
     "policy": "per-sample"
   },
   "referenceEngine": "production-native-promoted-v1",
-  "referenceHash": "sha256:21e5572f38b5bf9858e89e4d28f95acfef9546811d8098fdbd45dbaa78b5ea24",
+  "referenceHash": "sha256:ff23174735b2bcff97ddeb4c061f34ffe90418aa919bf95c45b5dfd2dd508a0e",
   "generationCommand": "node tools/dsp-parity/generate.mjs --type MP3CodecSimulatorPlugin --promote-production-native --mp3-decoder <independent-mp3-decoder>",
   "outputFloats": 4097,
   "byteLength": 16388,

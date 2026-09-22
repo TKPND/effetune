@@ -8,6 +8,7 @@ import { decodeDspPipelineDescriptor } from '../../js/audio/dsp-pipeline-descrip
 import { PowerPolicyController } from '../../js/audio/power-policy-controller.js';
 import { SHIPPED_ENABLED_TYPES } from '../../js/audio/dsp-rollout.js';
 import { instantiateDspBinding } from '../../js/audio/dsp-engine-binding.js';
+import { createReferenceSession } from '../../tools/dsp-parity/node-host.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const processorPath = path.join(repoRoot, 'plugins', 'audio-processor.js');
@@ -2193,6 +2194,144 @@ test('hybrid final output compensation aligns selected and untouched channels', 
   assert.equal(output[1][0], 0);
 });
 
+test('JS lookahead and oversampling report latency for routing compensation', async () => {
+  const cases = [
+    ['BrickwallLimiterPlugin', { la: 3, os: 1 }, 144],
+    ['BrickwallLimiterPlugin', { la: 0, os: 1 }, 1],
+    ['BrickwallLimiterPlugin', { la: 3, os: 4 }, 208],
+    ['SaturationPlugin', { os: 4, mx: 0, gn: 0 }, 64],
+    ['DynamicSaturationPlugin', { os: 2 }, 64],
+    ['ExciterPlugin', { os: 8 }, 64],
+    ['HardClippingPlugin', { os: 16 }, 64],
+    ['HarmonicDistortionPlugin', { os: 4 }, 64],
+    ['MultibandSaturationPlugin', { os: 2 }, 64]
+  ];
+  for (const [type, params, latency] of cases) {
+    const reference = await createReferenceSession(type, { params });
+    const harness = await createWorkletHarness();
+    await harness.send({ type: 'registerProcessor', pluginType: type,
+      processor: reference.plugin.processorString });
+    await harness.send({ type: 'updatePlugins', masterBypass: false, plugins: [
+      pluginConfig({ type, channel: 'L', parameters: reference.plugin.getParameters() })
+    ] });
+    assert.equal(harness.processor.dspPipelineLatencySamples, latency, type);
+    const processed = new Float32Array(512);
+    for (let block = 0; block < 4; block++) {
+      const input = Array.from({ length: 2 }, () => new Float32Array(128));
+      if (block === 0) input.forEach(channel => { channel[0] = 0.125; });
+      const output = input.map(() => new Float32Array(128));
+      harness.processor.process([input], [output], {});
+      processed.set(output[0], block * 128);
+      for (let frame = 0; frame < 128; frame++) {
+        const expected = block * 128 + frame === latency ? 0.125 : 0;
+        assert.equal(output[1][frame], expected, `${type} at ${block * 128 + frame}`);
+      }
+    }
+    if (type === 'BrickwallLimiterPlugin' || type === 'SaturationPlugin') {
+      let peak = 0;
+      for (let frame = 1; frame < processed.length; frame++) {
+        if (Math.abs(processed[frame]) > Math.abs(processed[peak])) peak = frame;
+      }
+      assert.equal(peak, latency, `${type}: actual processor latency`);
+    }
+    reference.plugin.setParameters({ os: 1, la: 0 });
+    await harness.send({ type: 'updatePlugin', plugin: pluginConfig({
+      type, channel: 'L', parameters: reference.plugin.getParameters()
+    }) });
+    assert.equal(harness.processor.dspPipelineLatencySamples,
+      type === 'BrickwallLimiterPlugin' ? 1 : 0, `${type}: changed parameters`);
+  }
+});
+
+test('channel split and mix align inputs before processing on every bus', async () => {
+  for (const wasm of [false, true]) {
+    for (const bus of [0, 1, 2, 3, 4]) {
+      const harness = await createWorkletHarness({ outputChannels: 4, sampleRate: 96000,
+        bindingOptions: { wasmGain: 1 } });
+      await registerFrequencyShifterFallback(harness);
+      await registerIdentityFallback(harness);
+      await harness.send({ type: 'registerProcessor', pluginType: 'MatrixPlugin', processor: `
+        const frames = parameters.blockSize;
+        for (let frame = 0; frame < frames; frame++) {
+          if (parameters.mix) {
+            data[frame] += data[2 * frames + frame];
+            data[frames + frame] += data[3 * frames + frame];
+          }
+          data[2 * frames + frame] = data[frame];
+          data[3 * frames + frame] = data[frames + frame];
+        }
+        return data;
+      ` });
+      const plugins = [
+        ...(bus === 0 ? [] : [pluginConfig({ id: 1, outputBus: bus })]),
+        pluginConfig({ id: 7, type: 'FrequencyShifterPlugin', inputBus: bus, outputBus: bus, channel: null }),
+        pluginConfig({ id: 8, type: 'MatrixPlugin', inputBus: bus, outputBus: bus }),
+        pluginConfig({ id: 9, type: 'FrequencyShifterPlugin', inputBus: bus, outputBus: bus, channel: '34' }),
+        pluginConfig({ id: 10, type: 'MatrixPlugin', inputBus: bus, outputBus: 0,
+          parameters: { enabled: true, mix: true } })
+      ];
+      await harness.send({ type: 'updatePlugins', plugins, masterBypass: false });
+      if (wasm) {
+        // Keep the routing effects in JS and exercise the hybrid WASM execution path.
+        await harness.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
+        await harness.send({ type: 'dspModule', module: {} });
+      }
+      const latency = 456;
+      for (let block = 0; block < 6; block++) {
+        const input = Array.from({ length: 2 }, () => new Float32Array(128));
+        if (block === 0) input.forEach(channel => { channel[0] = 1; });
+        const output = Array.from({ length: 4 }, () => new Float32Array(128));
+        harness.setContextFrame(block * 128);
+        assert.equal(harness.processor.process([input], [output], {}), true);
+        for (let channel = 0; channel < 4; channel++) {
+          for (let frame = 0; frame < 128; frame++) {
+            const expected = block * 128 + frame === latency
+              ? (bus !== 0 && channel < 2 ? 3 : 2) : 0;
+            assert.ok(Math.abs(output[channel][frame] - expected) < 1e-6,
+              `wasm=${wasm} bus=${bus} channel=${channel} frame=${block * 128 + frame}: ${output[channel][frame]} != ${expected}`);
+          }
+        }
+      }
+      assert.equal(harness.processor.dspPipelineLatencySamples, latency);
+    }
+  }
+});
+
+test('stereo processing aligns a delayed mono input without delaying its source bus', async () => {
+  const harness = await createWorkletHarness();
+  await registerFrequencyShifterFallback(harness);
+  await harness.send({ type: 'registerProcessor', pluginType: 'VolumePlugin', processor: `
+    for (let frame = 0; frame < parameters.blockSize; frame++) {
+      data[frame] -= data[parameters.blockSize + frame];
+      data[parameters.blockSize + frame] = data[frame];
+    }
+    return data;
+  ` });
+  await harness.send({ type: 'updatePlugins', masterBypass: false, plugins: [
+    pluginConfig({ id: 7, type: 'FrequencyShifterPlugin', channel: 'L' }),
+    pluginConfig({ id: 8, channel: null, outputBus: 1 }),
+    pluginConfig({ id: 9, channel: null })
+  ] });
+  for (let block = 0; block < 3; block++) {
+    const input = Array.from({ length: 2 }, () => new Float32Array(128));
+    if (block === 0) input.forEach(channel => { channel[0] = 1; });
+    const output = input.map(() => new Float32Array(128));
+    harness.processor.process([input], [output], {});
+    assert.ok(output.every(channel => channel.every(sample => Math.abs(sample) < 1e-6)));
+    assert.ok(harness.processor.busBuffers.get(1).every(sample => Math.abs(sample) < 1e-6));
+  }
+  const pending = [new Float32Array(128), new Float32Array(128)];
+  pending[1][127] = 1;
+  harness.processor.process([pending], [pending.map(() => new Float32Array(128))], {});
+  await harness.send({ type: 'resetProcessingState', requestId: 1 });
+  assert.equal(messagesOf(harness.posts, 'processingStateReset').at(-1).message.ok, true);
+  for (let block = 0; block < 2; block++) {
+    const output = processBlock(harness.processor, 0);
+    assert.ok(output.every(channel => channel.every(sample => Math.abs(sample) < 1e-6)));
+    assert.ok(harness.processor.busBuffers.get(1).every(sample => Math.abs(sample) < 1e-6));
+  }
+});
+
 test('worklet answers latency queries and applies ABX-only output delay separately', async () => {
   const harness = await createWorkletHarness();
   await harness.send({ type: 'requestDspLatency', requestId: 17 });
@@ -4216,7 +4355,7 @@ test('new power identities adopt the configured UI telemetry gate directly', asy
 
 test('display changes preserve warmed compensation in JS and WASM graphs', async () => {
   for (const execution of ['js', 'wasm']) {
-    for (const routing of ['output', 'merge']) {
+    for (const routing of ['output', 'merge', 'input']) {
       const binding = createBinding({
         pipelineConfigureStatus: 0,
         instanceLatency: id => id === 100 ? 114 : 0,
@@ -4227,11 +4366,12 @@ test('display changes preserve warmed compensation in JS and WASM graphs', async
       await registerFrequencyShifterFallback(harness);
       await harness.send({ type: 'registerProcessor', pluginType: 'SpectrumAnalyzerPlugin', processor: 'return data;' });
       const delayed = pluginConfig({ id: 7, type: execution === 'js' ? 'FrequencyShifterPlugin' : 'VolumePlugin',
-        channel: routing === 'output' ? 'L' : 'A', outputBus: routing === 'merge' ? 1 : 0 });
+        channel: routing === 'merge' ? 'A' : 'L', outputBus: routing === 'merge' ? 1 : 0 });
       const plugins = routing === 'merge'
         ? [delayed, pluginConfig({ id: 8, outputBus: 1 }), pluginConfig({ id: 9, inputBus: 1 })]
-        : [delayed];
-      if (execution === 'js') plugins.push(pluginConfig({ id: 10, type: 'SpectrumAnalyzerPlugin', wasmParams: undefined }));
+        : routing === 'input' ? [delayed, pluginConfig({ id: 8 })] : [delayed];
+      if (execution === 'js') plugins.push(pluginConfig({ id: 10, type: 'SpectrumAnalyzerPlugin',
+        channel: routing === 'output' ? 'L' : 'A', wasmParams: undefined }));
       await harness.send({ type: 'updatePlugins', plugins, masterBypass: false });
       if (execution === 'wasm') {
         await harness.send({ type: 'dspEnableTypes', types: ['VolumePlugin'] });
@@ -4246,7 +4386,10 @@ test('display changes preserve warmed compensation in JS and WASM graphs', async
       };
       assertContinuous();
       const originalPlan = harness.processor.dspLatencyPlan;
-      const originalLine = routing === 'merge' ? originalPlan.nodeActions.get(8).delayLine : originalPlan.outputDelayLine;
+      const delayLine = plan => routing === 'merge' ? plan.nodeActions.get(8).delayLine
+        : routing === 'input' ? plan.nodeActions.get(8).inputDelayLine : plan.outputDelayLine;
+      const originalLine = delayLine(originalPlan);
+      assert.ok(originalLine);
       if (execution === 'wasm') await harness.send({ type: 'setSpectrumTapRoute', pluginId: 7, enabled: true });
       for (const type of ['setDisplayDspBypassed', 'configurePowerPolicy']) {
         for (const bypassed of [true, false]) {
@@ -4254,7 +4397,7 @@ test('display changes preserve warmed compensation in JS and WASM graphs', async
             workletGraphGeneration: 0, topologyRevision: 0 });
           assert.equal(harness.processor.dspPipelineReady, false);
           const plan = harness.processor.dspLatencyPlan;
-          assert.equal(routing === 'merge' ? plan.nodeActions.get(8).delayLine : plan.outputDelayLine, originalLine);
+          assert.equal(delayLine(plan), originalLine);
           assertContinuous();
         }
       }

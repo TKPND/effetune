@@ -576,6 +576,35 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
         attachExistingRuntime(browserCdp, offscreenTarget)
       ]);
     });
+    await runNamedPhase('backup ZIP under extension CSP', 30_000, async () => {
+      const result = await controlPage.evaluate(async () => {
+        const { UserDataBackupService } = await import(chrome.runtime.getURL('js/user-data-backup/service.js'));
+        const item = {
+          key: 'pipeline:Browser smoke',
+          id: 'Browser smoke',
+          kind: 'pipeline',
+          name: 'Browser smoke',
+          data: { plugins: [] }
+        };
+        const adapter = {
+          async readSnapshot() {
+            return { items: [structuredClone(item)], unavailable: [] };
+          }
+        };
+        const service = new UserDataBackupService({ adapter, appVersion: 'browser-smoke' });
+        const catalog = await service.listBackup();
+        const backup = await service.createBackup(catalog, [catalog.items[0].key]);
+        const reopened = await service.openBackup(backup.blob);
+        return {
+          bytes: backup.blob.size,
+          fileName: backup.fileName,
+          itemNames: reopened.items.map(value => value.name)
+        };
+      });
+      assert.ok(result.bytes > 0, 'The extension backup ZIP was empty.');
+      assert.match(result.fileName, /\.effetune_backup$/);
+      assert.deepEqual(result.itemNames, ['Browser smoke']);
+    });
     await runNamedPhase('activeTab permission grant', 30_000,
       () => grantTabCapture(cdp, browserCdp, extensionId, sourcePage));
     const sourceTabs = await controlPage.evaluate(async () => {
@@ -809,24 +838,33 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     await extensionRequest(editor, 'setBypass', { enabled: false });
 
     const generatedAssetPipeline = [
-      { nm: 'FIR Crossover', en: true, ib: 0, ob: 0, ch: 'A' },
-      { nm: 'Level Meter', en: true, ib: 0, ob: 0, ch: 'A' }
+      { nm: 'FIR Crossover', en: true, ib: 0, ob: 1, ch: 'A' },
+      { nm: 'Level Meter', en: true, ib: 1, ob: 0, ch: 'A' }
     ];
     await modelRequest(editor, 'setPipeline', { plugins: generatedAssetPipeline });
     const assetState = await extensionRequest(editor, 'getState');
     assert.deepEqual(assetState.plugins.map(plugin => plugin.nm), ['FIR Crossover', 'Level Meter']);
+    assert.deepEqual(assetState.plugins.map(plugin => [plugin.ib, plugin.ob]), [[0, 1], [1, 0]]);
+    await editor.waitForFunction(() => {
+      const meter = window.audioManager?.pipeline?.find(plugin => plugin.name === 'Level Meter');
+      return Array.isArray(meter?.lv) && meter.lv.some(level => level > -100);
+    }, null, { timeout: transitionTimeoutMs });
     const assetDiagnostics = JSON.parse(await offscreenRuntime.evaluate(`JSON.stringify({
-      pipeline: window.audioManager?.pipeline?.map(plugin => ({ id: plugin.id, name: plugin.name })),
+      pipeline: window.audioManager?.pipeline?.map(plugin => ({
+        id: plugin.id, name: plugin.name, inputBus: plugin.inputBus, outputBus: plugin.outputBus
+      })),
       dsp: window.audioManager?.getDspExecutionStateSnapshot?.()
     })`));
     assert.deepEqual(assetDiagnostics.pipeline.map(plugin => plugin.name), ['FIR Crossover', 'Level Meter']);
+    assert.deepEqual(assetDiagnostics.pipeline.map(plugin => [plugin.inputBus, plugin.outputBus]),
+      [[0, 1], [1, 0]]);
     assert.ok(assetDiagnostics.dsp.states.length >= 2);
     assert.ok(assetDiagnostics.dsp.states.every(item => item.state === 'active'));
 
     const assetPipelineFingerprint = JSON.stringify(assetState.plugins);
     await assert.rejects(
       modelRequest(editor, 'setPipeline', { plugins: [
-        { nm: 'Volume', en: true, vl: -6, ib: 1, ob: 0, ch: 'A' }
+        { nm: 'Volume', en: true, vl: -6, ib: 5, ob: 0, ch: 'A' }
       ] }),
       error => matchesExactEvaluationError(
         error,
@@ -836,8 +874,8 @@ async function runBrowserScenario({ chromium, baseURL, profilePath, onContext })
     await waitAndConsumeExpectedRuntimeConsoleError(
       offscreenRuntime,
       exactConsoleDiagnostic(
-        'Session action failed: Error: This preset uses audio buses. ' +
-          'The extension supports one serial stereo pipeline.'
+        'Session action failed: Error: This preset has an invalid audio bus. ' +
+          'Choose Main or Bus 1–4.'
       ),
       'invalid topology rejection'
     );

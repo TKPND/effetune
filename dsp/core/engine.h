@@ -141,7 +141,9 @@ private:
 
   enum class DelayTarget : std::uint8_t { None = 0, Destination = 1, Incoming = 2 };
 
-  struct PipelineMergeCompensation {
+  struct PipelineCompensation {
+    std::array<std::uint32_t, 16> inputDelays{};
+    dsp::DelayLine inputDelayLine;
     std::array<DelayTarget, 16> targets{};
     std::array<std::uint32_t, 16> delays{};
     dsp::DelayLine delayLine;
@@ -174,7 +176,7 @@ private:
   TelemetryRing telemetry_;
   std::array<InstanceSlot, kMaxInstances> instances_{};
   std::array<PipelineNode, kMaxPipelineNodes> pipeline_{};
-  std::array<PipelineMergeCompensation, kMaxPipelineNodes> pipeline_compensation_{};
+  std::array<PipelineCompensation, kMaxPipelineNodes> pipeline_compensation_{};
   std::array<std::uint32_t, 16> pipeline_output_delays_{};
   dsp::DelayLine pipeline_output_delay_line_;
   std::uint32_t pipeline_count_ = 0;
@@ -215,7 +217,7 @@ public:
 private:
   friend class Engine;
   PipelineLatencySnapshot snapshot_;
-  std::array<PipelineMergeCompensation, kMaxPipelineNodes> compensation_{};
+  std::array<PipelineCompensation, kMaxPipelineNodes> compensation_{};
   std::array<std::uint32_t, 16> output_delays_{};
   dsp::DelayLine output_delay_line_;
   std::uint32_t latency_ = 0;

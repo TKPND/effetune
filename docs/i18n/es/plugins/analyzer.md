@@ -114,6 +114,7 @@ Sigue una frecuencia fundamental (F0) cada vez en un piano roll móvil de dos se
 - **Vertical** coloca las notas graves abajo y las agudas arriba. La estimación más reciente aparece junto al teclado de la derecha y el historial avanza hacia la izquierda.
 - La posición de la línea indica la altura entre semitonos. Una estimación más fiable se ve más intensa; la línea se interrumpe cuando la entrada es demasiado baja o no se encuentra una sola altura estable.
 - La etiqueta actual muestra la nota más cercana y la diferencia en cents. Un valor positivo indica una altura superior y uno negativo, inferior. La etiqueta desaparece cuando no hay una estimación fiable.
+- El nombre de la nota usa los mismos colores que Note Spectrogram. El tamaño del nombre y la diferencia en cents se adapta al ancho disponible, y el punto decimal de los cents mantiene una posición fija.
 
 ### Guía de Uso
 

@@ -160,6 +160,8 @@ test('updateApplicationMenu sends enabled menu labels and updates the tray', asy
   assert.equal(menuState['file.rescanLibrary'].label, 'label:menu.file.rescanLibrary');
   assert.equal(menuState['file.rescanLibrary'].enabled, true);
   assert.equal(menuState['file.importPreset'].enabled, true);
+  assert.equal(menuState['file.backupRestore'].label, 'label:menu.settings.backupRestore');
+  assert.equal(menuState['file.backupRestore'].enabled, true);
   assert.equal(menuState['edit.undo'].enabled, true);
   assert.equal(menuState['view.effectPipeline'].label, 'label:menu.view.effectPipeline');
   assert.equal(menuState['view.musicLibrary'].label, 'label:menu.view.musicLibrary');
@@ -190,6 +192,7 @@ test('updateApplicationMenu disables gated items while double blind test is acti
   assert.equal(menuState['file.rescanLibrary'].enabled, true);
   assert.equal(menuState['file.processAudioFiles'].enabled, false);
   assert.equal(menuState['file.importPreset'].enabled, false);
+  assert.equal(menuState['file.backupRestore'].enabled, false);
   assert.equal(menuState['file.doubleBlindTest'].enabled, false);
   assert.equal(menuState['edit.undo'].enabled, false);
   assert.equal(menuState['edit.selectAll'].enabled, false);

@@ -5,7 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 import { renderPopup } from '../../extension/popup.js';
-import { createUiManager, ExtensionAudioManager, ExtensionEditor, selectEditorSnapshot } from '../../extension/editor.js';
+import {
+  createUiManager,
+  ExtensionAudioManager,
+  ExtensionEditor,
+  getExtensionDocumentationUrl,
+  selectEditorSnapshot
+} from '../../extension/editor.js';
 import { ExtensionClient } from '../../extension/protocol.js';
 import { TelemetryFrameType, TelemetryHub } from '../../js/audio/telemetry-hub.js';
 import { PresetManager } from '../../js/ui/pipeline/preset-manager.js';
@@ -248,6 +254,14 @@ test('pipeline preset manager delegates extension persistence without touching l
   assert.deepEqual(calls, [['save', 'Clear'], ['load', 'Clear'], ['delete', 'Clear']]);
 });
 
+test('extension Help links target the public plugin documentation', () => {
+  assert.equal(
+    getExtensionDocumentationUrl('/plugins/dynamics#tone-control'),
+    'https://effetune.frieve.com/docs/plugins/dynamics.html#tone-control'
+  );
+  assert.equal(getExtensionDocumentationUrl('/unrelated'), '/unrelated');
+});
+
 test('extension pages use external module scripts and the editor reuses pipeline modules', async () => {
   const [popupHtml, editorHtml, editorCss, editorJs] = await Promise.all([
     readFile(resolve(repoRoot, 'extension/popup.html'), 'utf8'),
@@ -258,6 +272,9 @@ test('extension pages use external module scripts and the editor reuses pipeline
   assert.match(popupHtml, /<base href="\.\.\/">/);
   assert.match(editorHtml, /src="extension\/editor\.js"/);
   assert.match(editorHtml, /href="effetune-mobile\.css"/);
+  assert.match(editorHtml, /href="user-data-backup\.css"/);
+  assert.match(editorHtml, /id="editorBackupRestore"/);
+  assert.match(editorJs, /openUserDataBackupDialog/);
   assert.match(editorJs, /import \{ PipelineManager \}/);
   assert.match(editorJs, /new PluginListManager/);
   assert.match(editorJs, /new TelemetryHub/);
@@ -283,6 +300,7 @@ test('extension pages use external module scripts and the editor reuses pipeline
   assert.match(editorHtml, /class="header-button undo-button"[^>]*>↶<\/button>[\s\S]*class="header-button redo-button"[^>]*>↷<\/button>/);
   assert.doesNotMatch(editorCss, /\.pipeline-header\s*\{[^}]*position:\s*sticky/s);
   assert.doesNotMatch(editorCss, /\.pipeline-item\s*\{[^}]*max-width:\s*920px/s);
+  assert.doesNotMatch(editorCss, /(?:routing|ai|help)-button[^{}]*\{[^}]*display:\s*none/s);
   assert.match(editorJs, /enableFileProcessing:\s*false/);
   assert.doesNotMatch(editorJs, /shrinkSingleColumn/);
   assert.doesNotMatch(editorCss, /\.extension-editor \.pipeline\s*\{/);

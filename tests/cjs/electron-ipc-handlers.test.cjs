@@ -151,6 +151,7 @@ function createMenuState() {
     'menu.file': { label: 'File X' },
     'file.save': { label: 'Save X', enabled: false },
     'file.openMusicFile': { label: 'Open X', enabled: true },
+    'file.backupRestore': { label: 'Backup X', enabled: true },
     'menu.edit': { label: 'Edit X' },
     'edit.undo': { label: 'Undo X', enabled: false },
     'menu.view': { label: 'View X' },
@@ -789,6 +790,7 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
     assert.equal(translatedMenu.getMenuItemById('file.save').label, 'Save X');
     assert.equal(translatedMenu.getMenuItemById('file.save').enabled, false);
     assert.equal(translatedMenu.getMenuItemById('file.saveAs').label, 'Save As...');
+    assert.equal(translatedMenu.getMenuItemById('file.backupRestore').label, 'Backup X');
     assert.equal(translatedMenu.getMenuItemById('unknown'), null);
     assert.deepEqual(
       translatedMenu.template.map(section => ({
@@ -803,7 +805,7 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
           submenu: [
             'file.save', 'file.saveAs', 'separator', 'file.openMusicFile',
             'file.addMusicFolder', 'file.rescanLibrary', 'file.processAudioFiles',
-            'separator', 'file.exportPreset', 'file.importPreset', 'separator',
+            'separator', 'file.exportPreset', 'file.importPreset', 'file.backupRestore', 'separator',
             'file.doubleBlindTest', 'separator', 'file.quit'
           ]
         },
@@ -853,7 +855,7 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
       'menu.file',
       'file.save', 'file.saveAs', 'file.openMusicFile', 'file.addMusicFolder',
       'file.rescanLibrary', 'file.processAudioFiles', 'file.exportPreset',
-      'file.importPreset', 'file.doubleBlindTest', 'file.quit',
+      'file.importPreset', 'file.backupRestore', 'file.doubleBlindTest', 'file.quit',
       'menu.edit',
       'edit.undo', 'edit.redo', 'edit.cut', 'edit.copy', 'edit.paste',
       'edit.delete', 'edit.selectAll',
@@ -872,6 +874,10 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
     assert.deepEqual(
       calls.find(call => call[0] === 'webContents.send' && call[1] === 'set-pipeline-analyzer-open'),
       ['webContents.send', 'set-pipeline-analyzer-open', true]
+    );
+    assert.deepEqual(
+      calls.find(call => call[0] === 'webContents.send' && call[1] === 'backup-restore'),
+      ['webContents.send', 'backup-restore']
     );
 
     assert.deepEqual(handlers.get('hide-application-menu')(), { success: true });

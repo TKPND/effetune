@@ -233,6 +233,13 @@ host notification only after that application succeeds. This API does not
 provide an atomic transaction covering parameter changes, host bypass and host
 notifications, or guarantee click-free retiming.
 
+Each processor receives its selected channels aligned to their longest input
+latency, whether it processes a stereo pair or all channels. Its selected outputs
+then share that latency plus the processor's own latency. This keeps channel
+splits and mixes aligned on every bus. A cross-bus send aligns its working copy
+without changing the source bus; additive bus merges and final output alignment
+apply the remaining delays.
+
 Unchanged delays retain their history. Shorter delays reuse existing storage;
 longer delays copy all retained recent samples into prepared storage before
 swapping it in. History older than the previous capacity starts at zero. A

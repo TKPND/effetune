@@ -169,6 +169,7 @@ struct PipelineNodeDescriptor {
   std::uint8_t inputBus;
   std::uint8_t outputBus;
   std::int8_t channelSpec;
+  std::uint8_t enabled = 1u;
 };
 
 std::vector<std::uint8_t> pipelineDescriptor(std::initializer_list<PipelineNodeDescriptor> nodes) {
@@ -179,7 +180,7 @@ std::vector<std::uint8_t> pipelineDescriptor(std::initializer_list<PipelineNodeD
   for (const PipelineNodeDescriptor &node : nodes) {
     std::uint8_t *record = bytes.data() + 8u + index * 12u;
     writeU32(record, node.instance);
-    record[4] = 1u;
+    record[4] = node.enabled;
     record[5] = node.inputBus;
     record[6] = node.outputBus;
     record[7] = static_cast<std::uint8_t>(node.channelSpec);
@@ -433,6 +434,70 @@ void testPipelineLatencyCompensation() {
   et_engine_destroy(engine);
 }
 
+void testPipelineChannelAlignment() {
+  constexpr std::uint32_t kFrames = 128u;
+  constexpr std::uint32_t kLatency = 192u;
+  for (std::uint32_t channels : {4u, 16u}) {
+    for (std::uint8_t bus = 0u; bus < 5u; ++bus) {
+      for (bool mix : {false, true}) {
+        const et_engine engine = et_engine_create();
+        ET_CHECK(et_engine_prepare(engine, 48000.0F, channels, kFrames, 0u) == ET_OK);
+        const et_instance delay = et_instance_create(engine, "TestDelayPlugin");
+        const et_instance branch_delay = et_instance_create(engine, "TestDelayPlugin");
+        const et_instance split = et_instance_create(engine, "MatrixPlugin");
+        const et_instance merge = et_instance_create(engine, "MatrixPlugin");
+        const et_instance send = et_instance_create(engine, "TestGainPlugin");
+        const float unity = 1.0F;
+        ET_CHECK(et_instance_set_params(engine, send, &unity, 1u, kTestHash, 0u) == ET_OK);
+        const auto setRoutes = [&](et_instance instance, bool sum) {
+          const std::uint32_t count = channels * (sum ? 2u : 1u);
+          std::vector<std::uint8_t> bytes(4u + count * 3u, 0u);
+          bytes[0] = 1u;
+          bytes[2] = static_cast<std::uint8_t>(count);
+          for (std::uint32_t route = 0u; route < count; ++route) {
+            bytes[4u + route * 3u] =
+                static_cast<std::uint8_t>(route % 2u + (route >= channels ? 2u : 0u));
+            bytes[5u + route * 3u] = static_cast<std::uint8_t>(route % channels);
+          }
+          ET_CHECK(et_instance_set_param_bytes(engine, instance, bytes.data(),
+                                               static_cast<std::uint32_t>(bytes.size()),
+                                               0x07080f45u, 0u) == ET_OK);
+        };
+        setRoutes(split, false);
+        setRoutes(merge, mix);
+        const auto routing = pipelineDescriptor({
+            {send, 0u, bus, -2},
+            {delay, bus, bus, -1},
+            {split, bus, bus, -2},
+            {branch_delay, bus, bus, 17, static_cast<std::uint8_t>(mix)},
+            {merge, bus, 0u, -2},
+        });
+        ET_CHECK(et_pipeline_configure(engine, routing.data(),
+                                       static_cast<std::uint32_t>(routing.size())) == ET_OK);
+        const std::uint32_t expected_latency = kLatency * (mix ? 2u : 1u);
+        ET_CHECK(et_pipeline_latency(engine) == expected_latency);
+        float *audio = et_arena_combined_ptr(engine);
+        for (std::uint32_t block = 0u; block < 5u; ++block) {
+          std::fill_n(audio, channels * kFrames, 0.0F);
+          if (block == 0u) {
+            audio[0] = audio[kFrames] = 1.0F;
+          }
+          ET_CHECK(et_pipeline_process(engine, channels, kFrames, 0.0, 0u) == ET_OK);
+          for (std::uint32_t channel = 0u; channel < channels; ++channel) {
+            for (std::uint32_t frame = 0u; frame < kFrames; ++frame) {
+              const float amplitude =
+                  (mix ? 2.0F : 1.0F) + (bus != 0u && channel < 2u ? 1.0F : 0.0F);
+              const float expected = block * kFrames + frame == expected_latency ? amplitude : 0.0F;
+              ET_CHECK(audio[channel * kFrames + frame] == expected);
+            }
+          }
+        }
+        et_engine_destroy(engine);
+      }
+    }
+  }
+}
+
 void testDynamicPipelineLatency() {
   constexpr std::uint32_t kFrames = 64u;
   constexpr std::uint32_t kLimiterHash = 0xb531a24au;
@@ -577,12 +642,14 @@ void testDynamicLatencyHistory() {
     const std::array<float, 6> params{0.0F, 100.0F, milliseconds, 1.0F, 0.0F, 0.0F};
     ET_CHECK(engine.setInstanceParams(limiter, params.data(), 6u, 0xb531a24au, 0u) == ET_OK);
   };
-  // Exercise both final channel alignment and a destination merge delay.
-  for (bool merge : {false, true}) {
+  // Exercise output alignment, destination merges, and pre-processor input alignment.
+  for (std::uint32_t mode : {0u, 1u, 2u}) {
     for (float next_ms : {2.0F, 3.0F, 5.0F}) {
       setLatency(3.0F);
-      const auto routing = merge ? pipelineDescriptor({{limiter, 1u, 0u, -2}})
-                                 : pipelineDescriptor({{limiter, 0u, 0u, 0}});
+      const auto routing = mode == 1u ? pipelineDescriptor({{limiter, 1u, 0u, -2}})
+                           : mode == 2u
+                               ? pipelineDescriptor({{limiter, 0u, 0u, 0}, {gain, 0u, 0u, -1}})
+                               : pipelineDescriptor({{limiter, 0u, 0u, 0}});
       ET_CHECK(engine.configurePipeline(routing.data(),
                                         static_cast<std::uint32_t>(routing.size())) == ET_OK);
       std::fill_n(engine.combined(), kFrames * 2u, 0.0F);
@@ -767,6 +834,7 @@ void runAbiTests() {
   testDiscoveryAndLifecycle();
   testPipelineValidationAndRouting();
   testPipelineLatencyCompensation();
+  testPipelineChannelAlignment();
   testDynamicPipelineLatency();
   testDynamicLatencyHistory();
   testPipelineDescriptorFuzz();

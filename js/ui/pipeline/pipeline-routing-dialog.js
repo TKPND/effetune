@@ -1,5 +1,6 @@
 import { enableStandardSelect } from '../standard-select.js';
 import { runExitMotion } from '../motion.js';
+import { getPluginExecutionChannelMode } from '../../audio/plugin-execution-capabilities.js';
 
 /**
  * PipelineRoutingDialog - Handles the routing dialog for bus and channel configuration
@@ -121,7 +122,9 @@ export class PipelineRoutingDialog {
             channelOptions.push({ text: `Ch ${i}`, value: String(i) });
         }
 
-        channelOptions.forEach(option => {
+        // Fixed-channel hosts expose their supported layout; other hosts may prepare routing offline.
+        const outputChannelCount = this.pipelineCore.audioManager?.outputChannelCount ?? 16;
+        channelOptions.filter(option => getPluginExecutionChannelMode(option.value || null, outputChannelCount)).forEach(option => {
             const optionEl = document.createElement('option');
             optionEl.value = option.value;
             optionEl.textContent = option.text;

@@ -1,5 +1,6 @@
 #include "diagnostic.h"
 #include "mp3_core.h"
+#include "psycho_model.h"
 
 #include "MP3CodecSimulatorPluginParams.h"
 #include "allocation_guard.h"
@@ -113,6 +114,39 @@ void testBlockSwitchOracle() {
         "trailing attack of a consecutive transient run lost its SHORT window");
   state = mp3::nextBlockType(state, false, false);
   check(state == mp3::BlockType::Stop, "attack run did not close with a STOP window");
+}
+
+void testPsychoacousticBandAndWindowModel() {
+  const mp3::PsychoBands long_bands = mp3::psychoBands(mp3::Profile::Mpeg1, mp3::BlockType::Long);
+  const mp3::PsychoBands short_bands = mp3::psychoBands(mp3::Profile::Mpeg1, mp3::BlockType::Short);
+  check(long_bands[6u].frequencyBegin == 24u && long_bands[6u].frequencyEnd == 30u,
+        "MPEG-1 long psycho band 6 has the wrong frequency range");
+  for (std::uint32_t window = 0u; window < 3u; ++window) {
+    const mp3::PsychoBand &band = short_bands[18u + window];
+    check(band.frequencyBegin == 90u && band.frequencyEnd == 120u,
+          "MPEG-1 short psycho band 6 reused the long-band frequency range");
+    check(band.end - band.begin == 10u, "MPEG-1 short psycho band 6 has the wrong reordered width");
+  }
+  check(short_bands[18u].end == short_bands[19u].begin &&
+            short_bands[19u].end == short_bands[20u].begin,
+        "short psycho windows do not occupy distinct reordered ranges");
+
+  std::array<float, mp3::kGranuleSamples> strong{};
+  std::array<float, mp3::kGranuleSamples> attenuated{};
+  for (std::uint32_t line = short_bands[19u].begin; line < short_bands[19u].end; ++line) {
+    strong[line] = 1.0F;
+    attenuated[line] = 0.25F;
+  }
+  const mp3::MaskThresholds strong_thresholds =
+      mp3::maskingThresholds(strong.data(), short_bands, mp3::BlockType::Short, 0.0F);
+  const mp3::MaskThresholds attenuated_thresholds =
+      mp3::maskingThresholds(attenuated.data(), short_bands, mp3::BlockType::Short, 0.0F);
+  check(strong_thresholds[19u] > strong_thresholds[18u] * 1000000.0 &&
+            strong_thresholds[19u] > strong_thresholds[20u] * 1000000.0,
+        "energy in one short window leaked into the other two windows");
+  check(closeEnough(static_cast<float>(attenuated_thresholds[19u] / strong_thresholds[19u]),
+                    0.0625F, 1.0e-6F),
+        "masking threshold did not scale as squared MDCT error energy");
 }
 
 void testFrameBudgets() {
@@ -404,6 +438,71 @@ void processTone(KernelHarness &harness, const Params &params, std::uint32_t fra
   }
 }
 
+std::vector<mp3::ProductionDiagnosticSnapshot>
+captureMpeg1Diagnostics(const std::vector<float> &left, const std::vector<float> &right,
+                        const Params &params) {
+  const std::uint32_t channels = right.empty() ? 1u : 2u;
+  KernelHarness harness(44100.0F, channels);
+  check(harness.ready(), "diagnostic capture kernel prepares");
+  if (!harness.ready() || (!right.empty() && right.size() != left.size())) {
+    check(right.empty() || right.size() == left.size(), "diagnostic capture channel lengths match");
+    return {};
+  }
+
+  constexpr std::uint32_t kBlockFrames = 64u;
+  std::vector<mp3::ProductionDiagnosticSnapshot> snapshots;
+  std::uint64_t completed = 0u;
+  for (std::uint32_t absolute = 0u; absolute < left.size(); absolute += kBlockFrames) {
+    const std::uint32_t frames = left.size() - absolute < kBlockFrames
+                                     ? static_cast<std::uint32_t>(left.size() - absolute)
+                                     : kBlockFrames;
+    std::array<float, 2u * kBlockFrames> audio{};
+    for (std::uint32_t frame = 0u; frame < frames; ++frame) {
+      audio[frame] = left[absolute + frame];
+      if (channels == 2u) {
+        audio[frames + frame] = right[absolute + frame];
+      }
+    }
+    harness.stage(params);
+    harness.process(audio.data(), channels, frames);
+    mp3::ProductionDiagnosticSnapshot snapshot{};
+    if (harness.diagnostic(snapshot) && snapshot.completedFrames != completed) {
+      completed = snapshot.completedFrames;
+      snapshots.push_back(snapshot);
+    }
+  }
+  return snapshots;
+}
+
+void checkFrameBudget(const mp3::LogicalFrame &frame) {
+  std::uint32_t logical_bits = 0u;
+  for (std::uint32_t granule = 0u; granule < frame.granules; ++granule) {
+    for (std::uint32_t channel = 0u; channel < frame.channels; ++channel) {
+      logical_bits += frame.data[granule][channel].part23Length();
+    }
+  }
+  check(frame.budget.valid, "production frame exceeded its bit budget");
+  check(frame.budget.logicalAduBits == logical_bits,
+        "production frame budget did not account for every granule-channel");
+  check(logical_bits <= frame.budget.physicalMainDataAreaBits + frame.budget.reservoirBeforeBits,
+        "production frame payload exceeded physical data plus reservoir credit");
+  check(frame.budget.ancillaryBits + frame.budget.reservoirAfterBits + logical_bits ==
+            frame.budget.physicalMainDataAreaBits + frame.budget.reservoirBeforeBits,
+        "production frame payload, ancillary data, and reservoir do not balance");
+}
+
+double logicalSpectrumEnergy(const mp3::LogicalFrame &frame, std::uint32_t granule,
+                             std::uint32_t channel) {
+  std::array<float, mp3::kGranuleSamples> spectrum{};
+  mp3::decodeLogicalSpectrum(frame.data[granule][channel], frame.profile, mp3::kGranuleSamples - 1u,
+                             spectrum.data());
+  double energy = 0.0;
+  for (const float value : spectrum) {
+    energy += static_cast<double>(value) * value;
+  }
+  return energy;
+}
+
 void testFrameControlFastPath() {
   KernelHarness harness(44100.0F, 2u);
   check(harness.ready(), "frame-control kernel prepares");
@@ -554,81 +653,109 @@ void testContinuationPcmMatchesLogicalRender() {
   check(pcm_matches, "continuation PCM differs from production logical-frame synthesis");
 }
 
-// The lookahead granule of frame N holds exactly the samples that become granule 0 of
-// frame N+1. When both were run through detectAttack(), the second evaluation compared
-// the window against its own energy, so total/old collapsed to 1 and that criterion was
-// permanently dead for every frame's granule 0 - the granule nextBlockType() consumes as
-// current_attack. The stimulus below is built so total/old is the *only* criterion that
-// can see the two transients: the tone period is exactly 96 samples, so all six
-// sub-windows of a granule carry identical energy (largestRise == 1) and the tone is far
-// below the highFrequency threshold; the amplitude only ever steps at granule
-// boundaries. Absolute granule 5 is frame 2's granule 1 and absolute granule 6 is frame
-// 3's granule 0, so the trailing attack of the run lands on a frame's granule 0.
-void testAttackCarryAcrossFrameBoundary() {
-  KernelHarness harness(44100.0F, 2u);
-  check(harness.ready(), "attack-carry kernel prepares");
-  if (!harness.ready()) {
-    return;
-  }
-  // MPEG-1 at a 44.1 kHz host is a direct codec-rate path (no halfband, no rational
-  // stage), so codec sample k is host sample k and granule g spans [576g, 576g + 576).
+void testTransientEnergyUsesShortWindows() {
   Params params = defaultParams();
   params.codecRate = 1.0F;
-  constexpr std::uint32_t kGranuleSpan = 576u;
-  constexpr std::uint32_t kLeadingAttackGranule = 5u;
-  constexpr std::uint32_t kTrailingAttackGranule = 6u;
-  constexpr std::uint32_t kBlockFrames = 64u;
-  std::array<mp3::ProductionDiagnosticSnapshot, 4u> frames{};
-  std::uint32_t captured = 0u;
-  std::uint64_t completed = 0u;
-  std::uint32_t absolute = 0u;
-  std::array<float, 2u * kBlockFrames> audio{};
-  while (captured < frames.size() && absolute < 12000u) {
-    for (std::uint32_t frame = 0u; frame < kBlockFrames; ++frame) {
-      const std::uint32_t index = absolute + frame;
-      const std::uint32_t granule = index / kGranuleSpan;
-      // 0.05 -> 0.125 -> 0.3125 is a 6.25x energy step at each boundary, i.e. above
-      // the 4.0 total/old attack threshold and nothing else.
-      const double amplitude = granule < kLeadingAttackGranule    ? 0.05
-                               : granule < kTrailingAttackGranule ? 0.125
-                                                                  : 0.3125;
-      const double phase = 2.0 * std::numbers::pi_v<double> * static_cast<double>(index) / 96.0;
-      audio[frame] = static_cast<float>(amplitude * std::sin(phase));
-      audio[kBlockFrames + frame] = audio[frame];
+  params.bitrate = 3.0F;
+  constexpr std::uint32_t kGranuleSamples = 576u;
+  constexpr std::array<std::uint32_t, 4u> offsets = {0u, 191u, 383u, 575u};
+  for (const std::uint32_t offset : offsets) {
+    std::vector<float> signal(10u * kGranuleSamples, 0.0F);
+    signal[4u * kGranuleSamples + offset] = 1.0F;
+    const auto snapshots = captureMpeg1Diagnostics(signal, {}, params);
+    check(snapshots.size() >= 3u, "transient probe captured enough production frames");
+    if (snapshots.size() < 3u) {
+      continue;
     }
-    harness.stage(params);
-    harness.process(audio.data(), 2u, kBlockFrames);
-    absolute += kBlockFrames;
-    mp3::ProductionDiagnosticSnapshot snapshot{};
-    if (harness.diagnostic(snapshot) && snapshot.completedFrames != completed) {
-      completed = snapshot.completedFrames;
-      frames[captured++] = snapshot;
+
+    double maximum_energy = 0.0;
+    mp3::BlockType maximum_block = mp3::BlockType::Long;
+    for (const auto &snapshot : snapshots) {
+      checkFrameBudget(snapshot.logical);
+      for (std::uint32_t granule = 0u; granule < snapshot.logical.granules; ++granule) {
+        const double energy = logicalSpectrumEnergy(snapshot.logical, granule, 0u);
+        if (energy > maximum_energy) {
+          maximum_energy = energy;
+          maximum_block = snapshot.logical.data[granule][0u].blockType;
+        }
+      }
     }
+    if (maximum_block != mp3::BlockType::Short) {
+      std::fprintf(stderr, "transient-window detail offset=%u block=%d energy=%.9g\n", offset,
+                   static_cast<int>(maximum_block), maximum_energy);
+    }
+    check(maximum_energy > 1.0e-12,
+          "transient probe did not reach the production transform and quantizer");
+    check(maximum_block == mp3::BlockType::Short,
+          "the transform granule carrying the transient's peak energy was not SHORT");
   }
-  check(captured == frames.size(), "attack-carry probe captured four completed frames");
-  if (captured != frames.size()) {
+}
+
+void testSteadyHighFrequencyToneUsesLongWindows() {
+  Params params = defaultParams();
+  params.codecRate = 1.0F;
+  params.bitrate = 3.0F;
+  constexpr std::uint32_t kFrames = 12000u;
+  std::vector<float> signal(kFrames);
+  for (std::uint32_t frame = 0u; frame < kFrames; ++frame) {
+    const double phase = 2.0 * std::numbers::pi_v<double> * 12000.0 * frame / 44100.0;
+    signal[frame] = static_cast<float>(0.3 * std::sin(phase));
+  }
+  const auto snapshots = captureMpeg1Diagnostics(signal, {}, params);
+  check(snapshots.size() >= 6u, "steady high-frequency probe captured enough production frames");
+  if (snapshots.size() < 6u) {
     return;
   }
-  check(frames[3u].logical.granules == 2u && frames[3u].logical.channels == 2u,
-        "attack-carry probe did not run the MPEG-1 two-granule stereo layout");
-  for (std::uint32_t channel = 0u; channel < 2u; ++channel) {
-    const mp3::BlockType armed = frames[2u].logical.data[0u][channel].blockType;
-    const mp3::BlockType leading = frames[2u].logical.data[1u][channel].blockType;
-    const mp3::BlockType trailing = frames[3u].logical.data[0u][channel].blockType;
-    const mp3::BlockType closing = frames[3u].logical.data[1u][channel].blockType;
-    if (armed != mp3::BlockType::Start || leading != mp3::BlockType::Short ||
-        trailing != mp3::BlockType::Short || closing != mp3::BlockType::Stop) {
-      std::fprintf(stderr,
-                   "attack-carry detail channel=%u armed=%d leading=%d trailing=%d closing=%d\n",
-                   channel, static_cast<int>(armed), static_cast<int>(leading),
-                   static_cast<int>(trailing), static_cast<int>(closing));
+  for (std::size_t index = snapshots.size() - 3u; index < snapshots.size(); ++index) {
+    checkFrameBudget(snapshots[index].logical);
+    for (std::uint32_t granule = 0u; granule < snapshots[index].logical.granules; ++granule) {
+      check(snapshots[index].logical.data[granule][0u].blockType == mp3::BlockType::Long,
+            "steady 12 kHz tone retained a transient window after onset settled");
     }
-    check(armed == mp3::BlockType::Start, "granule before the transient run did not arm a START");
-    check(leading == mp3::BlockType::Short, "leading attack granule was not SHORT");
-    check(trailing == mp3::BlockType::Short,
-          "trailing attack on a frame's granule 0 lost its SHORT window");
-    check(closing == mp3::BlockType::Stop, "transient run did not close with a STOP window");
   }
+}
+
+std::vector<mp3::ProductionDiagnosticSnapshot> captureStereoScaleProbe(float amplitude) {
+  constexpr std::uint32_t kFrames = 12000u;
+  std::vector<float> left(kFrames);
+  std::vector<float> right(kFrames);
+  for (std::uint32_t frame = 0u; frame < kFrames; ++frame) {
+    const double phase1 = 2.0 * std::numbers::pi_v<double> * 997.0 * frame / 44100.0;
+    const double phase2 = 2.0 * std::numbers::pi_v<double> * 4013.0 * frame / 44100.0;
+    const double common = 0.7 * std::sin(phase1);
+    const double difference = 0.2 * std::sin(phase2);
+    left[frame] = static_cast<float>(amplitude * (common + difference));
+    right[frame] = static_cast<float>(amplitude * (common - difference));
+  }
+  Params params = defaultParams();
+  params.codecRate = 1.0F;
+  params.bitrate = 3.0F;
+  params.stereoMode = 0.0F;
+  return captureMpeg1Diagnostics(left, right, params);
+}
+
+void testMidSideDecisionIsLevelInvariant() {
+  const auto normal = captureStereoScaleProbe(0.7F);
+  const auto attenuated = captureStereoScaleProbe(0.021F);
+  check(normal.size() == attenuated.size() && normal.size() >= 6u,
+        "level-invariance probe captured matching production frames");
+  if (normal.size() != attenuated.size() || normal.size() < 6u) {
+    return;
+  }
+  bool saw_mid_side = false;
+  for (std::size_t index = 2u; index < normal.size(); ++index) {
+    checkFrameBudget(normal[index].logical);
+    checkFrameBudget(attenuated[index].logical);
+    saw_mid_side = saw_mid_side || normal[index].logical.midSide;
+    if (normal[index].logical.midSide != attenuated[index].logical.midSide) {
+      std::fprintf(stderr, "mid-side scale detail frame=%zu normal=%d attenuated=%d\n", index,
+                   normal[index].logical.midSide ? 1 : 0,
+                   attenuated[index].logical.midSide ? 1 : 0);
+    }
+    check(normal[index].logical.midSide == attenuated[index].logical.midSide,
+          "M/S selection changed when only the input level changed");
+  }
+  check(saw_mid_side, "level-invariance probe never exercised M/S coding");
 }
 
 void testShortCutoffAndSwitchedRegions() {
@@ -899,6 +1026,16 @@ void testWetImpulseAlignmentAcrossBitrates() {
           peak = magnitude;
           peakIndex = frame;
         }
+      }
+      if (!(peak > 1.0e-6F && peakIndex == harness.latency())) {
+        std::fprintf(stderr,
+                     "wet bitrate latency detail profile=%.0f bitrate-index=%u expected=%u "
+                     "actual=%u peak=%g neighborhood=[%g,%g,%g,%g,%g]\n",
+                     profile, bitrate, harness.latency(), peakIndex, peak,
+                     peakIndex >= 2u ? output[peakIndex - 2u] : 0.0F,
+                     peakIndex >= 1u ? output[peakIndex - 1u] : 0.0F, output[peakIndex],
+                     peakIndex + 1u < output.size() ? output[peakIndex + 1u] : 0.0F,
+                     peakIndex + 2u < output.size() ? output[peakIndex + 2u] : 0.0F);
       }
       check(peak > 1.0e-6F && peakIndex == harness.latency(),
             "wet impulse peak changed with bitrate instead of retaining fixed latency");
@@ -1252,7 +1389,8 @@ bool writeProductionDiagnostic(std::string_view fixture_id, const char *path) {
   params.stereoMode = joint ? 0.0F : 1.0F;
   params.bitReservoir = reservoir ? 1.0F : 0.0F;
 
-  std::array<mp3::ProductionDiagnosticSnapshot, 4u> snapshots{};
+  constexpr std::uint32_t kProductionDiagnosticFrames = 5u;
+  std::array<mp3::ProductionDiagnosticSnapshot, kProductionDiagnosticFrames> snapshots{};
   std::uint32_t captured = 0u;
   std::uint64_t previous_frame = 0u;
   std::uint32_t absolute = 0u;
@@ -1284,7 +1422,8 @@ bool writeProductionDiagnostic(std::string_view fixture_id, const char *path) {
     absolute += block_frames;
   }
   if (captured != snapshots.size()) {
-    std::fprintf(stderr, "MP3 production diagnostic did not complete four frames\n");
+    std::fprintf(stderr, "MP3 production diagnostic did not complete %u frames\n",
+                 kProductionDiagnosticFrames);
     return false;
   }
   const auto production_snapshots = snapshots;
@@ -1386,11 +1525,14 @@ int main(int argc, char **argv) {
   }
   testProfilePolicies();
   testBlockSwitchOracle();
+  testPsychoacousticBandAndWindowModel();
   testFrameBudgets();
   testHuffmanLengthOracle();
   testFrameMidSideCompatibility();
   testLogicalDecodeOracle();
-  testAttackCarryAcrossFrameBoundary();
+  testTransientEnergyUsesShortWindows();
+  testSteadyHighFrequencyToneUsesLongWindows();
+  testMidSideDecisionIsLevelInvariant();
   testShortCutoffAndSwitchedRegions();
   testMpeg2LsfScaleFactors();
   testFrameControlFastPath();

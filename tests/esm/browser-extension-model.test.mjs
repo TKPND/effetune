@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { activatePipelineModels, getPresetPluginStates, validatePreset } from '../../extension/model.js';
+import { activatePipelineModels, createPipelineModels, getPresetPluginStates, serializePipeline, validatePreset } from '../../extension/model.js';
+import { applySerializedState, convertShortToLongFormat } from '../../js/utils/serialization-utils.js';
+import { buildDspPipelineDescriptor } from '../../js/audio/dsp-pipeline-descriptor.js';
+import { DSP_PARAM_PACKERS } from '../../js/audio/dsp-params.generated.js';
+import { instantiateDsp } from '../../js/audio/dsp-wasm-loader.js';
 import { decidePowerTarget } from '../../js/audio/power-policy.js';
 import { ExtensionIrLibraryClient, ExtensionIrLibraryHost } from '../../extension/ir-library.js';
 import { IrLibraryService } from '../../js/ir-library/service.js';
@@ -344,25 +348,112 @@ test('capture stop and failed startup close intentionally without triggering aud
     });
 });
 
-test('extension presets preserve long/short serialization and reject unsupported topology before loading', () => {
+test('extension presets preserve bus routing and reject unsupported topology before loading', () => {
     const previousWindow = globalThis.window;
     class VolumePlugin {}
     globalThis.window = { dspParamPackers: new Map([['VolumePlugin', {}]]) };
     const manager = { pluginClasses: { Volume: VolumePlugin }, isPluginAvailable: name => name === 'Volume' };
     try {
-        const long = { pipeline: [{ name: 'Volume', enabled: true, parameters: { vl: -6 }, channel: 'L' }] };
-        assert.deepEqual(getPresetPluginStates(long), [{ nm: 'Volume', en: true, vl: -6, ch: 'L' }]);
+        const long = { pipeline: [{ name: 'Volume', enabled: true, parameters: { vl: -6 }, inputBus: 4, outputBus: 1, channel: 'L' }] };
+        assert.deepEqual(getPresetPluginStates(long), [{ nm: 'Volume', en: true, vl: -6, ib: 4, ob: 1, ch: 'L' }]);
         assert.equal(validatePreset(long, manager)[0].vl, -6);
-        const invalid = { plugins: [{ nm: 'Volume', en: true, ib: 1 }] };
-        const before = structuredClone(invalid);
-        assert.throws(() => validatePreset(invalid, manager), /buses/);
-        assert.deepEqual(invalid, before);
+        for (const bus of [null, 0, 1, 2, 3, 4]) {
+            const routed = { plugins: [{ nm: 'Volume', en: true, ib: bus, ob: bus }] };
+            assert.deepEqual(validatePreset(routed, manager), routed.plugins);
+        }
+        for (const bus of [-1, 5, 1.5, '1']) {
+            const invalid = { plugins: [{ nm: 'Volume', en: true, ib: bus }] };
+            const before = structuredClone(invalid);
+            assert.throws(() => validatePreset(invalid, manager), /invalid audio bus/);
+            assert.deepEqual(invalid, before);
+        }
         assert.throws(() => validatePreset({ plugins: [{ nm: 'Volume', ch: '34' }] }, manager), /channel/);
         assert.throws(() => validatePreset({ plugins: [{ nm: 'Unknown' }] }, manager), /unavailable/);
     } finally {
         if (previousWindow === undefined) delete globalThis.window;
         else globalThis.window = previousWindow;
     }
+});
+
+test('extension routed presets and live bus edits reach the stereo WASM pipeline', async () => {
+    const windowRef = { dspParamPackers: DSP_PARAM_PACKERS, addEventListener() {} };
+    const pluginContext = vm.createContext({
+        window: windowRef, document: {}, console, Float32Array, setTimeout, clearTimeout,
+        MutationObserver: class { observe() {} disconnect() {} }
+    });
+    for (const file of ['plugins/plugin-base.js', 'plugins/basics/volume.js']) {
+        vm.runInContext(await readFile(new URL(`../../${file}`, import.meta.url), 'utf8'), pluginContext);
+    }
+    const manager = {
+        nextPluginId: 1,
+        pluginClasses: { Volume: windowRef.VolumePlugin },
+        isPluginAvailable: name => name === 'Volume',
+        createPlugin() { const plugin = new windowRef.VolumePlugin(); plugin.id = this.nextPluginId++; return plugin; }
+    };
+    await withGlobals({ window: windowRef }, async () => {
+        const models = await createPipelineModels({ pipeline: [
+            { name: 'Volume', enabled: true, parameters: { vl: 0 }, outputBus: 4 },
+            { name: 'Volume', enabled: true, parameters: { vl: 0 }, inputBus: 4 }
+        ] }, manager);
+        const audio = { pipeline: models, masterBypass: false, audioContext: { sampleRate: 48000 } };
+        windowRef.irLibraryService = { async refresh() {} };
+        const sessionContext = vm.createContext({
+            window: windowRef, console, Map, Promise, harnessAudio: audio, harnessManager: manager,
+            serializePipeline, validatePreset, applySerializedState,
+            capturePreparationStatuses: () => []
+        });
+        const sessionSource = (await readFile(new URL('../../extension/session.js', import.meta.url), 'utf8'))
+            .replace(/^import .*;\r?\n/gm, '');
+        vm.runInContext(sessionSource, sessionContext);
+        vm.runInContext('audio = harnessAudio; manager = harnessManager; port = { postMessage() {} };', sessionContext);
+        const binding = await instantiateDsp(await readFile(new URL('../../plugins/dsp/effetune-dsp.wasm', import.meta.url)));
+        try {
+            assert.notEqual(binding.createEngine(), 0);
+            assert.equal(binding.prepare(48000, 2, 128, 256 * 1024), 0);
+            const instances = new Map();
+            for (const plugin of models) {
+                const instance = binding.createInstance('VolumePlugin');
+                assert.notEqual(instance, 0);
+                instances.set(plugin.id, instance);
+                const packer = DSP_PARAM_PACKERS.get('VolumePlugin');
+                assert.equal(binding.instanceSetParams(instance, packer.pack(plugin.getParameters()), packer.hash), 0);
+            }
+            const assertOutput = expected => {
+                const payload = models.map(plugin => plugin.getWorkletPluginData());
+                assert.equal(binding.pipelineConfigure(buildDspPipelineDescriptor(payload, {
+                    getInstanceId: plugin => instances.get(plugin.id)
+                })), 0);
+                const samples = binding.getArenaViews().combined.subarray(0, 256);
+                samples.fill(0.25);
+                assert.equal(binding.pipelineProcess(2, 128, 0, false), 0);
+                for (const sample of samples) assert.equal(sample, expected);
+            };
+            assertOutput(0.5);
+            const roundTrip = await createPipelineModels({
+                pipeline: serializePipeline(models).map(convertShortToLongFormat)
+            }, manager);
+            assert.deepEqual(roundTrip.map(plugin => [plugin.inputBus, plugin.outputBus]), [[null, 4], [4, null]]);
+            for (const plugin of roundTrip) plugin.cleanup();
+            const updateRoute = async (index, inputBus, outputBus) => {
+                const plugin = models[index].getWorkletPluginData();
+                plugin.inputBus = inputBus;
+                plugin.outputBus = outputBus;
+                const state = await sessionContext.handle('workletMessage', { message: { type: 'updatePlugin', plugin } });
+                assert.equal(state.plugins[index].ib, inputBus ?? undefined);
+                assert.equal(state.plugins[index].ob, outputBus ?? undefined);
+            };
+            await updateRoute(0, null, 1);
+            assertOutput(0.25);
+            await updateRoute(1, 1, null);
+            assertOutput(0.5);
+            await updateRoute(0, null, null);
+            await updateRoute(1, null, null);
+            assertOutput(0.25);
+        } finally {
+            binding.close();
+            for (const plugin of models) plugin.cleanup();
+        }
+    });
 });
 
 test('live capture remains in Monitoring past the full-suspend deadline without releasing input', () => {

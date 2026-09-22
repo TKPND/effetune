@@ -274,6 +274,7 @@ function createElectronAPI(calls, options = {}) {
     onSavePresetAs: register('savePresetAs'),
     onConfigAudio: register('configAudio'),
     onConfigApp: register('configApp'),
+    onBackupRestore: register('backupRestore'),
     onLoadUserPreset: register('loadUserPreset'),
     onShowAboutDialog: register('showAboutDialog'),
     onIPC(channel, callback) {
@@ -572,6 +573,12 @@ test('Electron constructor defers preferences and config while callbacks dispatc
     electronAPI.handlers.savePresetAs();
     electronAPI.handlers.configAudio();
     electronAPI.handlers.configApp();
+    windowRef.uiManager.stateManager = {
+      openBackupRestore() {
+        calls.push(['openBackupRestore']);
+      }
+    };
+    electronAPI.handlers.backupRestore();
 
     windowRef.pipelineManager = {
       presetManager: {
@@ -599,6 +606,7 @@ test('Electron constructor defers preferences and config while callbacks dispatc
     assert.ok(calls.some(call => call[0] === 'createAudioPlayer' && call[2] === false));
     assert.ok(calls.some(call => call[0] === 'loadPreset' && call[1] === 'Ready'));
     assert.ok(calls.some(call => call[0] === 'enterFresh'));
+    assert.ok(calls.some(call => call[0] === 'openBackupRestore'));
   });
 });
 

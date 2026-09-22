@@ -12,6 +12,7 @@ import {
   subscribeIrLibraryMigrationProgress
 } from '../../js/ir-library/ir-library-factory.js';
 import { IR_LIBRARY_INDEX_NAME, IrLibraryStore } from '../../js/ir-library/ir-library-store.js';
+import { chooseName, prepareItems } from '../../js/user-data-backup/portable.js';
 import {
   IR_LIBRARY_INDEX_TOO_LARGE_CODE,
   IR_LIBRARY_MAX_ANALYSIS_BYTES,
@@ -40,6 +41,63 @@ import {
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const encode = value => new TextEncoder().encode(value);
+
+test('backup snapshots carry both IR originals and append through the existing content store', async () => {
+  const source = await new IrLibraryStore(new MemoryBackend()).open();
+  const saved = await source.importPair({ left: { bytes: wavBytes({ marker: 1 }), fileName: 'Room_L.wav' },
+    right: { bytes: wavBytes({ marker: 2 }), fileName: 'Room_R.wav' },
+    analysis: { envelope: new Float32Array([1, 0.5]) } });
+  const [data] = await source.readBackupSnapshot();
+  assert.deepEqual(data.originals.map(item => item.role), ['L', 'R']);
+  assert.equal(data.entry.originals[0].storageName, undefined);
+  assert.equal(data.entry.analysis.storageName, undefined);
+  assert.deepEqual(data.analysis.envelope, new Float32Array([1, 0.5]));
+  const destination = await new IrLibraryStore(new MemoryBackend()).open();
+  const result = await destination.appendBackupItem(data, 'Room_L (2).wav + Room_R (2).wav');
+  assert.equal(result.entry.irId, saved.entry.irId);
+  assert.deepEqual(result.entry.originals.map(item => item.fileName), ['Room_L (2).wav', 'Room_R (2).wav']);
+  await destination.appendBackupItem(data, 'Room_L.wav + Room_R.wav');
+  assert.equal(destination.list().length, 1);
+  destination.backend.files.delete(result.entry.originals[0].storageName);
+  await assert.rejects(destination.readBackupSnapshot());
+});
+
+test('IR conflict previews match persisted single and paired names across three contents and repeat reuse', async () => {
+  const catalog = async store => prepareItems((await store.readBackupSnapshot()).map(data => ({
+    kind: 'ir', key: data.entry.irId, id: data.entry.irId,
+    name: data.originals.map(original => original.fileName).join(' + '), data
+  })));
+  for (const pair of [false, true]) {
+    const destination = await new IrLibraryStore(new MemoryBackend()).open();
+    const sources = [];
+    const expected = pair
+      ? ['Room_L.wav + Room_R.wav', 'Room_L (2).wav + Room_R (2).wav', 'Room_L (3).wav + Room_R (3).wav']
+      : ['Room.wav', 'Room (2).wav', 'Room (3).wav'];
+    for (let index = 0; index < 3; index++) {
+      const source = await new IrLibraryStore(new MemoryBackend()).open();
+      if (pair) await source.importPair({
+        left: { fileName: 'Room_L.wav', bytes: wavBytes({ marker: index + 1 }) },
+        right: { fileName: 'Room_R.wav', bytes: wavBytes({ marker: index + 11 }) }
+      });
+      else await source.importSingle({ fileName: 'Room.wav', bytes: wavBytes({ marker: index + 1 }) });
+      const [item] = await catalog(source);
+      sources.push(item);
+      const chosen = chooseName(item, await catalog(destination));
+      assert.equal(chosen.name, expected[index]);
+      const saved = await destination.appendBackupItem(item.data, chosen.name);
+      assert.equal(saved.entry.originals.map(original => original.fileName).join(' + '), chosen.name);
+    }
+    const writes = destination.backend.writes.length;
+    const saved = await catalog(destination);
+    for (const [index, item] of sources.entries()) {
+      const chosen = chooseName(item, saved);
+      assert.equal(chosen.name, expected[index]);
+      assert.equal(chosen.existing.id, item.id);
+    }
+    assert.equal(destination.list().length, 3);
+    assert.equal(destination.backend.writes.length, writes);
+  }
+});
 
 function deferred() {
   let resolve;

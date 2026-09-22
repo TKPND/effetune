@@ -1,0 +1,303 @@
+.backup-restore-overlay {
+    position: fixed;
+    z-index: 10000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.62);
+}
+
+.backup-restore-dialog {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: min(940px, calc(100vw - 32px));
+    max-height: min(820px, calc(100svh - 32px));
+    padding: 20px;
+    overflow: hidden;
+    color: var(--et-text-primary);
+    border: 1px solid var(--et-border-strong);
+    border-radius: 10px;
+    background: var(--et-panel-gradient);
+    box-shadow: 0 22px 54px rgba(0, 0, 0, 0.55);
+}
+
+.backup-restore-header,
+.backup-restore-controls,
+.backup-restore-group-header,
+.backup-restore-progress,
+.backup-restore-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.backup-restore-header {
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.backup-restore-header h2 {
+    margin: 0;
+    font-size: 21px;
+}
+
+.backup-restore-header p {
+    margin: 5px 0 0;
+    color: var(--et-text-secondary);
+    font-size: 13px;
+}
+
+.backup-restore-dialog button,
+.backup-restore-dialog input {
+    box-sizing: border-box;
+}
+
+.backup-restore-dialog button {
+    min-height: 32px;
+    padding: 5px 11px;
+    color: var(--et-text-primary);
+    border: 1px solid var(--et-surface-28);
+    border-radius: 5px;
+    background: var(--et-button-gradient);
+    cursor: pointer;
+}
+
+.backup-restore-dialog button:hover:not(:disabled) {
+    border-color: var(--et-surface-39);
+    background: var(--et-control-hover-gradient);
+    box-shadow: var(--et-control-hover-shadow);
+}
+
+.backup-restore-dialog button:focus-visible,
+.backup-restore-dialog input:focus-visible {
+    outline: none;
+    border-color: var(--et-accent);
+    box-shadow: var(--et-focus-ring);
+}
+
+.backup-restore-dialog button:disabled,
+.backup-restore-dialog input:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
+.backup-restore-close {
+    flex: 0 0 auto;
+}
+
+.backup-restore-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 16px 0 12px;
+}
+
+.backup-restore-tabs button.active,
+.backup-restore-primary {
+    color: var(--et-on-accent) !important;
+    border-color: var(--et-accent) !important;
+    background: var(--et-accent) !important;
+}
+
+.backup-restore-picker,
+.backup-restore-options {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.backup-restore-picker[hidden],
+.backup-restore-options[hidden],
+.backup-restore-warning[hidden],
+.backup-restore-progress[hidden],
+.backup-restore-result[hidden] {
+    display: none;
+}
+
+.backup-restore-options label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.backup-restore-options input,
+.backup-restore-row input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--et-accent);
+}
+
+.backup-restore-file-name,
+.backup-restore-selection-summary,
+.backup-restore-row-meta,
+.backup-restore-empty {
+    color: var(--et-text-secondary);
+    font-size: 13px;
+}
+
+.backup-restore-warning,
+.backup-restore-unavailable p {
+    margin: 0 0 10px;
+    padding: 9px 11px;
+    color: var(--et-text-primary);
+    border: 1px solid color-mix(in srgb, var(--et-warning) 42%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--et-warning) 10%, var(--et-surface-8));
+    font-size: 13px;
+}
+
+.backup-restore-controls {
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.backup-restore-controls input[type="search"] {
+    width: min(360px, 55%);
+    min-height: 34px;
+    padding: 6px 9px;
+    color: var(--et-text-primary);
+    border: 1px solid var(--et-surface-28);
+    border-radius: 5px;
+    background: var(--et-surface-9);
+}
+
+.backup-restore-list {
+    min-height: 140px;
+    overflow: auto;
+    border-block: 1px solid var(--et-border-subtle);
+}
+
+.backup-restore-group {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--et-border-subtle);
+}
+
+.backup-restore-group:last-child {
+    border-bottom: 0;
+}
+
+.backup-restore-group-header {
+    margin-bottom: 8px;
+}
+
+.backup-restore-group-header h3 {
+    flex: 1;
+    margin: 0;
+    font-size: 15px;
+}
+
+.backup-restore-group-header button {
+    min-height: 28px;
+    padding: 3px 9px;
+    font-size: 12px;
+}
+
+.backup-restore-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 5px 0;
+    padding: 9px 10px;
+    border: 1px solid var(--et-border-subtle);
+    border-radius: 6px;
+    background: var(--et-surface-8);
+}
+
+.backup-restore-row[data-selected="true"] {
+    border-color: color-mix(in srgb, var(--et-accent) 58%, transparent);
+}
+
+.backup-restore-row[data-available="false"] {
+    opacity: 0.68;
+}
+
+.backup-restore-row-detail {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.backup-restore-row-detail strong,
+.backup-restore-row-meta,
+.backup-restore-result p {
+    overflow-wrap: anywhere;
+}
+
+.backup-restore-empty {
+    margin: 8px 10px;
+}
+
+.backup-restore-status {
+    min-height: 20px;
+    padding-top: 8px;
+    font-size: 13px;
+}
+
+.backup-restore-progress {
+    padding-top: 8px;
+}
+
+.backup-restore-progress progress {
+    flex: 1;
+    min-width: 80px;
+    accent-color: var(--et-accent);
+}
+
+.backup-restore-result {
+    max-height: 160px;
+    margin-top: 8px;
+    padding: 10px;
+    overflow: auto;
+    border: 1px solid var(--et-border-subtle);
+    border-radius: 6px;
+    background: var(--et-surface-8);
+}
+
+.backup-restore-result h3,
+.backup-restore-result p {
+    margin: 0 0 6px;
+}
+
+.backup-restore-result-group + .backup-restore-result-group {
+    margin-top: 8px;
+}
+
+.backup-restore-actions {
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+@media (max-width: 600px) {
+    .backup-restore-overlay {
+        align-items: start;
+        padding: 8px;
+    }
+
+    .backup-restore-dialog {
+        width: calc(100vw - 16px);
+        max-height: calc(100svh - 16px);
+        padding: 12px;
+    }
+
+    .backup-restore-controls,
+    .backup-restore-progress {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .backup-restore-controls input[type="search"] {
+        width: 100%;
+        min-height: var(--et-mobile-control-height, 44px);
+    }
+
+    .backup-restore-dialog button {
+        min-height: var(--et-mobile-control-height, 44px);
+    }
+
+    .backup-restore-group-header {
+        flex-wrap: wrap;
+    }
+}

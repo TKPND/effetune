@@ -53,14 +53,34 @@ export class PluginPresetStore {
         try {
             const value = JSON.parse(serialized);
             if (!isRecord(value)) {
+                if (strict) throw new TypeError('Invalid plugin preset data');
                 console.warn('Ignoring invalid plugin preset data.');
                 return {};
             }
             return value;
         } catch (error) {
             console.warn('Failed to load plugin presets:', error);
+            if (strict) throw error;
             return {};
         }
+    }
+
+    readBackupSnapshot() {
+        return this.enqueueMutation(() => this.readPresets({ strict: true }));
+    }
+
+    appendPreset(pluginName, presetName, params) {
+        if (!normalizeName(pluginName) || !normalizeName(presetName) || !isRecord(params)) {
+            throw new TypeError('Invalid plugin preset');
+        }
+        return this.enqueueMutation(async () => {
+            const presets = await this.readPresets({ strict: true });
+            const group = Object.hasOwn(presets, pluginName) ? presets[pluginName] : {};
+            if (!isRecord(group) || Object.hasOwn(group, presetName)) throw new Error('Preset already exists or cannot be read');
+            setOwn(group, presetName, clone(params));
+            setOwn(presets, pluginName, group);
+            await this.persistPresets(presets);
+        });
     }
 
     async persistPresets(presets) {

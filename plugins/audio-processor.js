@@ -1034,19 +1034,33 @@ async function instantiateDspBinding(moduleOrBytes, {
 
 const JS_FALLBACK_SAMPLE_CHANNEL_BUDGET = 96000;
 
+function jsOversamplingLatency(parameters, maximum = 8) {
+    const factor = parameters.os;
+    return factor === 2 || factor === 4 || factor === 8 || factor === maximum ? 64 : 0;
+}
+
 const JS_FALLBACK_LATENCY_RESOLVERS = new Map([
+    ...[
+        'SaturationPlugin', 'DynamicSaturationPlugin', 'ExciterPlugin',
+        'HarmonicDistortionPlugin', 'MultibandSaturationPlugin'
+    ].map(type => [type, (_sampleRate, parameters) => jsOversamplingLatency(parameters)]),
+    ['HardClippingPlugin', (_sampleRate, parameters) => jsOversamplingLatency(parameters, 16)],
+    ['BrickwallLimiterPlugin', (sampleRate, parameters) => {
+        const lookahead = Math.ceil((parameters.la ?? 0) * sampleRate * 0.001);
+        return (lookahead > 0 ? lookahead : 1) + jsOversamplingLatency(parameters);
+    }],
     ['FrequencyShifterPlugin', sampleRate => {
         const hilbertStride = sampleRate <= 48000 ? 1 : (sampleRate <= 96000 ? 2 : 4);
         return 114 * hilbertStride;
     }]
 ]);
 
-function resolveJsFallbackLatency(pluginType, sampleRate) {
+function resolveJsFallbackLatency(pluginType, sampleRate, parameters = {}) {
     if (typeof pluginType !== 'string' || !Number.isFinite(sampleRate) || sampleRate <= 0) {
         return 0;
     }
     const resolver = JS_FALLBACK_LATENCY_RESOLVERS.get(pluginType);
-    return resolver ? resolver(sampleRate) >>> 0 : 0;
+    return resolver ? resolver(sampleRate, parameters) >>> 0 : 0;
 }
 
 function requiresWasmExecution(plugin) {
@@ -1917,6 +1931,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             for (const buffer of this.busBuffers.values()) buffer.fill(0);
             for (const action of this.dspLatencyPlan?.nodeActions?.values() || []) {
                 action.delayLine?.reset();
+                action.inputDelayLine?.reset();
             }
             this.dspLatencyPlan?.outputDelayLine?.reset();
             this.outputDelayLine?.reset();
@@ -3477,7 +3492,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                 }
                 continue;
             }
-            const fallbackLatency = resolveJsFallbackLatency(plugin.type, sampleRate);
+            const fallbackLatency = resolveJsFallbackLatency(plugin.type, sampleRate, plugin.parameters);
             if (fallbackLatency > 0) snapshot.set(plugin.id, fallbackLatency);
         }
         return snapshot;
@@ -3669,25 +3684,31 @@ class PluginProcessor extends AudioWorkletProcessor {
                 ? 0
                 : (latencySnapshot.get(plugin.id) ?? 0);
 
-            let tapInput = 0;
-            let tapOutput = 0;
             const targets = new Uint8Array(channelCount);
             const delays = new Uint32Array(channelCount);
+            const inputDelays = new Uint32Array(channelCount);
             let maximumDelay = 0;
+            let maximumInputDelay = 0;
             const firstChannel = selection.firstChannel;
             const endChannel = firstChannel + selection.requiredChannels;
+            // A processor may mix or copy any of its selected input channels.
+            // Align that group before processing, then propagate one output latency.
+            let inputLatency = 0;
             for (let channel = firstChannel; channel < endChannel; channel++) {
-                const inputLatency = hasContent[inputBus][channel] ? latency[inputBus][channel] : 0;
-                const incomingLatency = inputLatency + pluginLatency;
-                if (hasContent[inputBus][channel]) {
-                    tapInput = inputLatency > tapInput ? inputLatency : tapInput;
-                    tapOutput = incomingLatency > tapOutput ? incomingLatency : tapOutput;
+                if (hasContent[inputBus][channel] && latency[inputBus][channel] > inputLatency) {
+                    inputLatency = latency[inputBus][channel];
                 }
-                if (!Number.isSafeInteger(incomingLatency) || incomingLatency > 0xffffffff) {
-                    console.error('DSP pipeline latency exceeds the supported sample range.');
-                    this.publishDspPipelineLatency(0, false);
-                    return;
-                }
+            }
+            const incomingLatency = inputLatency + pluginLatency;
+            if (!Number.isSafeInteger(incomingLatency) || incomingLatency > 0xffffffff) {
+                console.error('DSP pipeline latency exceeds the supported sample range.');
+                this.publishDspPipelineLatency(0, false);
+                return;
+            }
+            for (let channel = firstChannel; channel < endChannel; channel++) {
+                const delay = inputLatency - (hasContent[inputBus][channel] ? latency[inputBus][channel] : 0);
+                inputDelays[channel] = delay;
+                maximumInputDelay = delay > maximumInputDelay ? delay : maximumInputDelay;
                 if (inputBus === outputBus) {
                     latency[outputBus][channel] = incomingLatency;
                     hasContent[outputBus][channel] = 1;
@@ -3713,18 +3734,25 @@ class PluginProcessor extends AudioWorkletProcessor {
                     maximumDelay = delay > maximumDelay ? delay : maximumDelay;
                 }
             }
-            tapPositions[plugin.id] = { input: tapInput, output: tapOutput,
+            tapPositions[plugin.id] = { input: inputLatency, output: incomingLatency,
                 execution: this.dspLive && this.wasmInstances.get(plugin.id)?.ready ? 'wasm' : 'js' };
-            if (maximumDelay > 0) {
+            if (maximumDelay > 0 || maximumInputDelay > 0) {
                 const previousAction = previousPlan?.nodeActions.get(plugin.id);
                 const unchanged = previousAction?.delays.length === channelCount &&
                     delays.every((delay, channel) => delay === previousAction.delays[channel] &&
                         targets[channel] === previousAction.targets[channel]);
+                const inputUnchanged = previousAction?.inputDelays.length === channelCount &&
+                    inputDelays.every((delay, channel) => delay === previousAction.inputDelays[channel]);
                 nodeActions.set(plugin.id, {
                     targets,
                     delays,
-                    delayLine: unchanged ? previousAction.delayLine :
-                        new WorkletSampleDelayLine(channelCount, maximumDelay)
+                    delayLine: maximumDelay > 0
+                        ? (unchanged ? previousAction.delayLine :
+                            new WorkletSampleDelayLine(channelCount, maximumDelay)) : null,
+                    inputDelays,
+                    inputDelayLine: maximumInputDelay > 0
+                        ? (inputUnchanged ? previousAction.inputDelayLine :
+                            new WorkletSampleDelayLine(channelCount, maximumInputDelay)) : null
                 });
             }
         }
@@ -5320,6 +5348,17 @@ class PluginProcessor extends AudioWorkletProcessor {
                 tempBuffer.set(inputBuffer.subarray(singleChannelIndex * blockSize, (singleChannelIndex + 1) * blockSize));
                 processingBuffer = tempBuffer; // Plugin processes this temp buffer
                  // Result will be written back from tempBuffer later
+            }
+
+            const inputCompensation = this.dspLatencyPlan?.nodeActions.get(plugin.id);
+            if (inputCompensation?.inputDelayLine) {
+                for (let offset = 0; offset < numProcessingChannels; offset++) {
+                    const channel = channelSelection.firstChannel + offset;
+                    inputCompensation.inputDelayLine.processChannel(
+                        processingBuffer, offset * blockSize, blockSize, channel,
+                        inputCompensation.inputDelays[channel]
+                    );
+                }
             }
 
             const spectrumTap = tapsActive && this.spectrumTaps.has(plugin.id)

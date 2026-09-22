@@ -4,6 +4,7 @@ import * as generatedParams from '../js/audio/dsp-params.generated.js';
 import { getSerializablePluginStateShort, convertLongToShortFormat, applySerializedState } from '../js/utils/serialization-utils.js';
 import { getPluginExecutionChannelMode, getPluginExecutionUnsupportedReason } from '../js/audio/plugin-execution-capabilities.js';
 import { getReachableEnabledPlugins } from '../js/audio/power-topology.js';
+import { DSP_PIPELINE_MAX_BUS } from '../js/audio/dsp-pipeline-descriptor.js';
 
 export async function activatePipelineModels(audio, plugins) {
     const activePlugins = audio.masterBypass ? [] : getReachableEnabledPlugins(plugins);
@@ -69,8 +70,9 @@ export function validatePreset(preset, pluginManager, sampleRate = 48000) {
         if (type !== 'SectionPlugin' && !window.dspParamPackers?.has(type)) {
             throw new Error('This effect is unavailable in the extension. Your current pipeline has been kept.');
         }
-        if (![state.ib, state.ob, state.inputBus, state.outputBus].every(bus => bus == null || bus === 0)) {
-            throw new Error('This preset uses audio buses. The extension supports one serial stereo pipeline.');
+        if (![state.ib, state.ob, state.inputBus, state.outputBus].every(bus =>
+            bus == null || (Number.isInteger(bus) && bus >= 0 && bus <= DSP_PIPELINE_MAX_BUS))) {
+            throw new Error('This preset has an invalid audio bus. Choose Main or Bus 1–4.');
         }
         const channel = state.ch ?? state.channel;
         const mode = getPluginExecutionChannelMode(channel, 2);

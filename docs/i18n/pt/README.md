@@ -149,6 +149,14 @@ Cada efeito também tem seu próprio botão Predefinições de efeito. Ele abre 
 
 Os recursos de importação, exportação e compartilhamento de arquivos `.effetune_preset` continuam sendo usados para presets da cadeia de efeitos completa.
 
+### Backup e restauração dos dados salvos
+
+Abra **Settings > Backup / Restaurar** para transferir presets de pipeline e de efeitos, respostas ao impulso e medições entre o aplicativo web, o aplicativo desktop e a extensão. Selecione itens individuais ou categorias inteiras. Ao selecionar um preset, os dados necessários também são selecionados; ao remover esses dados, os presets dependentes também são desmarcados.
+
+**Incluir dados de medição** e **Incluir dados de resposta ao impulso** ficam ativados por padrão. Se uma opção for desativada, apenas as referências serão salvas e os mesmos dados precisarão existir no destino. As respostas são restauradas na **Impulse Response Library**. Dados idênticos são reutilizados; itens diferentes com o mesmo nome recebem uma numeração. O pipeline atual, o volume, o preset selecionado, os dispositivos e as regras de URL não são alterados.
+
+Cada arquivo `.effetune_backup` tem limite de 256 MB; divida seleções maiores em vários backups. Se a restauração parar, os itens concluídos permanecem e o mesmo arquivo pode ser usado novamente com segurança. Antes de compartilhar, confira a seleção: ela pode conter nomes e comentários, arquivos de resposta ao impulso e detalhes das medições. Arquivos de música, Music Library, preferências, dispositivos, regras de URL, credenciais e o pipeline atual não salvo não são incluídos. Presets incompatíveis com a extensão continuam salvos e podem ser incluídos em outro backup, embora não possam ser aplicados nela.
+
 ### Usando a Funcionalidade Section
 
 1. Uso do Efeito Section:

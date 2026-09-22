@@ -1,7 +1,7 @@
 import { ExtensionClient } from './protocol.js';
 import { ExtensionIrLibraryClient } from './ir-library.js';
 import { hasPreparationStatus, mirrorPreparationStatus, refreshPreparationStatuses } from './preparation-status-bridge.js';
-import { initializePluginModel, serializePipeline } from './model.js';
+import { initializePluginModel, serializePipeline, validatePreset } from './model.js';
 import { PipelineManager } from '../js/ui/pipeline-manager.js';
 import { PluginListManager } from '../js/ui/plugin-list-manager.js';
 import { LayoutModeManager } from '../js/ui/layout-mode-manager.js';
@@ -11,11 +11,15 @@ import { installRangeFillStyling } from '../js/ui/range-fill.js';
 import { applySerializedState, getSerializablePluginStateShort, convertShortToLongFormat } from '../js/utils/serialization-utils.js';
 import dataStorage, { MeasurementImportError } from '../features/measurement/dataStorage.js';
 import { ExtensionMobileShell } from './mobile-shell.js';
+import { createUserDataBackupAdapter } from '../js/user-data-backup/adapters.js';
+import { openUserDataBackupDialog } from '../js/user-data-backup/dialog.js';
+import { UserDataBackupService } from '../js/user-data-backup/service.js';
 
 const MAXIMUM_MEASUREMENT_IMPORT_BYTES = 128 * 1024 * 1024;
 const TRANSIENT_MESSAGE_DURATION_MS = 3000;
 const VIRTUAL_MEASUREMENT_CHANNEL_SEPARATOR = '::ch=';
 const SAMPLE_RATES = new Set([44100, 48000, 96000, 192000]);
+const DOCUMENTATION_BASE_URL = 'https://effetune.frieve.com';
 
 const STATUS_LABELS = Object.freeze({
   stopped: 'Not processing',
@@ -81,6 +85,13 @@ function baseMeasurementId(id) {
   return separator > 0 ? text.slice(0, separator) : text;
 }
 
+export function getExtensionDocumentationUrl(path) {
+  const [basePath, anchor = ''] = path.split('#', 2);
+  if (!basePath.startsWith('/plugins/')) return path;
+  const htmlPath = basePath.replace(/\.[^/.]+$/, '') + '.html';
+  return `${DOCUMENTATION_BASE_URL}/docs${htmlPath}${anchor ? `#${anchor}` : ''}`;
+}
+
 export function createUiManager(translations, showMessage, hideMessage) {
   return {
     translations,
@@ -95,7 +106,7 @@ export function createUiManager(translations, showMessage, hideMessage) {
     updatePipelineToggleButton() {},
     clearError() { hideMessage(); },
     isDoubleBlindActive() { return false; },
-    getLocalizedDocPath(path) { return path; },
+    getLocalizedDocPath(path) { return getExtensionDocumentationUrl(path); },
     showTransientMessage(key, isError = false, params = {}, duration = 3000) {
       const fallback = isError ? 'Something went wrong. Try again.' : 'Pipeline updated.';
       showMessage(substitute(translations[key] || fallback, params), !isError, duration);
@@ -320,6 +331,7 @@ export class ExtensionEditor {
       settingsMenu: this.document.getElementById('editorSettingsMenu'),
       sampleRateSelect: this.document.getElementById('editorSampleRateSelect'),
       urlRules: this.document.getElementById('editorUrlRules'),
+      backupRestore: this.document.getElementById('editorBackupRestore'),
       rulesDialog: this.document.getElementById('urlRulesDialog'),
       rulesList: this.document.getElementById('urlRulesList'),
       emptyRules: this.document.getElementById('emptyUrlRules'),
@@ -447,6 +459,40 @@ export class ExtensionEditor {
     this.elements.urlRules?.addEventListener('click', () => {
       this.closeSettingsMenu();
       this.openRulesDialog();
+    });
+    this.elements.backupRestore?.addEventListener('click', () => {
+      this.closeSettingsMenu();
+      const adapter = createUserDataBackupAdapter({
+        presetManager: this.pipelineManager?.presetManager,
+        irLibrary: window.irLibraryService,
+        extensionClient: this.client,
+        canApplyPreset: item => {
+          if (item.kind !== 'pipeline') return true;
+          try {
+            validatePreset(item.data, this.pluginManager, this.currentSnapshot()?.sampleRate || 48000);
+            return true;
+          } catch {
+            return 'Some effects or settings cannot be used in this extension. The preset will still be saved.';
+          }
+        }
+      });
+      const service = new UserDataBackupService({
+        adapter,
+        appVersion: globalThis.chrome?.runtime?.getManifest?.().version || 'unknown'
+      });
+      openUserDataBackupDialog({
+        service,
+        translate: (key, fallback, params) => {
+          const translated = this.uiManager?.t?.(key, params);
+          return translated && translated !== key ? translated : substitute(fallback, params);
+        },
+        onRestored: async () => {
+          this.snapshot = await this.client.request('getState');
+          this.uiManager?.pluginListManager?.refreshPresetsIfVisible?.();
+          await this.refreshMeasurementConsumers();
+          this.updateImportedDeleteButtons();
+        }
+      });
     });
     this.elements.addRule?.addEventListener('click', () => {
       this.ruleDraft.push({ pattern: '', preset: Object.keys(this.snapshot?.presets || {})[0] || '', enabled: true });

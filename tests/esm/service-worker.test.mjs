@@ -12,6 +12,12 @@ const {
   buildPrecacheSource,
   generatePrecache
 } = require('../../scripts/generate-sw-precache.js');
+const backupRuntimeDependencies = [
+  'features/measurement/dataStorage.js',
+  'features/measurement/measurement-model.js',
+  'features/measurement/audio-utils/channel-selection.js',
+  'features/measurement/audio-utils/output-routing.js'
+];
 
 function createResponse(name, ok = true) {
   return {
@@ -125,6 +131,7 @@ function createPrecacheFixture(t) {
     'effetune-mobile.css',
     'effetune-library.css',
     'pipeline-analyzer.css',
+    'user-data-backup.css',
     'manifest.json',
     'sw.js'
   ]) {
@@ -134,6 +141,7 @@ function createPrecacheFixture(t) {
   writeFixtureFile(root, 'features/effetune-benchmark.js', 'export const benchmark = true;\n');
   writeFixtureFile(root, 'features/effetune-benchmark-score.js', 'export const score = true;\n');
   writeFixtureFile(root, 'features/benchmark-score-reference.js', 'export const reference = true;\n');
+  for (const relativePath of backupRuntimeDependencies) writeFixtureFile(root, relativePath, 'export {};\n');
   writeFixtureFile(root, 'js/app.js', 'console.log("first");\n');
   writeFixtureFile(root, 'plugins/plugins.txt', 'plugins/test.js\n');
   writeFixtureFile(root, 'plugins/test.js', 'class TestPlugin {}\n');
@@ -212,6 +220,13 @@ test('precache contains the performance benchmark runtime', () => {
   const precacheUrls = loadPrecacheUrls();
 
   assert.ok(precacheUrls.has('./features/effetune-benchmark.js'));
+});
+
+test('precache includes the measurement dependency closure used by backup adapters', () => {
+  const precacheUrls = loadPrecacheUrls();
+  for (const relativePath of backupRuntimeDependencies) {
+    assert.ok(precacheUrls.has(`./${relativePath}`), `${relativePath} should be precached`);
+  }
 });
 
 test('precache includes release WebAssembly DSP artifacts and omits debug builds', t => {

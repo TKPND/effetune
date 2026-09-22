@@ -10,7 +10,7 @@ La extensión procesa simultáneamente el audio de hasta cuatro pestañas, cada 
 
 ## Compatibilidad e instalación
 
-Úsala en un PC con Chrome 116 o posterior, o una versión compatible de Microsoft Edge basada en Chromium. Firefox, Safari, los navegadores móviles y la navegación privada no son compatibles. Cada pestaña utiliza una cadena estéreo en serie.
+Úsala en un PC con Chrome 116 o posterior, o una versión compatible de Microsoft Edge basada en Chromium. Firefox, Safari, los navegadores móviles y la navegación privada no son compatibles. Cada pestaña utiliza una cadena de efectos estéreo.
 
 Instala una extensión obtenida de una tienda desde esa tienda. Para un paquete local, extrae `effetune-extension-<version>.zip` en una carpeta que conservarás. Abre `chrome://extensions` en Chrome o `edge://extensions` en Edge, activa **Developer mode**, elige **Load unpacked** y selecciona esa carpeta. **Load unpacked** no instala el archivo ZIP; vuelve a cargar la extensión en esta página después de sustituir archivos.
 
@@ -32,6 +32,8 @@ Los preajustes y ajustes guardados permanecen en la extensión; no se sincroniza
 
 Para usar en Room EQ o Crosstalk Cancellation una medición de la aplicación web o de escritorio, expórtala allí como JSON. En el editor de la extensión, abre **Settings**, elige **Import measurement…** y selecciona ese archivo JSON. Incluye las respuestas al impulso al exportar si vas a usar Crosstalk Cancellation o la corrección de fase de Room EQ. Las mediciones importadas aparecen inmediatamente en la lista **Measurement** de Room EQ, permanecen en el almacenamiento del navegador de la extensión y no se sincronizan automáticamente. Para eliminar una copia importada, selecciónala en esa lista y elige **Delete** junto a ella. Tras la confirmación, se quitan todas las asignaciones de Room EQ y Crosstalk Cancellation que la utilizan antes de eliminar la copia.
 
+Para elegir qué datos guardados quieres trasladar, abre **Settings > Backup / Restore** en el editor. El mismo archivo `.effetune_backup` funciona en las aplicaciones web y de escritorio y puede incluir preajustes de la cadena, preajustes de efectos, respuestas al impulso y mediciones importadas. Las cadenas que usen un enrutamiento o efectos no compatibles con la extensión se conservan y pueden volver a incluirse en una copia de seguridad, aunque no se puedan aplicar en la extensión. No se incluyen las reglas de URL ni el ajuste Sample rate de la extensión.
+
 ## Preajustes por URL y frecuencia de muestreo
 
 En **Settings**, abre **URL rules…**, añade un patrón, elige un preajuste guardado y activa la regla. Los patrones usan `host/path`, como `example.com/music/*`; `*` coincide con cualquier texto. Se utiliza la primera regla activa que coincida. No se distinguen mayúsculas del nombre de host y se ignoran el protocolo, los parámetros de consulta y el fragmento. Reordena las reglas para ajustar su prioridad, o desactívalas o elimínalas.
@@ -44,6 +46,6 @@ Cada pestaña sigue iniciándose manualmente. El preajuste se elige al iniciar y
 
 La extensión solo captura audio de las pestañas donde inicias expresamente el procesamiento. Lee sus URL, también después de navegar, para elegir preajustes guardados. No lee el contenido de las páginas, no inserta scripts, no usa el micrófono, no graba audio ni lo envía a otros servicios.
 
-Admite cadenas estéreo normales. No están disponibles las cadenas multibus o con bifurcaciones, más de dos canales, realizar nuevas mediciones y controlar dispositivos, Music Library, conversión por lotes ni funciones exclusivas de escritorio que dependan de dispositivos o rutas de archivos.
+Las cadenas estéreo admiten Bus Routing con Main y Bus 1–4, incluidas las rutas de efectos en paralelo. En la extensión no están disponibles más de dos canales, realizar nuevas mediciones y controlar dispositivos, Music Library, la conversión de archivos por lotes ni las funciones exclusivas de escritorio que dependan de dispositivos o rutas de archivos.
 
 Parte del contenido protegido puede no estar disponible para captura; la extensión no elude la protección. Si no puede iniciar la captura, EffeTune detiene el procesamiento y la pestaña vuelve a su reproducción normal. Comprueba que la pestaña reproduce audio y elige **Start on this tab** de nuevo. Si aparece **Needs attention**, haz lo mismo. Si un preajuste no se aplica, la cadena actual se conserva; cambia el preajuste o proporciona los recursos necesarios antes de intentarlo de nuevo.

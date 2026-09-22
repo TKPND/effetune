@@ -51,6 +51,27 @@ function normalizeMeasurement(measurement) {
     return normalized;
 }
 
+export function validateMeasurementBackup(measurement, records) {
+    if (!measurement || typeof measurement.id !== 'string' || !measurement.id ||
+        typeof measurement.name !== 'string' || !Array.isArray(measurement.points) ||
+        !hasValidImportedScalars(measurement) || !Array.isArray(records)) {
+        throw new MeasurementExportError(new TypeError('Invalid measurement'));
+    }
+    const expected = new Set(measurement.points.flatMap(collectStoredIrKeyIds));
+    const seen = new Set();
+    for (const record of records) {
+        if (record?.measurementId !== measurement.id || !Number.isSafeInteger(record.pointId) ||
+            !expected.has(record.pointId) || seen.has(record.pointId) ||
+            !(record.data instanceof Float32Array) || !record.data.length ||
+            !record.data.every(Number.isFinite) || !Number.isFinite(record.sampleRate) || record.sampleRate <= 0 ||
+            !Number.isSafeInteger(record.onsetIndex) || record.onsetIndex < 0 || record.onsetIndex >= record.data.length) {
+            throw new MeasurementExportError(new TypeError('Invalid stored impulse response'));
+        }
+        seen.add(record.pointId);
+    }
+    if (seen.size !== expected.size) throw new MeasurementExportError(new Error('Missing stored impulse responses'));
+}
+
 function isIndexedDbUnavailableError(error) {
     return ['SecurityError', 'NotSupportedError', 'InvalidStateError'].includes(error?.name);
 }
@@ -212,6 +233,7 @@ export class DataStorage {
         this.SETTINGS_STORE = 'settings';
         this.IR_STORE = 'impulseResponses';
         this.db = null;
+        this.migrationPromise = null;
         this.measurements = [];
         this.loaded = false;
         this.irPersistenceAvailable = true;
@@ -274,10 +296,19 @@ export class DataStorage {
      * Open and initialize the IndexedDB database
      * @returns {Promise} Promise that resolves when DB is ready
      */
-    openDatabase() {
+    openDatabase({ migrate = true } = {}) {
+        const finishOpen = async db => {
+            if (migrate) {
+                this.migrationPromise ??= this.migrateFromLocalStorage().catch(error => {
+                    console.error('Migration error:', error);
+                });
+                await this.migrationPromise;
+            }
+            return db;
+        };
         return new Promise((resolve, reject) => {
             if (this.db) {
-                resolve(this.db);
+                resolve(finishOpen(this.db));
                 return;
             }
 
@@ -328,13 +359,7 @@ export class DataStorage {
             request.onsuccess = (event) => {
                 this.db = event.target.result;
                 
-                // Migrate data from localStorage if needed
-                this.migrateFromLocalStorage().then(() => {
-                    resolve(this.db);
-                }).catch(err => {
-                    console.error('Migration error:', err);
-                    resolve(this.db); // Still resolve even if migration fails
-                });
+                resolve(finishOpen(this.db));
             };
         });
     }
@@ -530,7 +555,9 @@ export class DataStorage {
             const stores = needsIrStore ? [this.STORE_NAME, this.IR_STORE] : [this.STORE_NAME];
             await new Promise((resolve, reject) => {
                 const transaction = db.transaction(stores, 'readwrite');
-                transaction.objectStore(this.STORE_NAME).put(storedMeasurement);
+                const measurementStore = transaction.objectStore(this.STORE_NAME);
+                if (options.appendOnly) measurementStore.add(storedMeasurement);
+                else measurementStore.put(storedMeasurement);
                 if (needsIrStore) {
                     const irStore = transaction.objectStore(this.IR_STORE);
                     for (const record of records) irStore.put(record);
@@ -545,11 +572,67 @@ export class DataStorage {
             return true;
         } catch (error) {
             console.error('Error saving measurement record:', error);
-            if (this.indexedDbUnavailable && options.requireImpulseResponses !== true) {
+            if (this.indexedDbUnavailable && options.requireImpulseResponses !== true && options.appendOnly !== true) {
                 return this.saveMetadataFallback(measurement);
             }
             return false;
         }
+    }
+
+    async readBackupSnapshot() {
+        let bundles;
+        try {
+            const db = await this.openDatabase({ migrate: false });
+            bundles = await new Promise((resolve, reject) => {
+                const transaction = db.transaction([this.STORE_NAME, this.IR_STORE], 'readonly');
+                const measurements = transaction.objectStore(this.STORE_NAME).getAll();
+                const responses = transaction.objectStore(this.IR_STORE).getAll();
+                transaction.oncomplete = () => {
+                    const byId = new Map();
+                    for (const record of responses.result) {
+                        if (!byId.has(record.measurementId)) byId.set(record.measurementId, []);
+                        byId.get(record.measurementId).push(record);
+                    }
+                    resolve(measurements.result.map(measurement => ({
+                        measurement: normalizeMeasurement(measurement),
+                        impulseResponses: byId.get(measurement.id) || []
+                    })));
+                };
+                transaction.onerror = event => reject(event.target.error);
+                transaction.onabort = event => reject(event.target.error || new Error('Measurement read was cancelled'));
+            });
+            if (globalThis.localStorage?.getItem('indexeddb_migration_complete') !== 'true') {
+                const serialized = globalThis.localStorage?.getItem(this.STORAGE_KEY);
+                const legacy = serialized ? JSON.parse(serialized) : [];
+                if (!Array.isArray(legacy)) throw new TypeError('Invalid legacy measurements');
+                const savedIds = new Set(bundles.map(bundle => bundle.measurement.id));
+                for (const measurement of legacy) {
+                    if (savedIds.has(measurement.id)) throw new Error('Legacy measurement migration is incomplete');
+                    bundles.push({ measurement, impulseResponses: [] });
+                }
+            }
+        } catch (error) {
+            if (!this.indexedDbUnavailable) throw new MeasurementLoadError(error);
+            const serialized = localStorage.getItem(this.STORAGE_KEY);
+            const measurements = serialized === null ? [] : JSON.parse(serialized);
+            if (!Array.isArray(measurements)) throw new MeasurementLoadError(new TypeError('Invalid measurements'));
+            bundles = measurements.map(measurement => ({ measurement, impulseResponses: [] }));
+        }
+        for (const bundle of bundles) validateMeasurementBackup(bundle.measurement, bundle.impulseResponses);
+        return bundles;
+    }
+
+    async appendBackupMeasurement(measurement, impulseResponses) {
+        validateMeasurementBackup(measurement, impulseResponses);
+        if (!await this.putMeasurement(measurement, impulseResponses, { appendOnly: true, requireImpulseResponses: true })) {
+            throw new MeasurementImportError('storage');
+        }
+        this.measurements.unshift(structuredClone(measurement));
+        this.dispatchEvent(this.EVENTS.MEASUREMENT_ADDED, { measurement });
+        if (!this.backupBridge) return { mirrorWarning: false };
+        clearTimeout(this.backupTimers.get(measurement.id));
+        this.backupTimers.delete(measurement.id);
+        return { mirrorWarning: !await this.runBackup(measurement.id) };
     }
 
     saveMetadataFallback(measurement) {

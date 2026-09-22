@@ -29,6 +29,8 @@ class AtomicDatabase {
                 if (!names.has(name)) throw new Error(`Store is outside transaction: ${name}`);
                 return {
                     put: value => operations.push({ type: 'put', store: name, value: clone(value) }),
+                    add: value => operations.push({ type: 'add', store: name, value: clone(value) }),
+                    getAll: () => ({ result: [...(name === 'measurements' ? this.measurements : this.impulseResponses).values()].map(clone) }),
                     delete: key => operations.push({ type: 'delete', store: name, key: clone(key) })
                 };
             }
@@ -51,10 +53,14 @@ class AtomicDatabase {
             const impulseResponses = new Map(this.impulseResponses);
             for (const operation of operations) {
                 const records = operation.store === 'measurements' ? measurements : impulseResponses;
-                if (operation.type === 'put') {
+                if (operation.type === 'put' || operation.type === 'add') {
                     const key = operation.store === 'measurements'
                         ? operation.value.id
                         : JSON.stringify([operation.value.measurementId, operation.value.pointId]);
+                    if (operation.type === 'add' && records.has(key)) {
+                        transaction.onabort?.({ target: { error: new Error('ConstraintError') } });
+                        return;
+                    }
                     records.set(key, clone(operation.value));
                 } else {
                     const key = operation.store === 'measurements'
@@ -98,6 +104,53 @@ function impulseRecord(measurementId, pointId, value = 1) {
         data: Float32Array.from([0, value, 0])
     };
 }
+
+test('backup reads metadata and all IR in one readonly transaction without cleanup or backfill', async () => {
+    const { storage, database } = createStorage();
+    const measurement = { id: 'saved', name: 'Room', points: [{ pointId: 1,
+        frequencyResponse: [[100, 0]], ir: { stored: true } }] };
+    database.measurements.set(measurement.id, measurement);
+    database.impulseResponses.set(JSON.stringify(['saved', 1]), impulseRecord('saved', 1));
+    const transaction = database.transaction.bind(database);
+    const transactions = [];
+    database.transaction = (stores, mode) => { transactions.push([stores, mode]); return transaction(stores, mode); };
+    storage.initialize = () => { throw new Error('Initialization must not run'); };
+    assert.equal((await storage.readBackupSnapshot())[0].impulseResponses[0].data[1], 1);
+    assert.deepEqual(transactions, [[['measurements', 'impulseResponses'], 'readonly']]);
+    assert.deepEqual(storage.measurements, []);
+    database.impulseResponses.clear();
+    await assert.rejects(storage.readBackupSnapshot(), MeasurementExportError);
+});
+
+test('backup database opening defers legacy migration until ordinary storage access', async () => {
+    const storage = new DataStorage({ backupBridge: null });
+    const database = new AtomicDatabase();
+    let migrated = 0;
+    storage.db = database;
+    storage.migrateFromLocalStorage = async () => { migrated++; };
+    assert.equal(await storage.openDatabase({ migrate: false }), database);
+    assert.equal(migrated, 0);
+    assert.equal(await storage.openDatabase(), database);
+    assert.equal(migrated, 1);
+    await storage.openDatabase();
+    assert.equal(migrated, 1);
+});
+
+test('backup append commits parent and IR once and preserves existing data on collision or failure', async () => {
+    const { storage, database } = createStorage();
+    const measurement = { id: 'new', name: 'Room', points: [{ pointId: 1,
+        frequencyResponse: [[100, 0]], ir: { stored: true } }] };
+    const records = [impulseRecord('new', 1)];
+    database.failNextIrTransaction = true;
+    await assert.rejects(storage.appendBackupMeasurement(measurement, records));
+    assert.equal(database.measurements.size, 0);
+    assert.equal(storage.measurements.length, 0);
+    await storage.appendBackupMeasurement(measurement, records);
+    assert.equal(database.impulseResponses.size, 1);
+    await assert.rejects(storage.appendBackupMeasurement({ ...measurement, name: 'Overwrite' }, records));
+    assert.equal(database.measurements.get('new').name, 'Room');
+    assert.equal(storage.measurements.length, 1);
+});
 
 test('measurement parent, IR additions, and point deletions commit atomically', async () => {
     const { storage, database } = createStorage();

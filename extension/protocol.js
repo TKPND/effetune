@@ -1,6 +1,6 @@
 export const CHANNEL_NAME = 'effetune-extension';
 export const CONTROL_COMMANDS = new Set(['getState', 'start', 'stop', 'setBypass', 'applyPreset', 'openEditor']);
-export const MODEL_COMMANDS = new Set(['getState', 'setPipeline', 'savePreset', 'importPreset', 'deletePreset', 'workletMessage', 'setTelemetry', 'irLibrary', 'setRules', 'setSampleRate']);
+export const MODEL_COMMANDS = new Set(['getState', 'setPipeline', 'savePreset', 'importPreset', 'readBackupPresets', 'appendBackupPreset', 'deletePreset', 'workletMessage', 'setTelemetry', 'irLibrary', 'setRules', 'setSampleRate']);
 const SESSION_COMMANDS = new Set(['stop', 'setBypass', 'applyPreset', 'setPipeline', 'savePreset', 'importPreset', 'workletMessage', 'setTelemetry']);
 
 export function isInternalSender(sender, paths, runtime = chrome.runtime) {

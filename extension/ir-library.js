@@ -17,6 +17,8 @@ export class ExtensionIrLibraryClient {
     get(irId) { return this.view.get(irId); }
     refresh() { return this.request('list'); }
     readAnalysis(irId) { return this.request('readAnalysis', { irId }); }
+    readBackupSnapshot() { return this.request('readBackupSnapshot'); }
+    appendBackupItem(data, name) { return this.request('appendBackupItem', { data, name }); }
 
     async request(method, args = {}) {
         const response = await this.client.request('irLibrary', { method, ...args });
@@ -88,6 +90,8 @@ export class ExtensionIrLibraryHost {
         let value;
         try {
             if (method === 'list') value = null;
+            else if (method === 'readBackupSnapshot') value = await this.service.store.readBackupSnapshot();
+            else if (method === 'appendBackupItem') value = await this.service.store.appendBackupItem(args.data, args.name);
             else if (method === 'importFiles') {
                 const files = args.files.map(({ file, name, relativePath }) => ({
                     name, size: file.size, webkitRelativePath: relativePath,

@@ -1,3 +1,7 @@
+import { createUserDataBackupAdapter } from '../user-data-backup/adapters.js';
+import { openUserDataBackupDialog } from '../user-data-backup/dialog.js';
+import { UserDataBackupService } from '../user-data-backup/service.js';
+
 export class StateManager {
     constructor(audioManager, showNotification = null) {
         this.audioManager = audioManager;
@@ -14,6 +18,7 @@ export class StateManager {
         this.audioConfigSettingsButton = document.getElementById('audioConfigSettingsButton');
         this.benchmarkSettingsButton = document.getElementById('benchmarkSettingsButton');
         this.measurementSettingsButton = document.getElementById('measurementSettingsButton');
+        this.backupRestoreSettingsButton = document.getElementById('backupRestoreSettingsButton');
         this.resetAudioSettingsButton = document.getElementById('resetAudioSettingsButton');
         this.shareButton = document.getElementById('shareButton');
         this.sampleRate = document.getElementById('sampleRate');
@@ -38,6 +43,7 @@ export class StateManager {
         this.configSettingsButton?.addEventListener('click', () => this.runMenuAction(() => this.openConfig()));
         this.benchmarkSettingsButton?.addEventListener('click', () => this.runMenuAction(() => this.openFeaturePage('features/effetune_bench.html')));
         this.measurementSettingsButton?.addEventListener('click', () => this.runMenuAction(() => this.openFeaturePage('features/measurement/measurement.html')));
+        this.backupRestoreSettingsButton?.addEventListener('click', () => this.runMenuAction(() => this.openBackupRestore()));
         this.resetAudioSettingsButton?.addEventListener('click', () => this.runMenuAction(() => this.resetAudio()));
 
         this.settingsMenuButton?.addEventListener('click', event => {
@@ -126,6 +132,9 @@ export class StateManager {
             this.measurementSettingsButton.textContent = this.translate('menu.settings.frequencyResponseMeasurement', 'Frequency Response Measurement');
             this.measurementSettingsButton.hidden = isElectron;
         }
+        if (this.backupRestoreSettingsButton) {
+            this.backupRestoreSettingsButton.textContent = this.translate('menu.settings.backupRestore', 'Backup / Restore');
+        }
         if (this.resetAudioSettingsButton) {
             this.resetAudioSettingsButton.textContent = this.translate('ui.resetButton', 'Reset Audio');
         }
@@ -202,6 +211,40 @@ export class StateManager {
         }
         window.uiManager?.flushPipelineStateToLocalStorage?.();
         window.location.href = path;
+    }
+
+    openBackupRestore() {
+        const uiManager = window.uiManager;
+        const adapter = createUserDataBackupAdapter({
+            presetManager: uiManager?.pipelineManager?.presetManager,
+            irLibrary: window.irLibraryService
+        });
+        const service = new UserDataBackupService({
+            adapter,
+            appVersion: document.getElementById('app-version')?.textContent || 'unknown'
+        });
+        return openUserDataBackupDialog({
+            service,
+            translate: (key, fallback, params) => {
+                const translated = uiManager?.t?.(key, params);
+                return translated && translated !== key ? translated : fallback.replace(
+                    /\{([^}]+)\}/g,
+                    (match, name) => Object.hasOwn(params || {}, name) ? String(params[name]) : match
+                );
+            },
+            onRestored: async () => {
+                uiManager?.pluginListManager?.refreshPresetsIfVisible?.();
+                await this.refreshMeasurementConsumers();
+                window.electronIntegration?.updateTrayMenu?.(true);
+            }
+        });
+    }
+
+    refreshMeasurementConsumers() {
+        const consumers = (this.audioManager?.pipeline || []).filter(plugin =>
+            (plugin?.name === 'Room EQ' || plugin?.name === 'Crosstalk Cancellation') &&
+            typeof plugin._refreshMeasurements === 'function');
+        return Promise.all(consumers.map(plugin => plugin._refreshMeasurements(false)));
     }
 
     async resetAudio() {

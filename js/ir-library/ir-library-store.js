@@ -1,4 +1,5 @@
 import { identifyPairedIr, identifySingleIr, sha256IrBytes } from './ir-library-id.js';
+import { irOriginalNamesForLabel } from './ir-library-name.js';
 import { decodeIrAnalysisSidecar, encodeIrAnalysisSidecar, summarizeIrAnalysis } from './ir-analysis-sidecar.js';
 import {
   IR_LIBRARY_INDEX_TOO_LARGE_CODE,
@@ -144,6 +145,7 @@ export class IrLibraryStore {
     this.recoveryRequired = false;
     this.entryRevisions = new Map();
     this.originalRevisions = new Map();
+    this.incompleteOriginals = false;
   }
 
   async open() {
@@ -205,7 +207,10 @@ export class IrLibraryStore {
         if (available.every(Boolean)) {
           entries[id] = entry;
           storageNames.forEach(name => claimedStorageNames.add(name));
-        } else changed = true;
+        } else {
+          changed = true;
+          this.incompleteOriginals = true;
+        }
       }
       this.index = { version: IR_LIBRARY_INDEX_VERSION, entries };
       for (const id of Object.keys(entries)) this.#touchOriginal(id);
@@ -247,6 +252,35 @@ export class IrLibraryStore {
   importPair(request) {
     this.#requestPersistence();
     return this.#serialize(() => this.#importPair(request));
+  }
+
+  readBackupSnapshot() {
+    return this.#serialize(async () => {
+      if (this.incompleteOriginals) throw new Error('Some stored impulse responses are missing.');
+      const items = [];
+      for (const entry of this.list()) {
+        const originals = [];
+        for (const original of entry.originals) {
+          const bytes = await this.readOriginal(entry.irId, original.role);
+          if (!bytes) throw new Error('A stored impulse response could not be read.');
+          originals.push({ role: original.role, fileName: original.fileName, bytes });
+          delete original.storageName;
+        }
+        const analysis = await this.readAnalysis(entry.irId);
+        delete entry.analysis.storageName;
+        items.push({ entry, originals, ...(analysis ? { analysis } : {}) });
+      }
+      return items;
+    });
+  }
+
+  appendBackupItem(data, name) {
+    const names = irOriginalNamesForLabel(data.originals, name);
+    const originals = data.originals.map((original, index) => ({ ...original, fileName: names[index] }));
+    const options = { metadata: data.entry, analysis: data.analysis || {} };
+    return data.entry.composition === 'pair'
+      ? this.importPair({ ...options, left: originals[0], right: originals[1] })
+      : this.importSingle({ ...options, ...originals[0] });
   }
 
   remove(irId, options = {}) {

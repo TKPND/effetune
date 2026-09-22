@@ -54,7 +54,8 @@ class PitchMeterPlugin extends PluginBase {
         this.generationFence = null;
         this.timeFence = null;
         this.lastObservedTimeSeconds = null;
-        this.currentLabel = '';
+        this.currentNote = '';
+        this.currentCents = '';
 
         this._dspTelemetryHub = null;
         this._dspTelemetryTapId = null;
@@ -245,7 +246,8 @@ class PitchMeterPlugin extends PluginBase {
         this.lastPitchMidi = 0;
         this.lastConfidence = 0;
         this.lastVoiced = false;
-        this.currentLabel = '';
+        this.currentNote = '';
+        this.currentCents = '';
     }
 
     writeHistory(snapshot) {
@@ -314,8 +316,9 @@ class PitchMeterPlugin extends PluginBase {
         }
         if (!this.writeHistory(snapshot)) return;
         this.lastObservedTimeSeconds = snapshot.timeSeconds;
-        this.currentLabel = snapshot.voiced
-            ? `${pitchMeterNoteName(snapshot.midi)} ${snapshot.cents >= 0 ? '+' : ''}${snapshot.cents.toFixed(1)} cent`
+        this.currentNote = snapshot.voiced ? pitchMeterNoteName(snapshot.midi) : '';
+        this.currentCents = snapshot.voiced
+            ? `${snapshot.cents >= 0 ? '+' : ''}${snapshot.cents.toFixed(1)} cent`
             : '';
     }
 
@@ -589,12 +592,31 @@ class PitchMeterPlugin extends PluginBase {
         }
         context.globalAlpha = 1;
         if (horizontal) context.restore();
-        if (this.currentLabel) {
-            context.fillStyle = palette.label;
-            context.font = `${12 * dpr}px Arial`;
+        if (this.currentNote) {
+            const padding = 8 * dpr;
+            const gap = 16 * dpr;
+            const fontSize = 48 * dpr;
+            context.font = `${fontSize}px Arial`;
+            const noteWidth = context.measureText('G#8').width;
+            context.font = `${fontSize}px monospace`;
+            const centsWidth = context.measureText('-50.0 cent').width;
+            const labelWidth = noteWidth + gap + centsWidth;
+            const availableWidth = this.canvas.width - (horizontal ? 0 : gutter) - 2 * padding;
+            if (availableWidth <= 0) return;
+            // Reserve fixed slots so note changes and cent digits never move the decimal point.
+            const scale = Math.min(1, availableWidth / labelWidth);
+            const noteColor = window.NoteSpectrogramPlugin?.noteColors[Math.round(this.lastPitchMidi) % 12];
+            context.fillStyle = noteColor
+                ? `rgb(${noteColor.join(', ')})` // theme-allow: Shared Note Spectrogram note colormap.
+                : palette.label;
+            context.font = `${fontSize * scale}px Arial`;
             context.textAlign = 'left';
             context.textBaseline = 'top';
-            context.fillText(this.currentLabel, 8 * dpr, 8 * dpr);
+            context.fillText(this.currentNote, padding, padding);
+            context.fillStyle = palette.label;
+            context.font = `${fontSize * scale}px monospace`;
+            context.textAlign = 'right';
+            context.fillText(this.currentCents, padding + labelWidth * scale, padding);
         }
     }
 

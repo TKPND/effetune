@@ -10,7 +10,7 @@ A extensão processa simultaneamente o áudio de até quatro abas, cada uma com 
 
 ## Compatibilidade e instalação
 
-Use-a em um PC com Chrome 116 ou posterior, ou uma versão compatível do Microsoft Edge baseada em Chromium. Firefox, Safari, navegadores móveis e navegação privada não são compatíveis. Cada aba usa uma cadeia estéreo serial.
+Use-a em um PC com Chrome 116 ou posterior, ou uma versão compatível do Microsoft Edge baseada em Chromium. Firefox, Safari, navegadores móveis e navegação privada não são compatíveis. Cada aba usa um pipeline de efeitos estéreo.
 
 Instale uma extensão recebida de uma loja na própria loja. Para um pacote local, extraia `effetune-extension-<version>.zip` em uma pasta que você manterá. Abra `chrome://extensions` no Chrome ou `edge://extensions` no Edge, ative **Developer mode**, escolha **Load unpacked** e selecione essa pasta. **Load unpacked** não instala o ZIP; recarregue a extensão nessa página depois de substituir arquivos.
 
@@ -32,6 +32,8 @@ As predefinições e configurações salvas ficam na extensão; elas não sincro
 
 Para usar no Room EQ ou no Crosstalk Cancellation uma medição do aplicativo web ou de desktop, exporte-a ali como JSON. No editor da extensão, abra **Settings**, escolha **Import measurement…** e selecione esse arquivo JSON. Inclua as respostas ao impulso na exportação ao usar o Crosstalk Cancellation ou a correção de fase do Room EQ. As medições importadas aparecem imediatamente na lista **Measurement** do Room EQ, permanecem no armazenamento do navegador da extensão e não são sincronizadas automaticamente. Para remover uma cópia importada, selecione-a nessa lista e escolha **Delete** ao lado dela. Após a confirmação, todas as atribuições do Room EQ e do Crosstalk Cancellation que a utilizam são limpas antes da exclusão da cópia.
 
+Para escolher quais dados salvos transferir, abra **Settings > Backup / Restore** no editor. O mesmo arquivo `.effetune_backup` funciona nos aplicativos web e de desktop e pode incluir predefinições da cadeia, predefinições de efeitos, respostas ao impulso e medições importadas. Uma cadeia que use roteamento ou efeitos incompatíveis com a extensão permanece salva e pode entrar em um novo backup, embora não possa ser aplicada na extensão. As regras de URL e a configuração Sample rate da extensão não são incluídas.
+
 ## Predefinições por URL e taxa de amostragem
 
 Em **Settings**, abra **URL rules…**, adicione um padrão, escolha uma predefinição salva e ative a regra. Os padrões usam `host/path`, como `example.com/music/*`; `*` corresponde a qualquer texto. A primeira regra ativa correspondente é usada. Maiúsculas e minúsculas do nome do host não são diferenciadas; protocolo, parâmetros de consulta e fragmento são ignorados. Reordene as regras para definir a prioridade, ou desative ou exclua as que não precisar.
@@ -44,6 +46,6 @@ Você ainda inicia cada aba manualmente. A predefinição é escolhida no iníci
 
 A extensão captura áudio apenas das abas onde você inicia explicitamente o processamento. Ela lê suas URLs, inclusive após a navegação, para escolher predefinições salvas. Não lê o conteúdo das páginas, não insere scripts, não usa o microfone, não grava áudio nem o envia para outros serviços.
 
-Ela aceita cadeias estéreo normais. Cadeias multibus ou ramificadas, mais de dois canais, realização de novas medições e controle de dispositivos, Music Library, conversão em lote e recursos exclusivos de desktop que dependem de dispositivos ou caminhos de arquivo não estão disponíveis.
+Os pipelines estéreo oferecem Bus Routing com Main e Bus 1–4, inclusive caminhos de efeitos paralelos. Mais de dois canais, realização de novas medições e controle de dispositivos, Music Library, conversão de arquivos em lote e recursos exclusivos de desktop que dependem de dispositivos ou caminhos de arquivo não estão disponíveis na extensão.
 
 Parte do conteúdo protegido pode não estar disponível para captura; a extensão não contorna a proteção. Se a captura não iniciar, o EffeTune interrompe o processamento e a aba volta à reprodução normal. Confirme que a aba está tocando áudio e escolha **Start on this tab** novamente. Se aparecer **Needs attention**, faça o mesmo. Se uma predefinição não for aplicada, a cadeia atual será preservada; troque a predefinição ou disponibilize os recursos necessários antes de tentar de novo.

@@ -1896,15 +1896,15 @@ class PluginBase {
     //
     // Each label element is expected to be absolutely positioned inside its
     // marker (the marker being its offsetParent). We try a set of candidate
-    // offsets around the marker in a preference order, score each by how much
-    // it overlaps already-placed labels / other markers and how far it had to
-    // be clamped to stay inside the box, then commit the best one.
+    // offsets around the marker, prefer the top when it fits without overlap,
+    // and otherwise score each by overlap with placed labels / markers and
+    // the clamping needed to stay inside the box, then commit the best one.
     //
     // @param {Object} opts
     // @param {Array}  opts.items  - [{ el, cx, cy }] label element + marker centre (px, container-local)
     // @param {number} opts.width  - graph container width (px)
     // @param {number} opts.height - graph container height (px)
-    // @param {string} [opts.axis='horizontal'] - preferred side: 'horizontal' (left/right) or 'vertical' (top/bottom)
+    // @param {string} [opts.axis='horizontal'] - fallback preference: 'horizontal' (left/right) or 'vertical' (top/bottom)
     // @param {number} [opts.radius=14] - marker radius (px), border box
     // @param {number} [opts.gap=6]     - gap between marker edge and label (px)
     layoutMarkerLabels({ items, width, height, axis = 'horizontal', radius = 14, gap = 6 } = {}) {
@@ -1941,7 +1941,7 @@ class PluginBase {
                 SE: { x: cx + dd,     y: cy + dd },
                 SW: { x: cx - dd - w, y: cy + dd }
             };
-            // Prefer pushing the label toward the OUTSIDE of the graph (away
+            // When the label cannot fit above, prefer the OUTSIDE of the graph (away
             // from the centre) so labels fan out to the edges instead of
             // bunching up in the middle. H/V are the outward directions for
             // this marker; Hi/Vi the inward fallbacks. Straight up/down (N/S)
@@ -1968,7 +1968,7 @@ class PluginBase {
                 const by = Math.max(0, Math.min(cand.y, height - h));
                 const moved = Math.abs(bx - cand.x) + Math.abs(by - cand.y);
                 const box = { x: bx, y: by, w, h };
-                // Keep the label as close to its marker as possible: distance
+                // Among fallback positions, keep the label close to its marker: distance
                 // from marker centre to label centre is the main cost, so a
                 // straight N/S/E/W spot (nearer) always beats a diagonal one
                 // (farther) when both are collision-free. The outward-order
@@ -1976,7 +1976,7 @@ class PluginBase {
                 // never enough to override a genuinely closer placement.
                 const dx = (bx + w / 2) - cx;
                 const dy = (by + h / 2) - cy;
-                let score = Math.sqrt(dx * dx + dy * dy) + moved + k * 1.5;
+                let overlapPenalty = 0;
                 // Penalise overlap with EVERY marker, including this label's own
                 // marker: near the top/bottom edge a straight up/down candidate
                 // gets clamped back inside and would otherwise land on top of its
@@ -1984,11 +1984,18 @@ class PluginBase {
                 // or the opposite (down/up) side instead.
                 for (let m = 0; m < markers.length; m++) {
                     const mk = markers[m];
-                    score += overlap(box, { x: mk.cx - mk.r, y: mk.cy - mk.r, w: mk.r * 2, h: mk.r * 2 }) * 4;
+                    overlapPenalty += overlap(box, { x: mk.cx - mk.r, y: mk.cy - mk.r, w: mk.r * 2, h: mk.r * 2 }) * 4;
                 }
                 for (let p = 0; p < placed.length; p++) {
-                    score += overlap(box, placed[p]) * 5;
+                    overlapPenalty += overlap(box, placed[p]) * 5;
                 }
+                // Keep unobstructed labels above their markers regardless of text
+                // width. Use the existing collision score only when that cannot fit.
+                if (order[k] === 'N' && moved === 0 && overlapPenalty === 0) {
+                    best = box;
+                    break;
+                }
+                const score = Math.sqrt(dx * dx + dy * dy) + moved + k * 1.5 + overlapPenalty;
                 if (score < bestScore) { bestScore = score; best = box; }
             }
             if (!best) continue;

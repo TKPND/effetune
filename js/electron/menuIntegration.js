@@ -80,6 +80,7 @@ export async function updateApplicationMenu(isElectron) {
       'file.processAudioFiles': { label: t('menu.file.processAudioFiles'), enabled: !dbtActive },
       'file.exportPreset': { label: t('menu.file.exportPreset'), enabled: !dbtActive },
       'file.importPreset': { label: t('menu.file.importPreset'), enabled: !dbtActive },
+      'file.backupRestore': { label: t('menu.settings.backupRestore'), enabled: !dbtActive },
       'file.doubleBlindTest': { label: t('menu.doubleBlindTest'), enabled: !dbtActive },
       'file.quit': { label: t('menu.file.quit'), enabled: true },
       'menu.edit': { label: t('menu.edit') },

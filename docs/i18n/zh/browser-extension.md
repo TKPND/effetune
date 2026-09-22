@@ -10,7 +10,7 @@ lang: zh
 
 ## 兼容性和安装
 
-请在装有 Chrome 116 或更高版本，或兼容的基于 Chromium 的 Microsoft Edge 的 PC 上使用。Firefox、Safari、移动浏览器和隐私浏览不受支持。 每个标签页都使用串行立体声效果链。
+请在装有 Chrome 116 或更高版本，或兼容的基于 Chromium 的 Microsoft Edge 的 PC 上使用。Firefox、Safari、移动浏览器和隐私浏览不受支持。 每个标签页都使用立体声效果链。
 
 从扩展商店获得的扩展请在该商店安装。对于本地包，请将 `effetune-extension-<version>.zip` 解压到会保留的文件夹。在 Chrome 中打开 `chrome://extensions`，在 Edge 中打开 `edge://extensions`，开启 **Developer mode**，选择 **Load unpacked**，再选择该文件夹。**Load unpacked** 不能直接安装 ZIP 文件；替换文件后，请在此页面重新加载扩展。
 
@@ -32,6 +32,8 @@ lang: zh
 
 要在 Room EQ 或 Crosstalk Cancellation 中使用网页应用或桌面应用的测量结果，请先在相应应用中将测量结果导出为 JSON。在扩展编辑器中打开 **Settings**，选择 **Import measurement…**，再选择该 JSON 文件。用于 Crosstalk Cancellation 或 Room EQ 相位校正时，导出时应包含脉冲响应。导入的测量结果会立即出现在 Room EQ 的 **Measurement** 列表中，保存在扩展的浏览器存储中，并且不会自动同步。如需删除导入的副本，请先在该列表中选中它，再选择列表旁的 **Delete**。确认后，会先清除所有使用该副本的 Room EQ 和 Crosstalk Cancellation 分配，再删除副本。
 
+如需选择已保存的数据并一次性转移，请在编辑器中打开 **Settings > Backup / Restore**。同一个 `.effetune_backup` 文件也可用于网页应用和桌面应用，能包含已保存的效果链预设、效果器预设、脉冲响应和导入的测量结果。使用扩展不支持的路由或效果的效果链仍会保存，也可以再次备份，但无法在扩展中应用。文件不包含 URL 规则和扩展的 Sample rate 设置。
+
 ## URL预设与采样率
 
 在 **Settings** 中打开 **URL rules…**，添加匹配模式，选择保存的预设并启用规则。模式使用 `host/path` 格式，例如 `example.com/music/*`，其中 `*` 可匹配任意文本。第一个匹配的启用规则生效。主机名不区分大小写，协议、查询字符串和片段不参与匹配。可调整规则顺序以改变优先级，也可停用或删除不需要的规则。
@@ -44,6 +46,6 @@ lang: zh
 
 扩展只捕获您明确开始处理的标签页音频，并读取这些标签页的URL，包括页面跳转后的URL，以选择保存的预设。它不会读取页面内容、插入脚本、使用麦克风、录音或向外发送音频。
 
-它支持普通立体声效果链。不提供多总线或分支效果链、两个以上声道、执行新测量与设备控制、Music Library、批量文件转换，以及依赖设备或文件路径的桌面专用功能。
+立体声效果链支持使用 Bus Routing 连接 Main 和 Bus 1–4，包括并行效果路径。扩展不支持两个以上声道、执行新测量与设备控制、Music Library、批量文件转换，以及依赖设备或文件路径的桌面专用功能。
 
 某些受保护内容可能无法捕获，扩展不会绕过内容保护。如果无法开始捕获，EffeTune 会停止处理，标签页会恢复正常播放。确认标签页正在播放音频后，再选择 **Start on this tab**。出现 **Needs attention** 时，也请这样操作。若无法应用预设，当前效果链会被保留；请更换预设或提供所需资源后重试。

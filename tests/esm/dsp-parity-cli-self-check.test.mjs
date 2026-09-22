@@ -380,7 +380,7 @@ test('MP3 packed conformance fixtures deterministically encode valid MPEG-1 and 
     assert.deepEqual(first.bytes, second.bytes, `${spec.id} regeneration changed`);
 
     const parsed = parseMp3ConformanceFixture(first.bytes);
-    assert.equal(parsed.length, 4);
+    assert.equal(parsed.length, 5);
     assert.deepEqual(new Set(parsed.map(frame => frame.paddingSlotBytes)), new Set([0, 1]));
     assert.ok(parsed.every(frame => frame.profile === spec.profile));
     assert.ok(parsed.every(frame => frame.channels === spec.channels));

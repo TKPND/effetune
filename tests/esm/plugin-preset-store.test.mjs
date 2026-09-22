@@ -112,8 +112,25 @@ test('Electron store reads and writes the userData file and reports bridge failu
 
   electronAPI.readFile = async () => ({ success: true, content: 'not json' });
   await withGlobals({ window: { electronAPI, electronIntegration: { isElectron: true } } }, async () => {
-    assert.equal(await new PluginPresetStore().save('Tone', 'Recovered', { gain: 5 }), true);
-    assert.deepEqual(writes.at(-1)[1], { Tone: { Recovered: { gain: 5 } } });
+    assert.equal(await new PluginPresetStore().save('Tone', 'Recovered', { gain: 5 }), false);
+    assert.equal(writes.length, 0);
+  });
+});
+
+test('backup reads reject malformed data and append refuses existing and reserved names', async () => {
+  await withWebStore({ effetune_plugin_presets: 'not json' }, async store => {
+    await assert.rejects(store.readBackupSnapshot());
+    await assert.rejects(store.appendPreset('Tone', 'Saved', {}));
+  });
+  await withWebStore({ effetune_plugin_presets: '{"Tone":{"Saved":{"gain":1}}}' }, async (store, storage) => {
+    await store.appendPreset('Tone', 'New', { gain: 2 });
+    await assert.rejects(store.appendPreset('Tone', 'Saved', { gain: 9 }));
+    for (const name of ['__proto__', 'constructor', 'prototype']) {
+      assert.throws(() => store.appendPreset('Tone', name, {}));
+    }
+    assert.deepEqual(JSON.parse(storage.values.get('effetune_plugin_presets')), {
+      Tone: { Saved: { gain: 1 }, New: { gain: 2 } }
+    });
   });
 });
 

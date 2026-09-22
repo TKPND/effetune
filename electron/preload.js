@@ -328,6 +328,9 @@ contextBridge.exposeInMainWorld(
     onConfigApp: (callback) => {
       return addNoArgIpcListener('config-app', callback);
     },
+    onBackupRestore: (callback) => {
+      return addNoArgIpcListener('backup-restore', callback);
+    },
     onShowAboutDialog: (callback) => {
       return addSingleArgIpcListener('show-about-dialog', callback);
     },

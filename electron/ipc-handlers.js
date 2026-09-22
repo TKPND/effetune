@@ -357,6 +357,10 @@ function createApplicationMenuTemplate(menuState = {}) {
           label: 'Import Preset...',
           click: () => sendToRenderer('import-preset')
         }),
+        item('file.backupRestore', {
+          label: 'Backup / Restore',
+          click: () => sendToRenderer('backup-restore')
+        }),
         { type: 'separator' },
         item('file.doubleBlindTest', {
           label: 'Double Blind Test',

@@ -92,6 +92,7 @@ function createCanvasContext() {
         translate(...args) { calls.push(['translate', depth, ...args]); },
         rotate(angle) { calls.push(['rotate', depth, angle]); },
         fillText(text, ...args) { calls.push(['fillText', depth, text, ...args]); },
+        measureText(text) { return { width: text.length * parseFloat(this._font) * 0.6 }; },
         set fillStyle(value) { this._fillStyle = value; },
         get fillStyle() { return this._fillStyle; },
         set strokeStyle(value) { this._strokeStyle = value; },
@@ -237,7 +238,8 @@ test('Pitch Meter validates telemetry and keeps only ordered frames from the new
     plugin.handleTelemetry(first);
     assert.equal(plugin.writeColumn, 1);
     assert.equal(plugin.pitchHistory[0], 69);
-    assert.equal(plugin.currentLabel, 'A4 +0.0 cent');
+    assert.equal(plugin.currentNote, 'A4');
+    assert.equal(plugin.currentCents, '+0.0 cent');
     plugin.handleTelemetry(first);
     assert.equal(plugin.writeColumn, 1, 'duplicate frame is ignored');
 
@@ -247,7 +249,8 @@ test('Pitch Meter validates telemetry and keeps only ordered frames from the new
     }));
     assert.equal(plugin.writeColumn, 6);
     assert.equal(plugin.voicedHistory[5], 0);
-    assert.equal(plugin.currentLabel, '');
+    assert.equal(plugin.currentNote, '');
+    assert.equal(plugin.currentCents, '');
 
     plugin.handleTelemetry(telemetryFrame({
         timeSeconds: 1.02, frameIndex: 0, generation: 4,
@@ -279,14 +282,16 @@ test('Pitch Meter subscribes to frame 26 and keeps horizontal labels upright', a
     const context = createCanvasContext();
     plugin.canvas = new FakeElement('canvas', context);
     plugin.canvasCtx = context;
-    plugin.currentLabel = 'A4 +0.0 cent';
+    plugin.handleTelemetry(telemetryFrame());
     plugin.storeHistoryColumn(0, 69, 0.8, true);
     plugin.storeHistoryColumn(1, 69.1, 0.9, true);
     plugin.writeColumn = 2;
     plugin.drawGraph();
     assert.ok(context.calls.some(call => call[0] === 'rotate' && call[2] === Math.PI / 2));
     assert.ok(context.calls.some(call => call[0] === 'fillText' &&
-        call[1] === 0 && call[2] === 'A4 +0.0 cent'));
+        call[1] === 0 && call[2] === 'A4'));
+    assert.ok(context.calls.some(call => call[0] === 'fillText' &&
+        call[1] === 0 && call[2] === '+0.0 cent'));
 
     context.calls.length = 0;
     plugin.setParameters({ ly: 'Vertical' });

@@ -154,6 +154,8 @@ export const MP3_SYNTHESIS_PCM_CONVENTION = Object.freeze({
   independentDecoderGain: 9
 });
 
+const MP3_PRODUCTION_DIAGNOSTIC_FRAME_COUNT = 5;
+
 export function defaultMp3ProductionDiagnosticPath(repoRoot) {
   const executable = process.platform === 'win32'
     ? 'effetune_dsp_mp3_codec_simulator_tests.exe'
@@ -197,7 +199,8 @@ function parseProductionDiagnosticBytes(bytes) {
   const profile = u32() === 1 ? 'mpeg1' : 'mpeg2';
   const channels = u32();
   const sampleRate = u32();
-  if (version !== 2 || frameCount !== 4 || (channels !== 1 && channels !== 2)) {
+  if (version !== 2 || frameCount !== MP3_PRODUCTION_DIAGNOSTIC_FRAME_COUNT ||
+      (channels !== 1 && channels !== 2)) {
     throw new Error('Unsupported MP3 production diagnostic layout');
   }
   const frames = [];
@@ -623,8 +626,11 @@ function writeProductionPart3(bytes, bitOffset, logical) {
 }
 
 export function generateMp3ConformanceFixture(spec, productionDiagnostic) {
-  if (!productionDiagnostic || productionDiagnostic.frames?.length !== 4) {
-    throw new Error('MP3 conformance packing requires four frames from the production native diagnostic');
+  if (!productionDiagnostic ||
+      productionDiagnostic.frames?.length !== MP3_PRODUCTION_DIAGNOSTIC_FRAME_COUNT) {
+    throw new Error(
+      `MP3 conformance packing requires ${MP3_PRODUCTION_DIAGNOSTIC_FRAME_COUNT} frames from the production native diagnostic`
+    );
   }
   if (spec.channels !== 1 && spec.channels !== 2) {
     throw new Error(`Unsupported MP3 fixture channel count ${spec.channels}`);

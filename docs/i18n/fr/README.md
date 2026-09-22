@@ -149,6 +149,14 @@ Chaque effet possède également son propre bouton Préréglages d’effet. Il o
 
 L’importation, l’exportation et le partage de fichiers `.effetune_preset` restent dédiés aux presets de chaîne d’effets complète.
 
+### Sauvegarder et restaurer les données enregistrées
+
+Ouvrez **Settings > Sauvegarde / Restauration** pour transférer les préréglages de chaîne et d’effets, les réponses impulsionnelles et les mesures entre l’application web, l’application de bureau et l’extension. Sélectionnez des éléments ou des catégories entières. Choisir un préréglage sélectionne aussi les données requises ; désélectionner ces données retire également les préréglages qui en dépendent.
+
+**Inclure les données de mesure** et **Inclure les réponses impulsionnelles** sont activés par défaut. Si vous désactivez une option, seules les références sont enregistrées et les mêmes données doivent déjà exister à destination. Les réponses sont restaurées dans **Impulse Response Library**. Les données identiques sont réutilisées et un élément différent portant le même nom reçoit un numéro. La chaîne active, le volume, le préréglage sélectionné, les périphériques et les règles d’URL ne sont pas modifiés.
+
+Un fichier `.effetune_backup` est limité à 256 Mo ; divisez une sélection plus grande en plusieurs sauvegardes. Si la restauration s’arrête, les éléments terminés restent disponibles et vous pouvez relancer le même fichier. Avant un partage, vérifiez la sélection : elle peut contenir des noms et commentaires, les fichiers de réponse impulsionnelle et des détails de mesure. La musique, Music Library, les préférences, périphériques, règles d’URL, identifiants et la chaîne active non enregistrée sont exclus. Les préréglages incompatibles avec l’extension restent enregistrés et sauvegardables, même s’ils ne peuvent pas y être appliqués.
+
 ### Utilisation de la fonction Section
 
 1. Utilisation de l'effet Section :

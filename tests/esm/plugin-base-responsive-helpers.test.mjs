@@ -143,6 +143,84 @@ function createPlugin() {
   return plugin;
 }
 
+function layoutMarkerLabels(points, { width = 1024, height = 480, axis = 'horizontal' } = {}) {
+  const items = points.map(({ cx, cy, w = 40, h = 26 }) => ({
+    cx,
+    cy,
+    el: {
+      offsetWidth: w,
+      offsetHeight: h,
+      offsetParent: { clientWidth: 24, clientHeight: 24 },
+      style: {}
+    }
+  }));
+  createPlugin().layoutMarkerLabels({ items, width, height, axis });
+  return items.map(({ el, cx, cy }) => ({
+    x: cx - 12 + parseFloat(el.style.left),
+    y: cy - 12 + parseFloat(el.style.top),
+    w: el.offsetWidth,
+    h: el.offsetHeight
+  }));
+}
+
+function assertLabelsFitWithoutOverlap(boxes, points, width, height) {
+  const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x &&
+    a.y < b.y + b.h && a.y + a.h > b.y;
+  for (const [index, box] of boxes.entries()) {
+    assert.ok(box.x >= 0 && box.x + box.w <= width);
+    assert.ok(box.y >= 0 && box.y + box.h <= height);
+    for (const { cx, cy } of points) {
+      assert.equal(overlaps(box, { x: cx - 14, y: cy - 14, w: 28, h: 28 }), false);
+    }
+    for (const previous of boxes.slice(0, index)) {
+      assert.equal(overlaps(box, previous), false);
+    }
+  }
+}
+
+test('graph labels stay above spaced markers regardless of text width or fallback axis', () => {
+  for (const axis of ['horizontal', 'vertical']) {
+    for (const cy of [100, 240, 380]) {
+      const points = [32, 32, 36, 36, 40].map((w, index) => ({
+        cx: 200 + index * 150, cy, w
+      }));
+      const boxes = layoutMarkerLabels(points, { axis });
+      for (const [index, box] of boxes.entries()) {
+        assert.equal(box.x + box.w / 2, points[index].cx);
+        assert.ok(box.y + box.h < cy - 14);
+      }
+    }
+  }
+});
+
+test('graph labels move away from neighboring labels and markers when needed', () => {
+  for (const axis of ['horizontal', 'vertical']) {
+    const points = [
+      { cx: 200, cy: 240, w: 70 },
+      { cx: 240, cy: 240, w: 70 },
+      { cx: 400, cy: 200 },
+      { cx: 400, cy: 240 }
+    ];
+    const boxes = layoutMarkerLabels(points, { axis });
+    assertLabelsFitWithoutOverlap(boxes, points, 1024, 480);
+  }
+});
+
+test('graph labels stay inside graph edges without overlapping their own markers', () => {
+  const width = 375;
+  const height = 176;
+  const points = [
+    { cx: 20, cy: 20 },
+    { cx: 355, cy: 20 },
+    { cx: 20, cy: 156 },
+    { cx: 355, cy: 156 }
+  ];
+  for (const axis of ['horizontal', 'vertical']) {
+    const boxes = layoutMarkerLabels(points, { width, height, axis });
+    assertLabelsFitWithoutOverlap(boxes, points, width, height);
+  }
+});
+
 test('channel selector exposes only available individual channels and stereo pairs through sixteen', () => {
   for (const channelCount of [2, 8, 9, 10, 16]) {
     const { PluginBase } = loadPluginBase({ window: {

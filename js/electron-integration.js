@@ -223,6 +223,10 @@ export class ElectronIntegration {
       this.showConfigDialog();
     });
 
+    window.electronAPI.onBackupRestore(() => {
+      window.uiManager?.stateManager?.openBackupRestore?.();
+    });
+
     window.electronAPI.onLoadUserPreset((name) => {
       if (window.pipelineManager && window.pipelineManager.presetManager) {
         if (window.app && window.app.audioManager && window.app.audioManager.workletNode) {

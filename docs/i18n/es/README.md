@@ -149,6 +149,14 @@ Cada efecto también tiene su propio botón Preajustes de efecto. Abre los preaj
 
 La importación, exportación y uso compartido de archivos `.effetune_preset` sigue correspondiendo a presets de la cadena de efectos completa.
 
+### Copia de seguridad y restauración de datos guardados
+
+Abre **Settings > Copia de seguridad / Restaurar** para transferir presets de cadena, presets de efectos, respuestas al impulso y mediciones entre la aplicación web, la de escritorio y la extensión. Puedes seleccionar elementos o categorías completas. Al elegir un preset también se seleccionan sus datos necesarios; si quitas esos datos, el preset dependiente también se desmarca.
+
+**Incluir datos de medición** e **Incluir datos de respuesta al impulso** están activados por defecto. Si desactivas una opción, solo se guardan referencias y en el destino deben existir los mismos datos. Las respuestas se restauran en **Impulse Response Library**. Los datos idénticos se reutilizan y los elementos distintos con el mismo nombre reciben un número. La cadena actual, el volumen, el preset seleccionado, los dispositivos y las reglas URL no cambian.
+
+Cada archivo `.effetune_backup` admite hasta 256 MB; divide una selección mayor en varios archivos. Si la restauración se detiene, se conservan los elementos terminados y puedes repetirla con seguridad. Antes de compartir, revisa la selección: puede contener nombres y comentarios, archivos de respuesta al impulso y detalles de medición. No incluye música, Music Library, preferencias, dispositivos, reglas URL, credenciales ni la cadena actual sin guardar. Los presets incompatibles con la extensión se conservan y pueden volver a copiarse, aunque no puedan aplicarse allí.
+
 ### Usando Secciones
 
 1. Uso del Efecto de Sección:

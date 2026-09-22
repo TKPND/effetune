@@ -63,7 +63,6 @@
 .editor-message.success { color: #b9f2d5; background: #174331; }
 .extension-editor .main-container { min-height: calc(100vh - 95px); }
 .extension-editor .plugin-list { top: 95px; height: calc(100vh - 95px); }
-.extension-editor .routing-button, .extension-editor .ai-button, .extension-editor .help-button { display: none; }
 .extension-editor #systemPresetsTab, .extension-editor #userPresetsTab { display: none; }
 .extension-editor .pipeline-item { min-width: 0; max-width: none; }
 .extension-editor .pipeline-item .plugin-ui { overflow-x: auto; }

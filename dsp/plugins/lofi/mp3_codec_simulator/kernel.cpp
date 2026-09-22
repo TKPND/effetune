@@ -4,8 +4,7 @@
 #include "effetune/dsp/halfband.h"
 #include "effetune/dsp/rational_resampler.h"
 #include "mp3_core.h"
-
-#include <pffft.h>
+#include "psycho_model.h"
 
 #include <algorithm>
 #include <array>
@@ -38,13 +37,14 @@ constexpr std::uint32_t kOutputCapacity = 32768u;
 constexpr std::uint32_t kMaximumHalfbandStages = 3u;
 constexpr std::uint32_t kMaximumRateFactor = 8u;
 constexpr std::uint32_t kProfileCount = 2u;
-constexpr std::uint32_t kMaximumScaleFactorBands = 22u;
+constexpr std::uint32_t kMaximumScaleFactorBands = mp3::kMaximumScaleFactors;
 constexpr double kInverseSqrtTwo = 0.70710678118654752440;
 static_assert(mp3::scaleFactorBits(Profile::Mpeg1, BlockType::Short, 36u) == 126u);
 
 enum class FrameWorkStage : std::uint8_t {
   Idle,
   DetectAttack,
+  SelectBlock,
   Psychoacoustics,
   AnalysisSlot,
   HybridAnalysis,
@@ -55,15 +55,8 @@ enum class FrameWorkStage : std::uint8_t {
   QuantizeBinaryHuffman,
   QuantizeFinalMap,
   QuantizeFinalHuffman,
-  QuantizeFinalSpacing,
   QuantizeInitialDistortion,
   QuantizePassSelect,
-  QuantizePassMap,
-  QuantizePassHuffman,
-  QuantizePassDistortion,
-  QuantizePassCommit,
-  QuantizeRestoreMap,
-  QuantizeRestoreHuffman,
   ScaleFactorSelection,
   BudgetCommit,
   DecodeSpectrum,
@@ -161,10 +154,7 @@ class MP3CodecSimulatorKernel final : public PluginKernel {
   EFFETUNE_PARAMS(generated::MP3CodecSimulatorPluginParams)
 
 public:
-  ~MP3CodecSimulatorKernel() override { destroyFftSetups(); }
-
   void prepare(const PrepareInfo &info) override {
-    destroyFftSetups();
     hostRate_ = static_cast<std::uint32_t>(info.sampleRate + 0.5F);
     maxChannels_ = info.maxChannels;
     maxFrames_ = info.maxFrames;
@@ -202,18 +192,13 @@ public:
     startWindow_.assign(36u, 0.0F);
     stopWindow_.assign(36u, 0.0F);
     shortWindow_.assign(12u, 0.0F);
-    fftInput_.assign(1024u, 0.0F);
-    fftOutput_.assign(1024u, 0.0F);
-    fftWork_.assign(1024u, 0.0F);
     logicalFrame_ = std::make_unique<LogicalFrame>();
     workFrame_ = std::make_unique<LogicalFrame>();
+    bestQuantized_ = std::make_unique<GranuleChannel>();
 
     buildTransformTables();
-    fftSetup1024_ = pffft_new_setup(1024, PFFFT_REAL);
-    fftSetup512_ = pffft_new_setup(512, PFFFT_REAL);
-    prepared_ = prepared_ && fftSetup1024_ != nullptr && fftSetup512_ != nullptr &&
-                logicalFrame_ != nullptr && workFrame_ != nullptr;
-
+    prepared_ =
+        prepared_ && logicalFrame_ != nullptr && workFrame_ != nullptr && bestQuantized_ != nullptr;
     // The reported latency includes the maximum measured codec topology delay and the
     // additional MPEG frame used by the deterministic continuation pipeline.
     latencySamples_ = maximumWetLatency(hostRate_);
@@ -305,7 +290,11 @@ public:
     dryPosition_ = 0u;
     wetDelayPosition_ = 0u;
     blockState_ = {BlockType::Long, BlockType::Long};
-    previousPsychoEnergy_ = {};
+    previousAttackEnergy_ = {};
+    previousAttackHighEnergy_ = {};
+    previousAttackSample_ = {};
+    pastAttacks_ = {};
+    previousShortEnergy_ = {};
     carriedAttack_ = {};
     attackCarryValid_ = false;
     workAttackFirstIndex_ = 0u;
@@ -419,17 +408,6 @@ private:
     return value > maximum ? maximum : value;
   }
 
-  void destroyFftSetups() noexcept {
-    if (fftSetup1024_ != nullptr) {
-      pffft_destroy_setup(fftSetup1024_);
-      fftSetup1024_ = nullptr;
-    }
-    if (fftSetup512_ != nullptr) {
-      pffft_destroy_setup(fftSetup512_);
-      fftSetup512_ = nullptr;
-    }
-  }
-
   void buildTransformTables() noexcept {
     for (std::uint32_t band = 0u; band < kSubbands; ++band) {
       for (std::uint32_t index = 0u; index < 64u; ++index) {
@@ -535,6 +513,16 @@ private:
     policy_ = mp3::profilePolicy(activeProfile_, activeBitrateIndex_);
     wetDelaySamples_ = wetAlignmentDelay(hostRate_, activeProfile_);
     activeResamplerIndex_ = profileIndex(activeProfile_);
+    for (std::uint32_t short_block = 0u; short_block < 2u; ++short_block) {
+      bandLayouts_[short_block] =
+          mp3::psychoBands(activeProfile_, short_block != 0u ? BlockType::Short : BlockType::Long);
+      for (std::uint32_t factor = 0u; factor < kMaximumScaleFactorBands; ++factor) {
+        const auto &band = bandLayouts_[short_block][factor];
+        for (std::uint32_t line = band.begin; line < band.end; ++line) {
+          lineFactors_[short_block][line] = static_cast<std::uint8_t>(factor);
+        }
+      }
+    }
   }
 
   // Both profile topologies are designed up front so the runtime Codec Rate switch
@@ -637,7 +625,11 @@ private:
     resetResamplers();
     analysisHistoryPosition_ = {0u, 0u};
     blockState_ = {BlockType::Long, BlockType::Long};
-    previousPsychoEnergy_ = {};
+    previousAttackEnergy_ = {};
+    previousAttackHighEnergy_ = {};
+    previousAttackSample_ = {};
+    pastAttacks_ = {};
+    previousShortEnergy_ = {};
     carriedAttack_ = {};
     attackCarryValid_ = false;
     workAttackFirstIndex_ = 0u;
@@ -702,32 +694,39 @@ private:
     }
   }
 
-  [[nodiscard]] bool detectAttack(const float *input, std::uint32_t channel) noexcept {
-    std::array<double, 6> energy{};
-    double highFrequency = 0.0;
-    float previous = input[0u];
-    for (std::uint32_t sample = 0u; sample < kGranuleSamples; ++sample) {
-      const double value = input[sample];
-      energy[sample / 96u] += value * value;
-      const double difference = static_cast<double>(input[sample] - previous);
-      highFrequency += difference * difference;
-      previous = input[sample];
+  [[nodiscard]] std::uint8_t detectAttack(const float *input, std::uint32_t channel) noexcept {
+    std::uint8_t attacks = 0u;
+    for (std::uint32_t window = 0u; window < 6u; ++window) {
+      double energy = 0.0;
+      double high = 0.0;
+      for (std::uint32_t sample = window * 96u; sample < (window + 1u) * 96u; ++sample) {
+        const double value = input[sample];
+        const double difference = value - previousAttackSample_[channel];
+        energy += value * value;
+        high += difference * difference;
+        previousAttackSample_[channel] = input[sample];
+      }
+      const double previous = previousAttackEnergy_[channel];
+      const double previous_high = previousAttackHighEnergy_[channel];
+      if (energy > 1.0e-9 && (energy > 4.0 * (previous > 1.0e-12 ? previous : 1.0e-12) ||
+                              high > 6.0 * (previous_high > 1.0e-12 ? previous_high : 1.0e-12))) {
+        attacks = static_cast<std::uint8_t>(attacks | (1u << window));
+      }
+      previousAttackEnergy_[channel] = energy;
+      previousAttackHighEnergy_[channel] = high;
     }
-    double largestRise = 0.0;
-    for (std::uint32_t window = 1u; window < energy.size(); ++window) {
-      const double reference = energy[window - 1u] > 1.0e-12 ? energy[window - 1u] : 1.0e-12;
-      const double rise = energy[window] / reference;
-      if (rise > largestRise) {
-        largestRise = rise;
+    return attacks;
+  }
+
+  [[nodiscard]] bool transformNeedsShort(std::uint32_t channel, int granule) const noexcept {
+    for (int input = -2; input <= static_cast<int>(workFrame_->granules); ++input) {
+      const auto attacks = input < 0 ? pastAttacks_[channel][static_cast<std::uint32_t>(input + 2)]
+                                     : workAttacks_[channel][static_cast<std::uint32_t>(input)];
+      if (mp3::attackOverlapsTransform(attacks, input, granule)) {
+        return true;
       }
     }
-    const double total =
-        energy[0u] + energy[1u] + energy[2u] + energy[3u] + energy[4u] + energy[5u];
-    const double old =
-        previousPsychoEnergy_[channel] > 1.0e-12 ? previousPsychoEnergy_[channel] : 1.0e-12;
-    previousPsychoEnergy_[channel] = total;
-    return total > 1.0e-9 &&
-           (largestRise >= 6.0 || total / old >= 4.0 || highFrequency > total * 1.75);
+    return false;
   }
 
   [[nodiscard]] BlockType selectBlockType(std::uint32_t channel, bool current_attack,
@@ -737,63 +736,20 @@ private:
     return next;
   }
 
-  void analyzePsychoacoustics(const float *input, std::uint32_t granule,
-                              std::uint32_t channel) noexcept {
-    const std::uint32_t fftSize = activeProfile_ == Profile::Mpeg1 ? 1024u : 512u;
-    for (std::uint32_t sample = 0u; sample < fftSize; ++sample) {
-      const double window = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi_v<double> *
-                                                 (static_cast<double>(sample) + 0.5) / fftSize);
-      fftInput_[sample] = sanitize(static_cast<float>(input[sample] * window));
+  void analyzePsychoacoustics(const float *input, std::uint32_t granule, std::uint32_t channel,
+                              bool mid_side = false) noexcept {
+    const BlockType block = workFrame_->data[granule][channel].blockType;
+    auto &previous = previousShortEnergy_[mid_side ? 1u : 0u][channel];
+    if (block != BlockType::Short) {
+      previous = {};
     }
-    PFFFT_Setup *setup = activeProfile_ == Profile::Mpeg1 ? fftSetup1024_ : fftSetup512_;
-    pffft_transform_ordered(setup, fftInput_.data(), fftOutput_.data(), fftWork_.data(),
-                            PFFFT_FORWARD);
-    const auto &boundaries =
-        activeProfile_ == Profile::Mpeg1 ? mp3::kMpeg1LongBoundaries : mp3::kMpeg2LongBoundaries;
-    std::array<double, kMaximumScaleFactorBands> energy{};
-    std::array<double, kMaximumScaleFactorBands> logEnergy{};
-    std::array<std::uint32_t, kMaximumScaleFactorBands> count{};
-    const std::uint32_t bins = fftSize / 2u;
-    for (std::uint32_t bin = 0u; bin <= bins; ++bin) {
-      const double real =
-          bin == 0u ? fftOutput_[0u] : (bin == bins ? fftOutput_[1u] : fftOutput_[2u * bin]);
-      const double imaginary = bin == 0u || bin == bins ? 0.0 : fftOutput_[2u * bin + 1u];
-      const double power = real * real + imaginary * imaginary + 1.0e-30;
-      const std::uint32_t line = bin == bins ? 575u : (bin * 576u) / bins;
-      std::uint32_t band = 0u;
-      while (band + 1u < boundaries.size() && line >= boundaries[band + 1u]) {
-        ++band;
-      }
-      if (band < kMaximumScaleFactorBands) {
-        energy[band] += power;
-        logEnergy[band] += std::log(power);
-        ++count[band];
-      }
-    }
-    float *thresholds =
+    const auto thresholds =
+        mp3::maskingThresholds(input, bandLayouts_[block == BlockType::Short ? 1u : 0u], block,
+                               policy_.initialNmrDb, &previous);
+    float *destination =
         maskThresholds_.data() + (granule * kChannels + channel) * kMaximumScaleFactorBands;
-    const double nmr = std::pow(10.0, policy_.initialNmrDb / 10.0);
-    for (std::uint32_t band = 0u; band < kMaximumScaleFactorBands; ++band) {
-      const double divisor = count[band] != 0u ? count[band] : 1u;
-      const double arithmetic = energy[band] / divisor + 1.0e-30;
-      const double geometric = std::exp(logEnergy[band] / divisor);
-      double flatness = geometric / arithmetic;
-      if (flatness < 0.0) {
-        flatness = 0.0;
-      }
-      if (flatness > 1.0) {
-        flatness = 1.0;
-      }
-      double spread = energy[band];
-      if (band != 0u) {
-        spread += energy[band - 1u] * 0.18;
-      }
-      if (band + 1u < kMaximumScaleFactorBands) {
-        spread += energy[band + 1u] * 0.08;
-      }
-      const double tonalFactor = 0.025 + flatness * 0.11;
-      const double ath = 1.0e-12 * (1.0 + static_cast<double>(band * band));
-      thresholds[band] = static_cast<float>((spread * tonalFactor + ath) * nmr);
+    for (std::uint32_t factor = 0u; factor < kMaximumScaleFactorBands; ++factor) {
+      destination[factor] = static_cast<float>(thresholds[factor]);
     }
   }
 
@@ -906,28 +862,7 @@ private:
   }
 
   [[nodiscard]] std::uint32_t scaleFactorIndex(BlockType block, std::uint32_t line) const noexcept {
-    if (block != BlockType::Short) {
-      const auto &boundaries =
-          activeProfile_ == Profile::Mpeg1 ? mp3::kMpeg1LongBoundaries : mp3::kMpeg2LongBoundaries;
-      std::uint32_t band = 0u;
-      while (band + 1u < boundaries.size() && line >= boundaries[band + 1u]) {
-        ++band;
-      }
-      return band;
-    }
-    const auto &boundaries =
-        activeProfile_ == Profile::Mpeg1 ? mp3::kMpeg1ShortBoundaries : mp3::kMpeg2ShortBoundaries;
-    std::uint32_t cursor = 0u;
-    for (std::uint32_t band = 0u; band + 1u < boundaries.size(); ++band) {
-      const std::uint32_t width = boundaries[band + 1u] - boundaries[band];
-      for (std::uint32_t window = 0u; window < 3u; ++window) {
-        if (line < cursor + width) {
-          return band * 3u + window;
-        }
-        cursor += width;
-      }
-    }
-    return 0u;
+    return lineFactors_[block == BlockType::Short ? 1u : 0u][line];
   }
 
   [[nodiscard]] bool codedLine(BlockType block, std::uint32_t line) const noexcept {
@@ -974,55 +909,51 @@ private:
     return logical.huffman.totalBits();
   }
 
-  std::uint32_t quantizeCandidate(const float *input, GranuleChannel &logical,
-                                  std::uint8_t global_gain) const noexcept {
-    return finishQuantizeCandidate(logical, quantizeCandidateValues(input, logical, global_gain));
-  }
+  struct NoiseScore final {
+    double worst = 0.0;
+    double excess = 0.0;
+    std::uint32_t over = 0u;
 
-  [[nodiscard]] double aggregateDistortion(const float *input,
-                                           const GranuleChannel &logical) const noexcept {
-    double distortion = 0.0;
-    for (std::uint32_t line = 0u; line < kGranuleSamples; ++line) {
-      const std::uint32_t factor = scaleFactorIndex(logical.blockType, line);
-      const float restored =
-          codedLine(logical.blockType, line) ? mp3::requantizeLine(logical, line, factor) : 0.0F;
-      const double error = static_cast<double>(input[line]) - restored;
-      distortion += error * error;
+    [[nodiscard]] bool betterThan(const NoiseScore &other) const noexcept {
+      return worst < other.worst ||
+             (worst == other.worst &&
+              (over < other.over || (over == other.over && excess < other.excess)));
     }
-    return distortion;
-  }
+  };
 
-  [[nodiscard]] std::uint32_t selectWorstScaleFactor(const float *input,
-                                                     const GranuleChannel &logical,
-                                                     std::uint32_t granule,
-                                                     std::uint32_t channel) const noexcept {
-    const mp3::ScaleFactorLayout layout = mp3::scaleFactorLayout(activeProfile_, logical.blockType);
-    std::uint32_t worstFactor = logical.scalefactorCount;
-    double worstRatio = 1.0;
-    for (std::uint32_t factor = 0u; factor < logical.scalefactorCount; ++factor) {
-      const std::uint32_t maximum = mp3::scaleFactorMaximum(layout, factor);
-      if (logical.scalefactors[factor] >= maximum) {
+  [[nodiscard]] NoiseScore measureQuantizationNoise(const float *input,
+                                                    const GranuleChannel &logical) noexcept {
+    std::array<double, kMaximumScaleFactorBands> errors{};
+    for (std::uint32_t line = 0u; line < kGranuleSamples; ++line) {
+      if (!codedLine(logical.blockType, line)) {
         continue;
       }
-      double distortion = 0.0;
-      for (std::uint32_t line = 0u; line < kGranuleSamples; ++line) {
-        if (scaleFactorIndex(logical.blockType, line) == factor) {
-          const float restored = mp3::requantizeLine(logical, line, factor);
-          const double error = static_cast<double>(input[line]) - restored;
-          distortion += error * error;
-        }
+      const std::uint32_t factor = scaleFactorIndex(logical.blockType, line);
+      const double error =
+          static_cast<double>(input[line]) - mp3::requantizeLine(logical, line, factor);
+      errors[factor] += error * error;
+    }
+    const float *thresholds = maskThresholds_.data() +
+                              (workGranule_ * kChannels + workChannel_) * kMaximumScaleFactorBands;
+    NoiseScore score{};
+    quantWorstFactor_ = logical.scalefactorCount;
+    double adjustable_worst = 1.0;
+    const auto layout = mp3::scaleFactorLayout(activeProfile_, logical.blockType);
+    for (std::uint32_t factor = 0u; factor < kMaximumScaleFactorBands; ++factor) {
+      const double ratio = errors[factor] / (thresholds[factor] + 1.0e-30);
+      quantNoiseRatios_[factor] = ratio;
+      if (ratio > 1.0) {
+        ++score.over;
+        score.excess += ratio - 1.0;
+        score.worst = ratio > score.worst ? ratio : score.worst;
       }
-      const std::uint32_t psychoBand = logical.blockType == BlockType::Short ? factor / 3u : factor;
-      const double target =
-          maskThresholds_[(granule * kChannels + channel) * kMaximumScaleFactorBands + psychoBand] +
-          1.0e-20;
-      const double ratio = distortion / target;
-      if (ratio > worstRatio) {
-        worstRatio = ratio;
-        worstFactor = factor;
+      if (factor < logical.scalefactorCount && ratio > adjustable_worst &&
+          logical.scalefactors[factor] < mp3::scaleFactorMaximum(layout, factor)) {
+        adjustable_worst = ratio;
+        quantWorstFactor_ = factor;
       }
     }
-    return worstFactor;
+    return score;
   }
 
   void initializeScaleFactors(const float *input, std::uint32_t granule, std::uint32_t channel,
@@ -1030,32 +961,20 @@ private:
     const mp3::ScaleFactorLayout layout = mp3::scaleFactorLayout(activeProfile_, logical.blockType);
     logical.scalefactorCount = layout.count;
     logical.scalefacCompress = layout.scalefacCompress;
-    const float *threshold =
+    const float *thresholds =
         maskThresholds_.data() + (granule * kChannels + channel) * kMaximumScaleFactorBands;
-    std::array<double, mp3::kMaximumScaleFactors> energies{};
-    std::array<std::uint32_t, mp3::kMaximumScaleFactors> counts{};
-    for (std::uint32_t line = 0u; line < kGranuleSamples; ++line) {
-      if (!codedLine(logical.blockType, line)) {
-        continue;
-      }
-      const std::uint32_t factor = scaleFactorIndex(logical.blockType, line);
-      energies[factor] += static_cast<double>(input[line]) * input[line];
-      ++counts[factor];
-    }
+    const auto &bands = bandLayouts_[logical.blockType == BlockType::Short ? 1u : 0u];
     for (std::uint32_t factor = 0u; factor < logical.scalefactorCount; ++factor) {
-      const std::uint32_t psychoBand = logical.blockType == BlockType::Short ? factor / 3u : factor;
-      const double target =
-          threshold[psychoBand] * (counts[factor] != 0u ? counts[factor] : 1u) + 1.0e-20;
-      double ratio = energies[factor] / target;
-      if (ratio < 1.0) {
-        ratio = 1.0;
+      double energy = 0.0;
+      for (std::uint32_t line = bands[factor].begin; line < bands[factor].end; ++line) {
+        if (codedLine(logical.blockType, line)) {
+          energy += static_cast<double>(input[line]) * input[line];
+        }
       }
-      std::uint32_t value = static_cast<std::uint32_t>(std::log2(ratio) * 0.25);
-      const std::uint32_t maximum = mp3::scaleFactorMaximum(layout, factor);
-      if (value > maximum) {
-        value = maximum;
-      }
-      logical.scalefactors[factor] = static_cast<std::uint8_t>(value);
+      const double ratio = energy / (thresholds[factor] + 1.0e-30);
+      const auto value = static_cast<std::uint32_t>(ratio > 1.0 ? std::log2(ratio) * 0.25 : 0.0);
+      const auto maximum = mp3::scaleFactorMaximum(layout, factor);
+      logical.scalefactors[factor] = static_cast<std::uint8_t>(value < maximum ? value : maximum);
     }
   }
 
@@ -1096,29 +1015,16 @@ private:
     constexpr std::uint32_t kLinesPerChunk = 288u;
     const float *left = spectrum_.data() + midSideGranule_ * kChannels * kGranuleSamples;
     const float *right = left + kGranuleSamples;
-    const std::uint32_t end = midSideLine_ + kLinesPerChunk < kGranuleSamples
-                                  ? midSideLine_ + kLinesPerChunk
-                                  : kGranuleSamples;
-    for (std::uint32_t line = midSideLine_; line < end; line += 2u) {
-      const auto estimate = [](float value) noexcept {
-        const double magnitude = value < 0.0F ? -value : value;
-        std::int32_t code = static_cast<std::int32_t>(std::pow(magnitude * 4.0, 0.75) + 0.5);
-        if (code > 8191) {
-          code = 8191;
-        }
-        return value < 0.0F ? -code : code;
-      };
-      const std::int32_t l0 = estimate(left[line]);
-      const std::int32_t l1 = estimate(left[line + 1u]);
-      const std::int32_t r0 = estimate(right[line]);
-      const std::int32_t r1 = estimate(right[line + 1u]);
-      midSideLrBits_ += mp3::huffmanPairLength(31u, l0, l1) + mp3::huffmanPairLength(31u, r0, r1);
-      const float m0 = static_cast<float>((left[line] + right[line]) * kInverseSqrtTwo);
-      const float m1 = static_cast<float>((left[line + 1u] + right[line + 1u]) * kInverseSqrtTwo);
-      const float s0 = static_cast<float>((left[line] - right[line]) * kInverseSqrtTwo);
-      const float s1 = static_cast<float>((left[line + 1u] - right[line + 1u]) * kInverseSqrtTwo);
-      midSideMsBits_ += mp3::huffmanPairLength(31u, estimate(m0), estimate(m1)) +
-                        mp3::huffmanPairLength(31u, estimate(s0), estimate(s1));
+    const std::uint32_t end = midSideLine_ + kLinesPerChunk;
+    const double normalization = frameSpectrumEnergy_ > 0.0 ? 1024.0 / frameSpectrumEnergy_ : 0.0;
+    for (std::uint32_t line = midSideLine_; line < end; ++line) {
+      const double l = left[line];
+      const double r = right[line];
+      const double mid = (l + r) * kInverseSqrtTwo;
+      const double side = (l - r) * kInverseSqrtTwo;
+      midSideLrCost_ += std::log1p(l * l * normalization) + std::log1p(r * r * normalization);
+      midSideMsCost_ +=
+          std::log1p(mid * mid * normalization) + std::log1p(side * side * normalization);
     }
     midSideLine_ = end;
     if (midSideLine_ == kGranuleSamples) {
@@ -1126,7 +1032,7 @@ private:
       ++midSideGranule_;
     }
     if (midSideGranule_ == frame.granules) {
-      workFrame_->midSide = midSideMsBits_ < midSideLrBits_;
+      workFrame_->midSide = midSideMsCost_ < midSideLrCost_;
       workGranule_ = 0u;
       frameWorkStage_ = FrameWorkStage::MidSideApply;
     }
@@ -1256,32 +1162,22 @@ private:
   [[nodiscard]] std::uint32_t frameWorkCost() const noexcept {
     switch (frameWorkStage_) {
     case FrameWorkStage::Psychoacoustics:
+    case FrameWorkStage::MidSideApply:
       return 4u;
     case FrameWorkStage::HybridAnalysis:
-      return 2u;
     case FrameWorkStage::HybridSynthesis:
     case FrameWorkStage::DecodeSpectrum:
     case FrameWorkStage::QuantizePassSelect:
       return 2u;
     case FrameWorkStage::MidSideDecision:
-      return 7u;
+      return 3u;
     case FrameWorkStage::QuantizeInitialize:
       return 4u;
     case FrameWorkStage::QuantizeBinaryMap:
-      return 5u;
-    case FrameWorkStage::QuantizeBinaryHuffman:
-      return 7u;
     case FrameWorkStage::QuantizeFinalMap:
-      return 7u;
-    case FrameWorkStage::QuantizePassMap:
-    case FrameWorkStage::QuantizeRestoreMap:
       return 4u;
+    case FrameWorkStage::QuantizeBinaryHuffman:
     case FrameWorkStage::QuantizeFinalHuffman:
-      return 8u;
-    case FrameWorkStage::QuantizeFinalSpacing:
-      return 7u;
-    case FrameWorkStage::QuantizePassHuffman:
-    case FrameWorkStage::QuantizeRestoreHuffman:
       return 5u;
     case FrameWorkStage::QuantizeInitialDistortion:
       return 3u;
@@ -1299,9 +1195,7 @@ private:
     frame.bitrateKbps = policy_.bitrateKbps;
     frame.budget =
         budgetState_.beginFrame(activeProfile_, policy_.bitrateKbps, channels, activeReservoir_);
-    workChannelBudget_ =
-        (frame.budget.physicalMainDataAreaBits + frame.budget.reservoirBeforeBits) /
-        (frame.granules * frame.channels);
+    frameSpectrumEnergy_ = 0.0;
     const std::uint32_t needed = policy_.frameSamples + kLookaheadSamples;
     for (std::uint32_t channel = 0u; channel < kChannels; ++channel) {
       const float *source = inputFifo_.data() + channel * kInputCapacity;
@@ -1314,14 +1208,20 @@ private:
     workChannels_ = channels;
     workGranule_ = 0u;
     workChannel_ = 0u;
+    if (attackCarryValid_) {
+      for (std::uint32_t channel = 0u; channel < kChannels; ++channel) {
+        if (frame.granules == 1u) {
+          pastAttacks_[channel][0u] = pastAttacks_[channel][1u];
+          pastAttacks_[channel][1u] = workAttacks_[channel][0u];
+        } else {
+          pastAttacks_[channel][0u] = workAttacks_[channel][0u];
+          pastAttacks_[channel][1u] = workAttacks_[channel][1u];
+        }
+      }
+    }
     workAttacks_ = {};
-    // The previous frame's lookahead granule holds exactly the samples that become
-    // this frame's granule 0 (startFrameWork copies [frameSamples, needed) back to the
-    // FIFO head). Re-running detectAttack() on it would compare the window against its
-    // own energy, so total/old collapses to 1 and the transient criterion is dead for
-    // granule 0 - the very granule nextBlockType() consumes as current_attack. Carry the
-    // verdict instead and evaluate each granule exactly once. Only the first frame after
-    // a reset or a profile change has no carry and must evaluate granule 0 itself.
+    // The lookahead samples become granule 0 of the next frame. Carry their
+    // onset masks so each 96-sample interval updates detector history once.
     if (attackCarryValid_) {
       for (std::uint32_t channel = 0u; channel < kChannels; ++channel) {
         workAttacks_[channel][0u] = carriedAttack_[channel];
@@ -1371,45 +1271,97 @@ private:
   void advanceAnalysisPosition() noexcept {
     ++workChannel_;
     if (workChannel_ < workChannels_) {
-      frameWorkStage_ = FrameWorkStage::Psychoacoustics;
+      frameWorkStage_ = FrameWorkStage::SelectBlock;
       return;
     }
     workChannel_ = 0u;
     ++workGranule_;
     if (workGranule_ < workFrame_->granules) {
-      frameWorkStage_ = FrameWorkStage::Psychoacoustics;
+      frameWorkStage_ = FrameWorkStage::SelectBlock;
       return;
     }
     workGranule_ = 0u;
     midSideGranule_ = 0u;
     midSideLine_ = 0u;
-    midSideLrBits_ = 0u;
-    midSideMsBits_ = 0u;
+    midSideLrCost_ = 0.0;
+    midSideMsCost_ = 0.0;
     midSideDecisionEligible_ =
         activeStereoMode_ == 0u && mp3::midSideBlockTypesCompatible(*workFrame_);
     frameWorkStage_ = FrameWorkStage::MidSideDecision;
   }
 
   void beginQuantization() noexcept {
-    workGranule_ = 0u;
-    workChannel_ = 0u;
+    const auto &frame = *workFrame_;
+    quantOrderCount_ = frame.granules * frame.channels;
+    workRemainingBudget_ = frame.budget.physicalMainDataAreaBits;
+    workRemainingPart2_ = 0u;
+    workRemainingDemand_ = 0.0;
+    for (std::uint32_t index = 0u; index < quantOrderCount_; ++index) {
+      const std::uint32_t granule = index / frame.channels;
+      const std::uint32_t channel = index % frame.channels;
+      const auto block = frame.data[granule][channel].blockType;
+      const float *input = spectrum_.data() + (granule * kChannels + channel) * kGranuleSamples;
+      const float *thresholds =
+          maskThresholds_.data() + (granule * kChannels + channel) * kMaximumScaleFactorBands;
+      const auto &bands = bandLayouts_[block == BlockType::Short ? 1u : 0u];
+      double demand = 0.0;
+      for (std::uint32_t factor = 0u; factor < kMaximumScaleFactorBands; ++factor) {
+        double energy = 0.0;
+        std::uint32_t count = 0u;
+        for (std::uint32_t line = bands[factor].begin; line < bands[factor].end; ++line) {
+          if (codedLine(block, line)) {
+            energy += static_cast<double>(input[line]) * input[line];
+            ++count;
+          }
+        }
+        demand += count * 0.5 * std::log2(1.0 + energy / (thresholds[factor] + 1.0e-30));
+      }
+      quantOrder_[index] = index;
+      quantDemand_[index] = demand;
+      workRemainingDemand_ += demand;
+      workRemainingPart2_ += mp3::scaleFactorBits(
+          activeProfile_, block, mp3::scaleFactorLayout(activeProfile_, block).count);
+    }
+    // Demand estimates distribute bits; they are not an absolute Huffman cost.
+    // Keep the physical frame available for quality, and use estimated excess
+    // demand to draw saved bits on complex frames instead of draining them on
+    // every simple frame.
+    const double extra = workRemainingDemand_ + workRemainingPart2_ - workRemainingBudget_;
+    if (extra > 0.0) {
+      workRemainingBudget_ += extra < frame.budget.reservoirBeforeBits
+                                  ? static_cast<std::uint32_t>(extra)
+                                  : frame.budget.reservoirBeforeBits;
+    }
+    // Small components run first, so their unused allocation is available to
+    // the demanding components of this very frame, including a silent Side.
+    std::sort(quantOrder_.begin(), quantOrder_.begin() + quantOrderCount_,
+              [this](std::uint32_t a, std::uint32_t b) {
+                return quantDemand_[a] < quantDemand_[b] ||
+                       (quantDemand_[a] == quantDemand_[b] && a < b);
+              });
+    quantOrderPosition_ = 0u;
+    selectQuantizationPosition();
+  }
+
+  void selectQuantizationPosition() noexcept {
+    const std::uint32_t index = quantOrder_[quantOrderPosition_];
+    workGranule_ = index / workFrame_->channels;
+    workChannel_ = index % workFrame_->channels;
     frameWorkStage_ = FrameWorkStage::QuantizeInitialize;
   }
 
   void advanceQuantizationPosition() noexcept {
-    ++workChannel_;
-    if (workChannel_ < workChannels_) {
-      frameWorkStage_ = FrameWorkStage::QuantizeInitialize;
-      return;
+    const auto &logical = workFrame_->data[workGranule_][workChannel_];
+    workRemainingBudget_ -= logical.part23Length();
+    workRemainingPart2_ -= logical.part2Length;
+    workRemainingDemand_ -= quantDemand_[quantOrder_[quantOrderPosition_]];
+    ++quantOrderPosition_;
+    if (quantOrderPosition_ < quantOrderCount_) {
+      selectQuantizationPosition();
+    } else {
+      workChannel_ = 0u;
+      frameWorkStage_ = FrameWorkStage::ScaleFactorSelection;
     }
-    workChannel_ = 0u;
-    ++workGranule_;
-    if (workGranule_ < workFrame_->granules) {
-      frameWorkStage_ = FrameWorkStage::QuantizeInitialize;
-      return;
-    }
-    workChannel_ = 0u;
-    frameWorkStage_ = FrameWorkStage::ScaleFactorSelection;
   }
 
   void advanceDecodePosition() noexcept {
@@ -1457,29 +1409,33 @@ private:
         if (workChannel_ == workChannels_) {
           workChannel_ = 0u;
           workGranule_ = 0u;
-          // Hand the lookahead verdict to the next frame's granule 0. Channels above
-          // workChannels_ stay false, which is what an unevaluated channel produced
-          // before as well. previousPsychoEnergy_ now holds the lookahead window's
-          // energy, i.e. the next frame's granule 0, so its granule 1 comparison is
-          // against the correct predecessor.
+          // Preserve both the lookahead verdict and its detector history.
           for (std::uint32_t channel = 0u; channel < kChannels; ++channel) {
             carriedAttack_[channel] = workAttacks_[channel][frame.granules];
           }
           attackCarryValid_ = true;
-          frameWorkStage_ = FrameWorkStage::Psychoacoustics;
+          frameWorkStage_ = FrameWorkStage::SelectBlock;
         }
       }
       break;
     }
-    case FrameWorkStage::Psychoacoustics: {
-      const float *input =
-          workInput_.data() + workChannel_ * kInputCapacity + workGranule_ * kGranuleSamples;
+    case FrameWorkStage::SelectBlock: {
       GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      logical.blockType = selectBlockType(workChannel_, workAttacks_[workChannel_][workGranule_],
-                                          workAttacks_[workChannel_][workGranule_ + 1u]);
-      analyzePsychoacoustics(input, workGranule_, workChannel_);
+      logical.blockType = selectBlockType(
+          workChannel_, transformNeedsShort(workChannel_, static_cast<int>(workGranule_)),
+          transformNeedsShort(workChannel_, static_cast<int>(workGranule_ + 1u)));
       workIndex_ = 0u;
       frameWorkStage_ = FrameWorkStage::AnalysisSlot;
+      break;
+    }
+    case FrameWorkStage::Psychoacoustics: {
+      const float *input =
+          spectrum_.data() + (workGranule_ * kChannels + workChannel_) * kGranuleSamples;
+      analyzePsychoacoustics(input, workGranule_, workChannel_);
+      for (std::uint32_t line = 0u; line < kGranuleSamples; ++line) {
+        frameSpectrumEnergy_ += static_cast<double>(input[line]) * input[line];
+      }
+      advanceAnalysisPosition();
       break;
     }
     case FrameWorkStage::AnalysisSlot: {
@@ -1498,7 +1454,7 @@ private:
       hybridAnalysis(workChannel_, logical.blockType,
                      spectrum_.data() +
                          (workGranule_ * kChannels + workChannel_) * kGranuleSamples);
-      advanceAnalysisPosition();
+      frameWorkStage_ = FrameWorkStage::Psychoacoustics;
       break;
     }
     case FrameWorkStage::MidSideDecision:
@@ -1512,8 +1468,32 @@ private:
       break;
     case FrameWorkStage::MidSideApply: {
       float *granuleSpectrum = spectrum_.data() + workGranule_ * kChannels * kGranuleSamples;
+      if (!frame.midSide) {
+        previousShortEnergy_[1u] = {};
+      }
       if (frame.midSide && workChannels_ == 2u) {
+        std::array<float, kMaximumScaleFactorBands> lrLimit{};
+        const std::uint32_t offset = workGranule_ * kChannels * kMaximumScaleFactorBands;
+        for (std::uint32_t factor = 0u; factor < kMaximumScaleFactorBands; ++factor) {
+          const float left = maskThresholds_[offset + factor];
+          const float right = maskThresholds_[offset + kMaximumScaleFactorBands + factor];
+          lrLimit[factor] = 0.5F * (left < right ? left : right);
+        }
         applyMidSide(granuleSpectrum, granuleSpectrum + kGranuleSamples);
+        for (std::uint32_t channel = 0u; channel < kChannels; ++channel) {
+          analyzePsychoacoustics(granuleSpectrum + channel * kGranuleSamples, workGranule_, channel,
+                                 true);
+          for (std::uint32_t factor = 0u; factor < kMaximumScaleFactorBands; ++factor) {
+            float &threshold =
+                maskThresholds_[offset + channel * kMaximumScaleFactorBands + factor];
+            // Each decoded L/R error is (eM +/- eS)/sqrt(2). Bounding both
+            // component errors by half the quieter L/R budget also covers
+            // fully correlated errors, not just their expected energies.
+            if (threshold > lrLimit[factor]) {
+              threshold = lrLimit[factor];
+            }
+          }
+        }
       }
       ++workGranule_;
       if (workGranule_ == frame.granules) {
@@ -1527,13 +1507,22 @@ private:
       GranuleChannel &logical = frame.data[workGranule_][workChannel_];
       initializeScaleFactors(input, workGranule_, workChannel_, logical);
       logical.part2Length = static_cast<std::uint16_t>(scaleFactorBits(logical));
-      quantSpectralBudget_ =
-          workChannelBudget_ > logical.part2Length ? workChannelBudget_ - logical.part2Length : 0u;
+      const std::uint32_t available = workRemainingBudget_ > workRemainingPart2_
+                                          ? workRemainingBudget_ - workRemainingPart2_
+                                          : 0u;
+      const double demand = quantDemand_[quantOrder_[quantOrderPosition_]];
+      const double share =
+          workRemainingDemand_ > 0.0 ? available * demand / workRemainingDemand_ : 0.0;
+      quantSpectralBudget_ = share < available ? static_cast<std::uint32_t>(share) : available;
+      const std::uint32_t maximum = 4095u - logical.part2Length;
+      if (quantSpectralBudget_ > maximum) {
+        quantSpectralBudget_ = maximum;
+      }
       quantLow_ = 0u;
       quantHigh_ = 255u;
       quantIteration_ = 0u;
+      quantSearchIterations_ = 8u;
       quantPass_ = 0u;
-      quantPassTerminated_ = false;
       frameWorkStage_ = FrameWorkStage::QuantizeBinaryMap;
       break;
     }
@@ -1548,15 +1537,15 @@ private:
     }
     case FrameWorkStage::QuantizeBinaryHuffman: {
       GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      quantCandidateBits_ = finishQuantizeCandidate(logical, quantRangeExceeded_);
-      if (quantCandidateBits_ > quantSpectralBudget_) {
+      const auto bits = finishQuantizeCandidate(logical, quantRangeExceeded_);
+      if (bits > quantSpectralBudget_) {
         quantLow_ = static_cast<std::uint32_t>(quantCandidateGain_) + 1u;
       } else {
         quantHigh_ = quantCandidateGain_;
       }
       ++quantIteration_;
-      frameWorkStage_ = quantIteration_ < 8u ? FrameWorkStage::QuantizeBinaryMap
-                                             : FrameWorkStage::QuantizeFinalMap;
+      frameWorkStage_ = quantIteration_ < quantSearchIterations_ ? FrameWorkStage::QuantizeBinaryMap
+                                                                 : FrameWorkStage::QuantizeFinalMap;
       break;
     }
     case FrameWorkStage::QuantizeFinalMap: {
@@ -1571,107 +1560,47 @@ private:
     case FrameWorkStage::QuantizeFinalHuffman: {
       GranuleChannel &logical = frame.data[workGranule_][workChannel_];
       quantHuffmanBits_ = finishQuantizeCandidate(logical, quantRangeExceeded_);
-      frameWorkStage_ = FrameWorkStage::QuantizeFinalSpacing;
-      break;
-    }
-    case FrameWorkStage::QuantizeFinalSpacing: {
       frameWorkStage_ = FrameWorkStage::QuantizeInitialDistortion;
       break;
     }
     case FrameWorkStage::QuantizeInitialDistortion: {
       const float *input =
           spectrum_.data() + (workGranule_ * kChannels + workChannel_) * kGranuleSamples;
-      const GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      quantAggregateError_ = aggregateDistortion(input, logical);
+      GranuleChannel &logical = frame.data[workGranule_][workChannel_];
+      const auto score = measureQuantizationNoise(input, logical);
+      if (quantHuffmanBits_ <= quantSpectralBudget_ &&
+          (quantPass_ == 0u || score.betterThan(quantBestScore_))) {
+        logical.part3Length = static_cast<std::uint16_t>(quantHuffmanBits_);
+        *bestQuantized_ = logical;
+        quantBestScore_ = score;
+      }
       frameWorkStage_ = FrameWorkStage::QuantizePassSelect;
       break;
     }
     case FrameWorkStage::QuantizePassSelect: {
-      const float *input =
-          spectrum_.data() + (workGranule_ * kChannels + workChannel_) * kGranuleSamples;
-      const GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      quantPassActive_ = false;
-      if (!quantPassTerminated_) {
-        quantWorstFactor_ = selectWorstScaleFactor(input, logical, workGranule_, workChannel_);
-        quantPassActive_ = quantWorstFactor_ < logical.scalefactorCount;
-        if (!quantPassActive_) {
-          quantPassTerminated_ = true;
-        }
-      }
-      frameWorkStage_ = FrameWorkStage::QuantizePassMap;
-      break;
-    }
-    case FrameWorkStage::QuantizePassMap: {
-      const float *input =
-          spectrum_.data() + (workGranule_ * kChannels + workChannel_) * kGranuleSamples;
       GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      if (quantPassActive_) {
-        const mp3::ScaleFactorLayout layout =
-            mp3::scaleFactorLayout(activeProfile_, logical.blockType);
-        logical.scalefactors[quantWorstFactor_] = mp3::incrementScaleFactor(
-            layout, quantWorstFactor_, logical.scalefactors[quantWorstFactor_]);
-        quantRangeExceeded_ = quantizeCandidateValues(input, logical, logical.globalGain);
-      }
-      frameWorkStage_ = FrameWorkStage::QuantizePassHuffman;
-      break;
-    }
-    case FrameWorkStage::QuantizePassHuffman: {
-      GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      if (quantPassActive_) {
-        quantCandidateBits_ = finishQuantizeCandidate(logical, quantRangeExceeded_);
-      }
-      frameWorkStage_ = FrameWorkStage::QuantizePassDistortion;
-      break;
-    }
-    case FrameWorkStage::QuantizePassDistortion: {
-      const float *input =
-          spectrum_.data() + (workGranule_ * kChannels + workChannel_) * kGranuleSamples;
-      const GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      if (quantPassActive_) {
-        quantCandidateError_ = aggregateDistortion(input, logical);
-      }
-      frameWorkStage_ = FrameWorkStage::QuantizePassCommit;
-      break;
-    }
-    case FrameWorkStage::QuantizePassCommit: {
-      GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      quantNeedsRestore_ = false;
-      if (quantPassActive_) {
-        if (quantCandidateBits_ > quantSpectralBudget_ ||
-            quantCandidateError_ > quantAggregateError_) {
-          --logical.scalefactors[quantWorstFactor_];
-          quantNeedsRestore_ = true;
-          quantPassTerminated_ = true;
-        } else {
-          quantHuffmanBits_ = quantCandidateBits_;
-          quantAggregateError_ = quantCandidateError_;
-        }
-      }
-      frameWorkStage_ = FrameWorkStage::QuantizeRestoreMap;
-      break;
-    }
-    case FrameWorkStage::QuantizeRestoreMap: {
-      const float *input =
-          spectrum_.data() + (workGranule_ * kChannels + workChannel_) * kGranuleSamples;
-      GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      if (quantNeedsRestore_) {
-        quantRangeExceeded_ = quantizeCandidateValues(input, logical, logical.globalGain);
-      }
-      frameWorkStage_ = FrameWorkStage::QuantizeRestoreHuffman;
-      break;
-    }
-    case FrameWorkStage::QuantizeRestoreHuffman: {
-      GranuleChannel &logical = frame.data[workGranule_][workChannel_];
-      if (quantNeedsRestore_) {
-        quantHuffmanBits_ = finishQuantizeCandidate(logical, quantRangeExceeded_);
-      }
-      ++quantPass_;
-      if (quantPass_ < 4u) {
-        frameWorkStage_ = FrameWorkStage::QuantizePassSelect;
-      } else {
-        logical.part3Length = static_cast<std::uint16_t>(quantHuffmanBits_);
+      if (quantPass_ == 3u || quantWorstFactor_ >= logical.scalefactorCount ||
+          logical.globalGain > 253u) {
+        logical = *bestQuantized_;
         advanceQuantizationPosition();
+        break;
       }
+      const auto layout = mp3::scaleFactorLayout(activeProfile_, logical.blockType);
+      const double worst = quantNoiseRatios_[quantWorstFactor_];
+      for (std::uint32_t factor = 0u; factor < logical.scalefactorCount; ++factor) {
+        if (quantNoiseRatios_[factor] > 1.0 && quantNoiseRatios_[factor] >= worst * 0.5) {
+          logical.scalefactors[factor] =
+              mp3::incrementScaleFactor(layout, factor, logical.scalefactors[factor]);
+        }
+      }
+      // Raising scalefactors by one is exactly undone by globalGain + 2.
+      // Search that bounded interval, then compare the resulting masked noise.
+      quantLow_ = logical.globalGain;
+      quantHigh_ = static_cast<std::uint32_t>(logical.globalGain) + 2u;
+      quantIteration_ = 0u;
+      quantSearchIterations_ = 2u;
+      ++quantPass_;
+      frameWorkStage_ = FrameWorkStage::QuantizeBinaryMap;
       break;
     }
     case FrameWorkStage::ScaleFactorSelection:
@@ -1833,20 +1762,26 @@ private:
   std::vector<float> startWindow_;
   std::vector<float> stopWindow_;
   std::vector<float> shortWindow_;
-  std::vector<float> fftInput_;
-  std::vector<float> fftOutput_;
-  std::vector<float> fftWork_;
   std::unique_ptr<LogicalFrame> logicalFrame_;
   std::unique_ptr<LogicalFrame> workFrame_;
-  PFFFT_Setup *fftSetup1024_ = nullptr;
-  PFFFT_Setup *fftSetup512_ = nullptr;
+  std::unique_ptr<GranuleChannel> bestQuantized_;
+  std::array<mp3::PsychoBands, 2> bandLayouts_{};
+  std::array<std::array<std::uint8_t, kGranuleSamples>, 2> lineFactors_{};
+  std::array<std::array<std::array<double, 13>, kChannels>, 2> previousShortEnergy_{};
+  std::array<double, kMaximumScaleFactorBands> quantNoiseRatios_{};
+  NoiseScore quantBestScore_{};
+  std::array<std::uint32_t, 4> quantOrder_{};
+  std::array<double, 4> quantDemand_{};
   mp3::FrameBudgetState budgetState_{};
   ProfilePolicy policy_{};
   std::array<std::uint32_t, kChannels> analysisHistoryPosition_{};
   std::array<BlockType, kChannels> blockState_{};
-  std::array<std::array<bool, 3>, kChannels> workAttacks_{};
-  std::array<bool, kChannels> carriedAttack_{};
-  std::array<double, kChannels> previousPsychoEnergy_{};
+  std::array<std::array<std::uint8_t, 3>, kChannels> workAttacks_{};
+  std::array<std::array<std::uint8_t, 2>, kChannels> pastAttacks_{};
+  std::array<std::uint8_t, kChannels> carriedAttack_{};
+  std::array<double, kChannels> previousAttackEnergy_{};
+  std::array<double, kChannels> previousAttackHighEnergy_{};
+  std::array<float, kChannels> previousAttackSample_{};
   std::array<bool, kProfileCount> rationalActive_{};
   std::uint32_t baseRate_ = 0u;
   std::uint32_t halfbandStages_ = 0u;
@@ -1873,7 +1808,13 @@ private:
   std::uint32_t workAttackFirstIndex_ = 0u;
   std::uint32_t midSideGranule_ = 0u;
   std::uint32_t midSideLine_ = 0u;
-  std::uint32_t workChannelBudget_ = 0u;
+  std::uint32_t workRemainingBudget_ = 0u;
+  std::uint32_t workRemainingPart2_ = 0u;
+  std::uint32_t quantOrderCount_ = 0u;
+  std::uint32_t quantOrderPosition_ = 0u;
+  std::uint32_t quantSearchIterations_ = 0u;
+  double workRemainingDemand_ = 0.0;
+  double frameSpectrumEnergy_ = 0.0;
   std::uint32_t frameWorkCredit_ = 0u;
   std::uint32_t quantSpectralBudget_ = 0u;
   std::uint32_t quantLow_ = 0u;
@@ -1881,16 +1822,13 @@ private:
   std::uint32_t quantIteration_ = 0u;
   std::uint32_t quantPass_ = 0u;
   std::uint32_t quantWorstFactor_ = 0u;
-  std::uint32_t quantCandidateBits_ = 0u;
   std::uint32_t quantHuffmanBits_ = 0u;
-  std::uint64_t midSideLrBits_ = 0u;
-  std::uint64_t midSideMsBits_ = 0u;
+  double midSideLrCost_ = 0.0;
+  double midSideMsCost_ = 0.0;
   std::size_t dryPosition_ = 0u;
   std::size_t wetDelayPosition_ = 0u;
   double gainSmoothed_ = 1.0;
   double mixSmoothed_ = 1.0;
-  double quantAggregateError_ = 0.0;
-  double quantCandidateError_ = 0.0;
   Profile activeProfile_ = Profile::Mpeg1;
   Profile requestedProfile_ = Profile::Mpeg1;
   std::uint32_t activeBitrateIndex_ = 2u;
@@ -1910,9 +1848,6 @@ private:
   bool attackCarryValid_ = false;
   bool midSideDecisionEligible_ = false;
   bool quantRangeExceeded_ = false;
-  bool quantPassActive_ = false;
-  bool quantPassTerminated_ = false;
-  bool quantNeedsRestore_ = false;
   std::uint32_t resamplerBuildCount_ = 0u;
   std::uint64_t completedFrames_ = 0u;
   std::uint64_t schedulerDeadlineMisses_ = 0u;

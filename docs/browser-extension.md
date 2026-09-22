@@ -12,7 +12,7 @@ For details about local data handling and optional external links, read the [Bro
 
 ## Compatibility
 
-Use the extension on a PC with Chrome 116 or later, or a compatible Chromium-based version of Microsoft Edge. Firefox, Safari, mobile browsers, and private browsing are not supported. Each tab uses a stereo, serial effect chain.
+Use the extension on a PC with Chrome 116 or later, or a compatible Chromium-based version of Microsoft Edge. Firefox, Safari, mobile browsers, and private browsing are not supported. Each tab uses a stereo effect pipeline.
 
 ## Install a local package
 
@@ -46,6 +46,8 @@ If a preset needs an unsupported routing, effect, or unavailable external asset,
 
 To use a measurement from the web app or desktop app with Room EQ or Crosstalk Cancellation, export the measurement as JSON there. In the extension editor, open **Settings**, choose **Import measurement…**, then select that JSON file. Include impulse responses in the export when using Crosstalk Cancellation or Room EQ's phase correction. Imported measurements appear immediately in Room EQ's **Measurement** list, remain in the extension's browser storage, and do not sync automatically. To remove an imported copy, select it in that list and choose **Delete** beside the list. After confirmation, every Room EQ and Crosstalk Cancellation assignment that uses it is cleared before the copy is deleted.
 
+For a selective transfer of all supported saved data, open **Settings > Backup / Restore** in the editor. The same `.effetune_backup` file works with the web and desktop apps and can contain saved pipeline presets, effect presets, impulse responses, and imported measurements. A pipeline that uses unsupported extension routing or effects remains saved and can be backed up again, although it cannot be applied in the extension. URL rules and the extension sample-rate setting are not included.
+
 ## URL presets and sample rate
 
 In **Settings**, open **URL rules…** to add a pattern, choose a saved preset, and enable the rule. Patterns use `host/path`, such as `example.com/music/*`; `*` matches any text. The first enabled matching rule wins. Host names ignore letter case; the scheme, query string, and fragment are ignored. Reorder rules to set their priority, or disable or delete rules you no longer need.
@@ -58,7 +60,7 @@ You still start each tab yourself. Its preset is selected automatically at start
 
 The extension captures audio only from tabs where you explicitly start processing. It reads those tabs' URLs to choose saved presets, including after navigation. It does not read page content, insert scripts into websites, require microphone access, record audio, or send your audio elsewhere.
 
-It supports ordinary stereo pipelines. Multibus or branching pipelines, more than two channels, taking measurements and device control, Music Library, batch file conversion, and desktop-only device or file-path features are unavailable in the extension.
+Stereo pipelines support Bus Routing with Main and Bus 1–4, including parallel effect paths. More than two channels, taking measurements and device control, Music Library, batch file conversion, and desktop-only device or file-path features are unavailable in the extension.
 
 Some protected content may not be available for capture. The extension does not bypass content protection. If capture cannot start, the tab returns to normal playback. Make sure the tab is playing audio, then choose **Start on this tab** again.
 

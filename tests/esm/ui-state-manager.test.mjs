@@ -76,6 +76,7 @@ function createDocument(calls) {
     'audioConfigSettingsButton',
     'benchmarkSettingsButton',
     'measurementSettingsButton',
+    'backupRestoreSettingsButton',
     'resetAudioSettingsButton'
   ]) {
     elements.set(id, createElement(id, calls));
@@ -149,6 +150,7 @@ test('constructor labels the settings gear as Settings in Electron environments 
     assert.equal(manager.settingsMenu.hidden, false);
     assert.equal(manager.benchmarkSettingsButton.hidden, true);
     assert.equal(manager.measurementSettingsButton.hidden, true);
+    assert.equal(manager.backupRestoreSettingsButton.textContent, 'Backup / Restore');
     assert.equal(documentRef.elements.get('settingsMenuButton').listeners.has('click'), true);
     assert.ok(calls.some(call => call[0] === 'addEventListener' && call[1] === 'settingsMenuButton'));
   });
@@ -569,5 +571,25 @@ test('initAudio tolerates missing audio contexts', async () => {
     const manager = new StateManager({});
     manager.initAudio();
     assert.equal(documentRef.elements.get('sampleRate').textContent, '');
+  });
+});
+
+test('restored measurements refresh open consumers without redesigning the pipeline', async () => {
+  await withStateGlobals({}, async () => {
+    const refreshes = [];
+    const pipelineUpdates = [];
+    const manager = new StateManager({
+      pipeline: [
+        { name: 'Room EQ', _refreshMeasurements: schedule => refreshes.push(['Room EQ', schedule]) },
+        { name: 'Crosstalk Cancellation', _refreshMeasurements: schedule => refreshes.push(['Crosstalk Cancellation', schedule]) },
+        { name: 'Volume', _refreshMeasurements: schedule => refreshes.push(['Volume', schedule]) }
+      ],
+      updatePipeline: () => pipelineUpdates.push('update')
+    });
+
+    await manager.refreshMeasurementConsumers();
+
+    assert.deepEqual(refreshes, [['Room EQ', false], ['Crosstalk Cancellation', false]]);
+    assert.deepEqual(pipelineUpdates, []);
   });
 });

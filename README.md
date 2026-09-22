@@ -157,6 +157,14 @@ Each effect also has its own **Effect Presets** button. It opens system presets 
 
 The existing `.effetune_preset` file import, export, and sharing features continue to use complete effect-chain presets.
 
+### Backing Up and Restoring Saved Data
+
+Open **Settings > Backup / Restore** to move saved pipeline presets, effect presets, impulse responses, and measurements between the web app, desktop app, and browser extension. Select individual items or whole categories. A preset automatically selects data that it needs; clearing required data also clears presets that depend on it.
+
+**Include measurement data** and **Include impulse response data** are on by default, making the backup self-contained. Turning either option off stores references for that type. Those references can be restored only when matching data already exists at the destination. Restored impulse responses go into EffeTune's managed **Impulse Response Library**. Existing identical data is reused, while a different item with the same name is added under a numbered name. The current pipeline, volume, selected preset, device settings, and extension URL rules are not changed.
+
+Each `.effetune_backup` file is limited to 256 MB; create separate backups when your selection is larger. If restoration stops, completed items remain available and you can safely restore the same file again. Before sharing a backup, review the selection: it can contain preset names and comments, original impulse-response files, and measurement details. Music files, Music Library data, application preferences, device choices, URL rules, credentials, and an unsaved current pipeline are not included. A preset can be carried to the browser extension even when its routing or effects cannot be applied there; it remains saved and can be backed up again.
+
 ### Using Section Features
 
 1. Section Effect Usage:

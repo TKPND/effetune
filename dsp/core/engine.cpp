@@ -201,6 +201,7 @@ void Engine::resetGraphOwnedInstances() noexcept {
 
 void Engine::resetPipelineDelayHistory() noexcept {
   for (std::uint32_t index = 0u; index < pipeline_count_; ++index) {
+    pipeline_compensation_[index].inputDelayLine.reset();
     pipeline_compensation_[index].delayLine.reset();
   }
   pipeline_output_delay_line_.reset();
@@ -769,15 +770,27 @@ et_status Engine::preparePipelineLatencyUpdate(const PipelineLatencySnapshot &sn
       }
 
       const std::uint32_t plugin_latency = snapshot.latencies_[index];
+      std::uint32_t input_latency = 0u;
+      for (std::uint32_t offset = 0u; offset < routed_channels; ++offset) {
+        const std::uint32_t channel = first_channel + offset;
+        if (has_content[node.inputBus][channel] &&
+            latency[node.inputBus][channel] > input_latency) {
+          input_latency = latency[node.inputBus][channel];
+        }
+      }
+      if (plugin_latency > std::numeric_limits<std::uint32_t>::max() - input_latency) {
+        return ET_ERR_DESC;
+      }
+      const std::uint32_t incoming_latency = input_latency + plugin_latency;
+      std::uint32_t maximum_input_delay = 0u;
       std::uint32_t maximum_merge_delay = 0u;
       for (std::uint32_t offset = 0u; offset < routed_channels; ++offset) {
         const std::uint32_t channel = first_channel + offset;
-        const std::uint32_t input_latency =
+        const std::uint32_t channel_latency =
             has_content[node.inputBus][channel] ? latency[node.inputBus][channel] : 0u;
-        if (plugin_latency > std::numeric_limits<std::uint32_t>::max() - input_latency) {
-          return ET_ERR_DESC;
-        }
-        const std::uint32_t incoming_latency = input_latency + plugin_latency;
+        const std::uint32_t input_delay = input_latency - channel_latency;
+        compensation[index].inputDelays[channel] = input_delay;
+        maximum_input_delay = input_delay > maximum_input_delay ? input_delay : maximum_input_delay;
 
         if (node.inputBus == node.outputBus) {
           latency[node.outputBus][channel] = incoming_latency;
@@ -804,6 +817,10 @@ et_status Engine::preparePipelineLatencyUpdate(const PipelineLatencySnapshot &sn
           compensation[index].delays[channel] = delay;
           maximum_merge_delay = delay > maximum_merge_delay ? delay : maximum_merge_delay;
         }
+      }
+      if (maximum_input_delay != 0u && !compensation[index].inputDelayLine.prepareNothrow(
+                                           snapshot.channel_count_, maximum_input_delay)) {
+        return ET_ERR_OOM;
       }
       if (maximum_merge_delay != 0u && !compensation[index].delayLine.prepareNothrow(
                                            snapshot.channel_count_, maximum_merge_delay)) {
@@ -869,6 +886,8 @@ et_status Engine::applyPipelineLatencyUpdate(PipelineLatencyUpdate &update) noex
   for (std::uint32_t index = 0u; index < pipeline_count_; ++index) {
     auto &active = pipeline_compensation_[index];
     auto &next = update.compensation_[index];
+    adopt_storage(active.inputDelayLine, next.inputDelayLine);
+    active.inputDelays = next.inputDelays;
     adopt_storage(active.delayLine, next.delayLine);
     for (std::uint32_t channel = 0u; channel < max_channels_; ++channel) {
       if (active.targets[channel] != next.targets[channel]) {
@@ -925,14 +944,28 @@ et_status Engine::processPipeline(std::uint32_t channel_count, std::uint32_t fra
     }
     float *input = arena_.bus(node.inputBus);
     float *output = arena_.bus(node.outputBus);
-    PipelineMergeCompensation &compensation = pipeline_compensation_[index];
+    PipelineCompensation &compensation = pipeline_compensation_[index];
+    // Align only this processor's input. A send must leave its source bus intact.
+    const auto align_input = [&](float *audio, std::uint32_t first_channel,
+                                 std::uint32_t routed_channels) noexcept {
+      if (compensation.inputDelayLine.channelCount() == 0u) {
+        return;
+      }
+      for (std::uint32_t offset = 0u; offset < routed_channels; ++offset) {
+        const std::uint32_t channel = first_channel + offset;
+        applyDelay(compensation.inputDelayLine, channel, compensation.inputDelays[channel],
+                   audio + offset * frame_count, frame_count);
+      }
+    };
 
     if (node.channelSpec == -2) {
       if (node.inputBus == node.outputBus) {
+        align_input(input, 0u, channel_count);
         processSlot(*slot, input, channel_count, frame_count, time_seconds);
       } else {
         float *routed = arena_.scratch(0);
         std::memcpy(routed, input, total_floats * sizeof(float));
+        align_input(routed, 0u, channel_count);
         processSlot(*slot, routed, channel_count, frame_count, time_seconds);
         for (std::uint32_t channel = 0u; channel < channel_count; ++channel) {
           float *target = output + channel * frame_count;
@@ -971,6 +1004,7 @@ et_status Engine::processPipeline(std::uint32_t channel_count, std::uint32_t fra
       std::memcpy(routed + channel * frame_count, input + (first_channel + channel) * frame_count,
                   frame_count * sizeof(float));
     }
+    align_input(routed, first_channel, routed_channels);
     processSlot(*slot, routed, routed_channels, frame_count, time_seconds);
     for (std::uint32_t channel = 0; channel < routed_channels; ++channel) {
       float *target = output + (first_channel + channel) * frame_count;

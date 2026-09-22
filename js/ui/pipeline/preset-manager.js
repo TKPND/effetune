@@ -64,7 +64,7 @@ export class PresetManager {
      * Get presets from storage
      * @returns {Object} The presets object
      */
-    async getPresets() {
+    async getPresets({ strict = false } = {}) {
         if (this.externalHost) {
             return this.externalHost.getPresets();
         }
@@ -92,17 +92,38 @@ export class PresetManager {
                 }
                 
                 // Parse presets
-                return JSON.parse(result.content);
+                const presets = JSON.parse(result.content);
+                if (!presets || typeof presets !== 'object' || Array.isArray(presets)) throw new TypeError('Invalid preset data');
+                return presets;
             } else {
                 // Fallback to localStorage for web version
                 const presetsJson = localStorage.getItem('effetune_presets');
-                return presetsJson ? JSON.parse(presetsJson) : {};
+                const presets = presetsJson ? JSON.parse(presetsJson) : {};
+                if (!presets || typeof presets !== 'object' || Array.isArray(presets)) throw new TypeError('Invalid preset data');
+                return presets;
             }
         } catch (error) {
             console.error('Failed to load presets:', error);
+            if (strict) throw error;
             // Failed to load presets, return empty object
             return {};
         }
+    }
+
+    readBackupSnapshot() {
+        return this.enqueuePresetMutation(() => this.getPresets({ strict: true }));
+    }
+
+    appendPreset(name, preset) {
+        if (typeof name !== 'string' || !name.trim() || ['__proto__', 'constructor', 'prototype'].includes(name)) {
+            throw new TypeError('Invalid preset name');
+        }
+        return this.enqueuePresetMutation(async () => {
+            const presets = await this.getPresets({ strict: true });
+            if (Object.hasOwn(presets, name)) throw new Error('Preset already exists');
+            setOwn(presets, name, structuredClone(preset));
+            await this.persistPresets(presets);
+        });
     }
 
     getPresetPluginStates(preset) {
