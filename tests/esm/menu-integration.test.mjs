@@ -165,6 +165,9 @@ test('updateApplicationMenu sends enabled menu labels and updates the tray', asy
   assert.equal(menuState['edit.undo'].enabled, true);
   assert.equal(menuState['view.effectPipeline'].label, 'label:menu.view.effectPipeline');
   assert.equal(menuState['view.musicLibrary'].label, 'label:menu.view.musicLibrary');
+  assert.deepEqual(menuState['view.visualizer'], {
+    label: 'label:menu.view.visualizer', enabled: true
+  });
   assert.equal(menuState['view.pipelineAnalyzer'].label, 'label:menu.view.pipelineAnalyzer');
   assert.equal(menuState['view.pipelineAnalyzer'].checked, false);
   assert.equal(menuState['toggle-fullscreen'].label, 'label:menu.view.toggleFullscreen');
@@ -196,6 +199,7 @@ test('updateApplicationMenu disables gated items while double blind test is acti
   assert.equal(menuState['file.doubleBlindTest'].enabled, false);
   assert.equal(menuState['edit.undo'].enabled, false);
   assert.equal(menuState['edit.selectAll'].enabled, false);
+  assert.equal(menuState['view.visualizer'].enabled, false);
 });
 
 test('updateApplicationMenu treats missing double blind state as inactive', async () => {

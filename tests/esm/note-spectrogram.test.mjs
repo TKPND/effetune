@@ -145,6 +145,8 @@ async function loadPlugin({ telemetryHub = null, audioContext = null, nullCanvas
         : name === 'accent' ? 'rgba(26, 115, 232, 1)'
         : name === 'graph-trace' ? `rgba(${trace.join(', ')}, 1)` : originalGet(name);
     vm.runInContext(source, context, { filename: pluginPath });
+    const spectrogramSource = await fs.readFile(path.join(repoRoot, 'plugins', 'analyzer', 'spectrogram.js'), 'utf8');
+    vm.runInContext(spectrogramSource, context, { filename: 'spectrogram.js' });
     const Plugin = window.NoteSpectrogramPlugin;
     assert.equal(typeof Plugin, 'function');
     return new Plugin();
@@ -301,6 +303,8 @@ test('Note Spectrogram exposes display and note range controls', async () => {
     assert.equal(plugin.vl, false);
     assert.deepEqual([timeSpan.minimum, timeSpan.maximum, timeSpan.step, timeSpan.value], [1, 10, 1, 8]);
     color.setter('Normal');
+    assert.equal(plugin.cl, 'Normal');
+    color.setter('Heatmap');
     assert.equal(plugin.cl, 'Normal');
     color.setter('Rainbow');
     assert.equal(plugin.cl, 'Rainbow');

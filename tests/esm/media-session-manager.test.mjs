@@ -78,6 +78,7 @@ function createHarness(options = {}) {
     isPlaying: false,
     isPaused: true,
     isStopped: false,
+    playbackSpeed: 1,
     ...options.state
   }, calls);
   const mediaSession = createMediaSession(calls);
@@ -167,6 +168,18 @@ test('MediaSessionManager syncs player metadata, playback state, and position', 
 
   stateManager.update({ currentTrackDuration: 0 });
   assert.deepEqual(mediaSession.positionStates.at(-1), {});
+});
+
+test('MediaSessionManager publishes playback speed changes immediately', () => {
+  const { mediaSession, stateManager } = createHarness();
+
+  stateManager.update({ playbackSpeed: 1.5 });
+
+  assert.deepEqual(mediaSession.positionStates.at(-1), {
+    duration: 120,
+    playbackRate: 1.5,
+    position: 12
+  });
 });
 
 test('MediaSessionManager clears and skips position state while stopped', () => {

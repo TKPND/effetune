@@ -1,0 +1,1251 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import { chromium } from 'playwright';
+
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
+const css = read('../../effetune-theme.css') +
+    read('../../effetune.css').replace('@import url("effetune-theme.css");', '') +
+    read('../../effetune-mobile.css') + read('../../effetune-library.css');
+const viewSource = read('../../js/visualizer/visualizer-view.js')
+    .replace(/^import .*;\r?\n/gm, '')
+    .replace('export class VisualizerView', 'window.VisualizerView = class VisualizerView');
+const modelSource = read('../../js/visualizer/visualizer-model.js')
+    .replace(/^export /gm, '') + '\nwindow.createDefaultLayout = createDefaultLayout; window.createItem = createItem; window.normalizeEffect = normalizeEffect;';
+const palettePresetsSource = read('../../js/visualizer/visualizer-palette-presets.js').replace(/^export /gm, '');
+const editorSource = read('../../js/visualizer/visualizer-editor.js')
+    .replace(/^import .*;\r?\n/gm, '')
+    .replace('export class VisualizerEditor', 'window.VisualizerEditor = class VisualizerEditor');
+
+test('Rainbow stop sliders retain fractional positions and update the saved and drawn gradient', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await page.setContent('<!doctype html><body><div id="visualizerView"><div class="visualizer-stage"></div></div></body>');
+        await page.addScriptTag({ content: modelSource + '\nwindow.normalizeLayout = normalizeLayout;' });
+        await page.addScriptTag({ content: read('../../js/visualizer/visualizer-effects.js').replace(/\bexport /g, '') +
+            '\nwindow.paletteGradient = paletteGradient;' });
+        await page.addScriptTag({ content: palettePresetsSource });
+        await page.addScriptTag({ content: editorSource });
+        const result = await page.evaluate(() => {
+            Object.defineProperty(window, 'localStorage', { configurable: true,
+                value: { getItem: () => null, setItem() {} } });
+            let nextId = 0;
+            Object.defineProperty(crypto, 'randomUUID', { configurable: true,
+                value: () => String(++nextId) });
+            const root = document.querySelector('#visualizerView');
+            const layout = createDefaultLayout();
+            layout.items[0].palette.mode = 'gradient';
+            const view = { root, stage: root.querySelector('.visualizer-stage'), layout,
+                t: (_, fallback) => fallback, changed() {}, notice() {} };
+            const editor = new VisualizerEditor(view);
+            editor.selection = layout.items[0].id;
+            editor.setOpen(true);
+            const dbRange = [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(row => row.querySelector('label')?.textContent === 'DB Range').querySelector('input').value;
+            const preset = [...editor.root.querySelectorAll('select')]
+                .find(select => [...select.options].some(option => option.value === 'rainbow'));
+            const presetCount = preset.options.length;
+            preset.value = 'rainbow';
+            preset.closest('.visualizer-select-action-row').querySelector('button').click();
+            const sliders = [...editor.root.querySelectorAll('.visualizer-stop > .visualizer-field input[type="range"]')];
+            const initial = sliders.map(input => ({ value: Number(input.value), min: input.min, max: input.max, step: input.step }));
+            const draw = () => {
+                const canvas = document.createElement('canvas'); canvas.width = 100; canvas.height = 1;
+                const context = canvas.getContext('2d');
+                context.fillStyle = paletteGradient(context, layout.items[0].palette, 100, 0);
+                context.fillRect(0, 0, 100, 1);
+                return [...context.getImageData(20, 0, 1, 1).data];
+            };
+            const before = draw();
+            sliders[1].value = '.3';
+            sliders[1].dispatchEvent(new Event('input', { bubbles: true }));
+            const after = draw();
+            const saved = normalizeLayout(layout).items[0].palette.stops[1].pos;
+            const stops = layout.items[0].palette.stops.map(stop => stop.pos);
+            preset.value = GRADIENT_PRESETS[3].id;
+            preset.closest('.visualizer-select-action-row').querySelector('button').click();
+            const expandedPreset = layout.items[0].palette.stops.every((stop, index) =>
+                stop.color === GRADIENT_PRESETS[3].colors[index] &&
+                stop.pos === (GRADIENT_PRESETS[3].colors.length === 1 ? 0 : index / (GRADIENT_PRESETS[3].colors.length - 1)));
+            editor.selection = null;
+            const stereo = createItem('stereo'); layout.items.push(stereo);
+            editor.selection = stereo.id; editor.render();
+            const windowRange = [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(row => row.querySelector('label')?.textContent === 'Window').querySelector('input').value;
+            return { initial, stops, edited: sliders[1].value, saved, before, after, dbRange, windowRange,
+                presetCount, expandedPreset };
+        });
+        assert.deepEqual(result.initial.map(stop => stop.value), [0, .2, .4, .6, .8, 1]);
+        assert.ok(result.initial.every(stop => stop.min === '0' && stop.max === '1' && stop.step === '0.01'));
+        assert.deepEqual(result.stops, [0, .3, .4, .6, .8, 1]);
+        assert.equal(result.edited, '0.3');
+        assert.equal(result.saved, .3);
+        assert.equal(result.presetCount, 23);
+        assert.equal(result.expandedPreset, true);
+        assert.notDeepEqual(result.after, result.before);
+        assert.equal(result.dbRange, '-96');
+        assert.equal(result.windowRange, '0.1');
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Editor additions respect saved item and effect limits and recover after deletion', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await page.setContent('<!doctype html><body><div id="visualizerView"><div class="visualizer-stage"></div></div></body>');
+        await page.addScriptTag({ content: modelSource + '\nwindow.normalizeLayout = normalizeLayout;' });
+        await page.addScriptTag({ content: palettePresetsSource });
+        await page.addScriptTag({ content: editorSource });
+        const result = await page.evaluate(() => {
+            Object.defineProperty(window, 'localStorage', { configurable: true,
+                value: { getItem: () => null, setItem() {} } });
+            let nextId = 0;
+            Object.defineProperty(crypto, 'randomUUID', { configurable: true,
+                value: () => String(++nextId) });
+            const root = document.querySelector('#visualizerView');
+            const layout = createDefaultLayout();
+            layout.items = Array.from({ length: 63 }, () => createItem('title'));
+            const view = { root, stage: root.querySelector('.visualizer-stage'), layout,
+                t: (_, fallback) => fallback, changed() {}, notice() {} };
+            const editor = new VisualizerEditor(view);
+            editor.setOpen(true);
+            const addItem = () => editor.navigation.querySelector('.visualizer-navigation-add-row button');
+            addItem().click();
+            const itemDisabled = addItem().disabled;
+            addItem().click();
+            addItem().dispatchEvent(new Event('click'));
+            const duplicateBlocked = editor.duplicateItem(layout.items[0]) === null;
+            const itemLimit = layout.items.length;
+            editor.deleteSelected();
+            const itemReenabled = !addItem().disabled;
+            addItem().click();
+            const itemRestored = layout.items.length;
+            const effects = [];
+            for (const target of [layout.items.at(-1), layout.background]) {
+                target.effects = Array.from({ length: 15 }, () => normalizeEffect({ type: 'opacity' }));
+                editor.selection = target.id || null;
+                editor.render();
+                const addEffect = () => [...editor.root.querySelectorAll('.visualizer-select-action-row')]
+                    .find(row => row.querySelector('select option[value="opacity"]')).querySelector('button');
+                addEffect().click();
+                const disabled = addEffect().disabled;
+                addEffect().click();
+                addEffect().dispatchEvent(new Event('click'));
+                const limit = target.effects.length;
+                editor.root.querySelector('.visualizer-effect-actions .delete-button').click();
+                const reenabled = !addEffect().disabled;
+                addEffect().click();
+                effects.push({ disabled, limit, reenabled, restored: target.effects.length });
+            }
+            return { itemDisabled, duplicateBlocked, itemLimit, itemReenabled, itemRestored, effects,
+                layout, restored: normalizeLayout(JSON.parse(JSON.stringify(layout))) };
+        });
+        assert.equal(result.itemDisabled && result.duplicateBlocked && result.itemReenabled, true);
+        assert.equal(result.itemLimit, 64);
+        assert.equal(result.itemRestored, 64);
+        assert.deepEqual(result.effects, Array(2).fill({ disabled: true, limit: 16, reenabled: true, restored: 16 }));
+        assert.deepEqual(result.restored, result.layout);
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Chroma octave sliders retain pointer and keyboard interaction while synchronizing crossed bounds', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await page.setContent('<!doctype html><body><div id="visualizerView"><div class="visualizer-stage"></div></div></body>');
+        await page.addScriptTag({ content: modelSource + '\nwindow.normalizeLayout = normalizeLayout;' });
+        await page.addScriptTag({ content: palettePresetsSource });
+        await page.addScriptTag({ content: editorSource });
+        await page.evaluate(() => {
+            Object.defineProperty(window, 'localStorage', { configurable: true,
+                value: { getItem: () => null, setItem() {} } });
+            let nextId = 0;
+            Object.defineProperty(crypto, 'randomUUID', { configurable: true,
+                value: () => String(++nextId) });
+            const root = document.querySelector('#visualizerView');
+            const layout = createDefaultLayout();
+            const item = createItem('chroma');
+            item.params.hi = 3;
+            layout.items = [item];
+            const view = { root, stage: root.querySelector('.visualizer-stage'), layout,
+                t: (_, fallback) => fallback, changed() {}, notice() {} };
+            const editor = new VisualizerEditor(view);
+            root.append(editor.root);
+            editor.selection = item.id;
+            editor.setOpen(true);
+            const fields = [...editor.root.querySelectorAll('.visualizer-field')];
+            const slider = label => fields.find(row => row.querySelector('label')?.textContent === label).querySelector('input');
+            const low = slider('Lowest Octave'), high = slider('Highest Octave');
+            low.style.width = '400px';
+            window.__octaves = { layout, low, high, inputCount: 0, refreshed: [] };
+            low.addEventListener('input', () => window.__octaves.inputCount++);
+            window.uiManager = { refreshRangeFillStyling: input => window.__octaves.refreshed.push(input.value) };
+        });
+        const readState = () => page.evaluate(() => {
+            const { layout, low, high, inputCount, refreshed } = window.__octaves;
+            return { values: [layout.items[0].params.lo, layout.items[0].params.hi],
+                inputs: [Number(low.value), Number(high.value)],
+                outputs: [low.nextElementSibling.textContent, high.nextElementSibling.textContent],
+                connected: low.isConnected && high.isConnected, inputCount, refreshed,
+                saved: normalizeLayout(JSON.parse(JSON.stringify(layout))).items[0].params };
+        });
+        await page.getByLabel('Lowest Octave', { exact: true }).focus();
+        for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
+        const raised = await readState();
+        assert.deepEqual(raised.values, [5, 5]);
+        assert.deepEqual(raised.inputs, [5, 5]);
+        assert.deepEqual(raised.outputs, ['5', '5']);
+        await page.getByLabel('Highest Octave', { exact: true }).focus();
+        for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowLeft');
+        const lowered = await readState();
+        assert.deepEqual(lowered.values, [2, 2]);
+        assert.deepEqual(lowered.inputs, [2, 2]);
+        assert.deepEqual(lowered.outputs, ['2', '2']);
+        const box = await page.getByLabel('Lowest Octave', { exact: true }).boundingBox();
+        await page.mouse.move(box.x + box.width * .15, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * .95, box.y + box.height / 2, { steps: 12 });
+        await page.mouse.up();
+        const dragged = await readState();
+        assert.equal(dragged.connected, true);
+        assert.ok(dragged.inputCount >= lowered.inputCount + 3);
+        assert.ok(dragged.values[0] >= 7);
+        assert.deepEqual(dragged.inputs, dragged.values);
+        assert.deepEqual(dragged.outputs, dragged.values.map(String));
+        assert.deepEqual([dragged.saved.lo, dragged.saved.hi], dragged.values);
+        assert.equal(dragged.refreshed.at(-1), String(dragged.values[1]));
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Trail Feedback sliders save zoom, rotation, and horizontal and vertical flow', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await page.setContent('<!doctype html><body><div id="visualizerView"><div class="visualizer-stage"></div></div></body>');
+        await page.addScriptTag({ content: modelSource + '\nwindow.normalizeLayout = normalizeLayout;' });
+        await page.addScriptTag({ content: palettePresetsSource });
+        await page.addScriptTag({ content: editorSource });
+        const result = await page.evaluate(() => {
+            Object.defineProperty(window, 'localStorage', { configurable: true,
+                value: { getItem: () => null, setItem() {} } });
+            let nextId = 0;
+            Object.defineProperty(crypto, 'randomUUID', { configurable: true,
+                value: () => String(++nextId) });
+            const root = document.querySelector('#visualizerView');
+            const layout = createDefaultLayout();
+            layout.items[0].effects = [normalizeEffect({ type: 'trail-feedback' })];
+            const view = { root, stage: root.querySelector('.visualizer-stage'), layout,
+                t: (_, fallback) => fallback, changed() {}, notice() {} };
+            const editor = new VisualizerEditor(view);
+            editor.selection = layout.items[0].id;
+            editor.setOpen(true);
+            const slider = label => [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(row => row.querySelector('label')?.textContent === label)?.querySelector('input');
+            const inputs = [slider('Zoom'), slider('Rotation angle (°)'),
+                slider('Horizontal flow'), slider('Vertical flow')];
+            const types = inputs.map(input => input?.type);
+            for (const [input, value] of inputs.map((input, index) => [input, [-1.5, -2, .5, -.6][index]])) {
+                input.value = String(value);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            return { types, ranges: inputs.map(input => [input.min, input.max, input.step]),
+                values: inputs.map(input => input.nextElementSibling?.textContent),
+                effect: normalizeLayout(layout).items[0].effects[0] };
+        });
+        assert.deepEqual(result.types, ['range', 'range', 'range', 'range']);
+        assert.deepEqual(result.ranges, [['-2', '2', '0.05'], ['-3', '3', '0.05'],
+            ['-1', '1', '0.05'], ['-1', '1', '0.05']]);
+        assert.deepEqual(result.values, ['-1.5%', '-2°', '0.5%', '-0.6%']);
+        assert.deepEqual([result.effect.zoom, result.effect.angle, result.effect.flowX, result.effect.flowY],
+            [-1.5, -2, .5, -.6]);
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Visualizer expand icon is centered and names both view-area actions', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage({ viewport: { width: 860, height: 600 } });
+        await page.setContent('<!doctype html><body class="view-visualizer"><div class="main-container"></div></body>');
+        await page.addStyleTag({ content: css });
+        await page.addScriptTag({ content: `
+            window.createDefaultLayout = () => ({ aspect: '16:9' });
+            window.VisualizerPresetStore = class {};
+            window.VisualizerSources = class {};
+            window.VisualizerRenderer = class {};
+            window.VisualizerEditor = class {
+                constructor() {
+                    this.navigation = document.createElement('aside'); this.root = document.createElement('aside');
+                    this.navigationContent = document.createElement('div');
+                    this.navigation.appendChild(this.navigationContent);
+                    this.open = false;
+                }
+                setOpen(open) { this.open = open; }
+            };
+        ` });
+        await page.addScriptTag({ content: viewSource });
+        const result = await page.evaluate(() => {
+            Object.defineProperty(window, 'localStorage', { configurable: true,
+                value: { getItem: () => null } });
+            window.VisualizerView.prototype.initialize = async () => {};
+            const view = new window.VisualizerView({ t: key => key, audioManager: {}, layoutMode: {} });
+            view.showControls = () => {};
+            const button = view.expandButton, svg = button.querySelector('svg');
+            const rect = element => element.getBoundingClientRect();
+            const buttonRect = rect(button), svgRect = rect(svg);
+            const centered = Math.abs((buttonRect.left + buttonRect.right - svgRect.left - svgRect.right) / 2) < 1 &&
+                Math.abs((buttonRect.top + buttonRect.bottom - svgRect.top - svgRect.bottom) / 2) < 1;
+            const initial = [button.title, button.getAttribute('aria-label'), button.getAttribute('aria-pressed')];
+            let presetOpens = 0;
+            view.openPresets = () => { presetOpens++; return Promise.resolve(); };
+            view.presetButton.click();
+            const toolbarOrder = view.toolbar.children[0] === view.editButton &&
+                view.editButton.nextElementSibling === view.presetButton;
+            const toolbarButtons = [view.presetButton, view.editButton].map(control => {
+                const icon = control.querySelector('svg'), label = control.querySelector('span');
+                const bounds = control.getBoundingClientRect(), iconBounds = icon.getBoundingClientRect();
+                const labelBounds = label.getBoundingClientRect();
+                return { markup: control.firstElementChild === icon && icon.nextElementSibling === label,
+                    size: [iconBounds.width, iconBounds.height],
+                    aligned: Math.abs((bounds.top + bounds.bottom - iconBounds.top - iconBounds.bottom) / 2) < 1 &&
+                        Math.abs((labelBounds.top + labelBounds.bottom - iconBounds.top - iconBounds.bottom) / 2) < 2,
+                    gap: labelBounds.left - iconBounds.right };
+            });
+            const editIcon = view.editButton.querySelector('svg');
+            view.editButton.click(); const editOpened = view.editor.open;
+            const playerActive = document.createElement('button');
+            playerActive.className = 'player-button'; playerActive.dataset.active = 'true';
+            document.body.appendChild(playerActive);
+            const appearance = element => {
+                const style = getComputedStyle(element);
+                return [style.backgroundImage, style.borderTopColor, style.color, style.boxShadow];
+            };
+            const editMatchesPlayer = JSON.stringify(appearance(view.editButton)) === JSON.stringify(appearance(playerActive));
+            playerActive.remove();
+            view.editButton.click(); const editClosed = !view.editor.open && view.editButton.querySelector('svg') === editIcon;
+            button.click();
+            const expanded = [button.title, button.getAttribute('aria-label'), button.getAttribute('aria-pressed'),
+                document.body.classList.contains('visualizer-expanded')];
+            button.click();
+            const restored = [button.title, button.getAttribute('aria-label'), button.getAttribute('aria-pressed'),
+                document.body.classList.contains('visualizer-expanded')];
+            return { centered, decorative: svg.getAttribute('aria-hidden'), initial, expanded, restored,
+                toolbarButtons, toolbarOrder, presetOpens, editOpened, editClosed, editMatchesPlayer };
+        });
+        assert.equal(result.centered, true);
+        assert.equal(result.decorative, 'true');
+        assert.equal(result.presetOpens, 1);
+        assert.equal(result.toolbarOrder, true);
+        assert.equal(result.editOpened && result.editClosed, true);
+        assert.equal(result.editMatchesPlayer, true);
+        assert.ok(result.toolbarButtons.every(value => value.markup && value.aligned &&
+            value.size[0] === 16 && value.size[1] === 16 && value.gap >= 5), JSON.stringify(result.toolbarButtons));
+        assert.deepEqual(result.initial, ['Fill app window', 'Fill app window', 'false']);
+        assert.deepEqual(result.expanded, ['Restore Visualizer size', 'Restore Visualizer size', 'true', true]);
+        assert.deepEqual(result.restored, ['Fill app window', 'Fill app window', 'false', false]);
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Visualizer fills the available width on first display and after leaving expanded mode', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+        await page.setContent(`<!doctype html><body class="view-visualizer">
+            <div class="title-container">EffeTune</div>
+            <div class="main-container" style="width:1100px;height:400px"></div>
+            <section id="visualizerView"><div class="visualizer-toolbar"><button>Visualizer Presets</button><label class="visualizer-quality-label"><span>Quality</span><select></select></label></div>
+                <div class="visualizer-workspace"><aside class="visualizer-editor visualizer-editor-navigation" hidden><div class="visualizer-navigation-content"></div></aside><div class="visualizer-stage-host">
+                    <div class="visualizer-stage" style="aspect-ratio:16/9"><canvas></canvas></div>
+                </div><aside class="visualizer-editor visualizer-editor-inspector" hidden></aside></div>
+            </section></body>`);
+        await page.addStyleTag({ content: `${css}\n* { transition: none !important; }` });
+        await page.addScriptTag({ content: viewSource });
+        const sizes = await page.evaluate(() => {
+            const stageHost = document.querySelector('.visualizer-stage-host');
+            const stage = document.querySelector('.visualizer-stage');
+            const root = document.querySelector('#visualizerView');
+            const navigation = document.querySelector('.visualizer-editor-navigation');
+            const inspector = document.querySelector('.visualizer-editor-inspector');
+            const qualityLabel = document.querySelector('.visualizer-quality-label');
+            const toolbar = document.querySelector('.visualizer-toolbar');
+            const view = Object.assign(Object.create(window.VisualizerView.prototype), {
+                visible: true, layout: { aspect: '16:9' }, root, toolbar, qualityLabel, stageHost, stage,
+                canvas: stage.querySelector('canvas'), status: {},
+                renderer: { quality: 0, draw() {} }, sources: { getStatus: () => 'ready' },
+                uiManager: { t: key => key }, editor: { open: false, navigation, navigationContent: navigation.firstElementChild,
+                    setOpen(open) { this.open = open; navigation.hidden = !open; inspector.hidden = !open; root.classList.toggle('is-editing', open); } },
+                editButton: { setAttribute() {} }, expandButton: { setAttribute() {} }, showControls() {}
+            });
+            window.requestAnimationFrame = () => 1;
+            const measure = () => {
+                view.frame(0);
+                const host = stageHost.getBoundingClientRect(), rect = stage.getBoundingClientRect();
+                return { hostWidth: host.width, hostHeight: host.height, width: rect.width, height: rect.height,
+                    center: rect.x + rect.width / 2, hostCenter: host.x + host.width / 2 };
+            };
+            const initial = measure();
+            view.setEditing(true);
+            const editing = measure();
+            const navigationRect = navigation.getBoundingClientRect();
+            const hostRect = stageHost.getBoundingClientRect();
+            const inspectorRect = inspector.getBoundingClientRect();
+            const editingOrder = navigationRect.right < hostRect.left && hostRect.right < inspectorRect.left;
+            const qualityInNavigation = qualityLabel.parentNode === navigation;
+            view.setEditing(false);
+            const qualityReturned = qualityLabel.parentNode === toolbar;
+            view.setExpanded(true);
+            const expanded = measure();
+            view.setExpanded(false);
+            const restored = measure();
+            document.body.classList.remove('view-visualizer');
+            const effectsWidth = document.querySelector('.main-container').getBoundingClientRect().width;
+            const effectsBodyDisplay = getComputedStyle(document.body).display;
+            document.body.classList.add('view-library');
+            const libraryWidth = document.querySelector('.main-container').getBoundingClientRect().width;
+            const libraryBodyDisplay = getComputedStyle(document.body).display;
+            document.body.classList.remove('view-library');
+            document.body.classList.add('view-visualizer');
+            const reopened = measure();
+            document.body.style.zoom = '0.8';
+            const zoomed = measure();
+            document.body.style.zoom = '';
+            document.body.classList.add('layout-mobile');
+            const mobile = measure();
+            view.setEditing(true);
+            const mobileEditing = measure();
+            const mobileOrder = navigation.getBoundingClientRect().bottom < stageHost.getBoundingClientRect().top &&
+                stageHost.getBoundingClientRect().bottom < inspector.getBoundingClientRect().top;
+            view.setEditing(false);
+            document.body.classList.remove('layout-mobile');
+            document.body.classList.add('layout-mini-player');
+            const mini = measure();
+            return { initial, editing, editingOrder, qualityInNavigation, qualityReturned, expanded, restored, reopened, zoomed, mobile, mobileEditing, mobileOrder, mini,
+                effectsWidth, effectsBodyDisplay, libraryWidth, libraryBodyDisplay };
+        });
+        assert.equal(sizes.initial.hostWidth, 1240, JSON.stringify(sizes));
+        assert.equal(sizes.editingOrder, true, JSON.stringify(sizes));
+        assert.equal(sizes.qualityInNavigation, true);
+        assert.equal(sizes.qualityReturned, true);
+        assert.ok(sizes.editing.hostWidth < sizes.initial.hostWidth);
+        assert.ok(sizes.editing.hostWidth > 300);
+        assert.ok(Math.abs(sizes.editing.width / sizes.editing.height - 16 / 9) < .001);
+        assert.ok(Math.abs(sizes.editing.center - sizes.editing.hostCenter) < 1);
+        for (const size of [sizes.initial, sizes.restored, sizes.reopened, sizes.zoomed, sizes.mobile]) {
+            assert.ok(Math.abs(size.width / size.height - 16 / 9) < 0.001);
+            assert.ok(Math.abs(size.width - Math.min(size.hostWidth, size.hostHeight * 16 / 9)) < 1);
+            assert.ok(Math.abs(size.center - size.hostCenter) < 1);
+        }
+        assert.deepEqual(sizes.restored, sizes.initial);
+        assert.deepEqual(sizes.reopened, sizes.initial);
+        assert.ok(Math.abs(sizes.zoomed.hostWidth - (1280 - 40 * 0.8)) < 1);
+        assert.equal(sizes.effectsWidth, 1100);
+        assert.equal(sizes.effectsBodyDisplay, 'inline-block');
+        assert.equal(sizes.libraryWidth, 1100);
+        assert.equal(sizes.libraryBodyDisplay, 'inline-block');
+        assert.equal(sizes.mobile.hostWidth, 1264);
+        assert.equal(sizes.mobileOrder, true, JSON.stringify(sizes));
+        assert.ok(Math.abs(sizes.mobileEditing.width / sizes.mobileEditing.height - 16 / 9) < .001);
+        for (const size of [sizes.expanded, sizes.mini]) {
+            assert.equal(size.hostWidth, 1280);
+            assert.ok(Math.abs(size.width - Math.max(size.hostWidth, size.hostHeight * 16 / 9)) < 1);
+        }
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Visualizer editor uses unboxed settings sections and pipeline parameter rows without clipped controls', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage({ viewport: { width: 860, height: 760 } });
+        await page.setContent('<!doctype html><body class="view-visualizer"><section id="visualizerView"><div class="visualizer-workspace"><div class="visualizer-stage-host"><div class="visualizer-stage" style="width:320px;height:180px"></div></div></div></section></body>');
+        await page.addStyleTag({ content: css });
+        await page.addScriptTag({ content: `${read('../../plugins/plugin-base.js')}\nwindow.TestPluginBase = PluginBase;` });
+        await page.addScriptTag({ content: viewSource });
+        await page.addScriptTag({ content: modelSource });
+        await page.addScriptTag({ content: palettePresetsSource });
+        await page.addScriptTag({ content: editorSource });
+        const result = await page.evaluate(() => {
+            Object.defineProperty(window, 'localStorage', { configurable: true,
+                value: { getItem: () => null, setItem() {} } });
+            let nextId = 0;
+            Object.defineProperty(crypto, 'randomUUID', { configurable: true,
+                value: () => String(++nextId) });
+            let themeTrace = 'rgba(12, 34, 56, 1)';
+            window.ThemePalette = { get: () => themeTrace };
+            const root = document.querySelector('#visualizerView');
+            const stage = root.querySelector('.visualizer-stage');
+            const layout = window.createDefaultLayout();
+            layout.items[0].palette.mode = 'gradient';
+            layout.items[0].params.showAxes = true;
+            layout.items.push(window.createItem('artwork'));
+            const view = { root, stage, layout,
+                t: (key, fallback) => ({ 'visualizer.type.spectrum': 'Spectrum',
+                    'visualizer.gradient': 'グラデーション', 'visualizer.apply': '適用',
+                    'visualizer.effect': '演出', 'visualizer.add': '追加' })[key] || fallback, changes: 0,
+                changed() { this.changes++; }, notice() {} };
+            const editor = new window.VisualizerEditor(view);
+            const workspace = root.querySelector('.visualizer-workspace');
+            workspace.insertBefore(editor.navigation, workspace.firstChild);
+            workspace.appendChild(editor.root);
+            editor.selection = layout.items[0].id;
+            editor.setOpen(true);
+            const qualityRow = document.createElement('label');
+            qualityRow.className = 'visualizer-quality-label';
+            qualityRow.innerHTML = '<span>Quality</span><select><option>Auto</option></select>';
+            editor.navigation.insertBefore(qualityRow, editor.navigationContent);
+            const itemList = editor.navigation.querySelector('.visualizer-item-list');
+            const layoutFields = [...editor.navigation.querySelector('.visualizer-section').querySelectorAll(':scope > .visualizer-field')];
+            const leftAddRow = editor.navigation.querySelector('.visualizer-navigation-add-row');
+            const leftMetrics = {
+                settingPitch: layoutFields[1].getBoundingClientRect().top - layoutFields[0].getBoundingClientRect().top,
+                settingHeight: layoutFields[0].getBoundingClientRect().height,
+                addHeight: leftAddRow.getBoundingClientRect().height,
+                qualityHeight: qualityRow.getBoundingClientRect().height,
+                qualityMargin: [getComputedStyle(qualityRow).marginTop, getComputedStyle(qualityRow).marginBottom],
+                listPitch: itemList.children[1].getBoundingClientRect().top - itemList.children[0].getBoundingClientRect().top,
+                listHeight: itemList.children[0].getBoundingClientRect().height,
+                addParts: ['label', 'select', 'button'].map(tag => leftAddRow.querySelector(tag).getBoundingClientRect().width),
+                fits: editor.navigation.scrollWidth <= editor.navigation.clientWidth + 1
+            };
+            const gridToggle = layoutFields[1].querySelector('input');
+            const gridBefore = gridToggle.checked;
+            layoutFields[1].querySelector('label').click();
+            const gridLabelWorks = gridToggle.checked !== gridBefore;
+            const listInitial = itemList.children.length === 3 &&
+                itemList.children[1].classList.contains('active') &&
+                itemList.children[1].getAttribute('aria-pressed') === 'true';
+            itemList.children[2].click();
+            const listSelects = editor.selection === layout.items[1].id &&
+                editor.root.querySelector('.visualizer-item-name').textContent.includes('artwork');
+            editor.navigation.querySelector('.visualizer-item-list').children[1].click();
+            const pipelineCard = document.createElement('div');
+            pipelineCard.className = 'pipeline-item'; document.body.appendChild(pipelineCard);
+            const pluginUI = document.createElement('div');
+            pluginUI.className = 'plugin-ui expanded'; pipelineCard.appendChild(pluginUI);
+            const reference = document.createElement('div');
+            reference.className = 'compressor-plugin-ui plugin-parameter-ui'; pluginUI.appendChild(reference);
+            const native = Object.create(window.TestPluginBase.prototype);
+            Object.assign(native, { id: 'fixture', name: 'Compressor', _registerUIControl() {} });
+            for (const label of ['Threshold', 'Attack', 'Release']) {
+                reference.appendChild(native.createParameterControl(label, 0, 100, 1, 50, () => {}, 'dB', label));
+            }
+            const standardSelectRow = native.createSelectControl('Mode', ['One', 'Two'], 'One', () => {});
+            reference.appendChild(standardSelectRow);
+            const controlMetric = element => {
+                const style = getComputedStyle(element);
+                return { width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
+                    boxSizing: style.boxSizing, cssHeight: style.height, minHeight: style.minHeight,
+                    padding: style.padding, border: style.borderWidth, borderRadius: style.borderRadius,
+                    lineHeight: style.lineHeight };
+            };
+            const standardSelectMetric = controlMetric(standardSelectRow.querySelector('select'));
+            standardSelectRow.remove();
+            const backgroundSection = [...editor.navigationContent.querySelectorAll(':scope > .visualizer-section')]
+                .find(section => section.querySelector(':scope > h3')?.textContent === 'Background');
+            const themeSection = backgroundSection.querySelector('.visualizer-theme-colors');
+            const backgroundColor = backgroundSection.querySelector('input[type="color"]');
+            const themeColors = [...themeSection.querySelectorAll('.visualizer-field')].map(row => ({
+                inputLeft: row.querySelector('input').getBoundingClientRect().left,
+                labelRight: row.querySelector('label').getBoundingClientRect().right
+            }));
+            const themeColorAlignment = themeColors.every(({ inputLeft, labelRight }) =>
+                Math.abs(inputLeft - backgroundColor.getBoundingClientRect().left) <= .5 && labelRight < inputLeft);
+            const removeImageButton = backgroundSection.querySelector(':scope > button');
+            const resetThemeButton = themeSection.querySelector(':scope > button');
+            const currentLayoutSection = editor.navigationContent.querySelector('.visualizer-section');
+            const navControlMetrics = {
+                standardSelect: standardSelectMetric,
+                aspectSelect: controlMetric(currentLayoutSection.querySelector(':scope > .visualizer-field select')),
+                itemSelect: controlMetric(editor.navigation.querySelector('.visualizer-navigation-add-row select')),
+                removeImage: { ...controlMetric(removeImageButton), left: removeImageButton.getBoundingClientRect().left,
+                    right: removeImageButton.getBoundingClientRect().right,
+                    parentLeft: backgroundSection.getBoundingClientRect().left,
+                    parentRight: backgroundSection.getBoundingClientRect().right,
+                    margin: getComputedStyle(removeImageButton).margin },
+                resetTheme: { ...controlMetric(resetThemeButton), left: resetThemeButton.getBoundingClientRect().left,
+                    right: resetThemeButton.getBoundingClientRect().right,
+                    parentLeft: themeSection.getBoundingClientRect().left,
+                    parentRight: themeSection.getBoundingClientRect().right,
+                    margin: getComputedStyle(resetThemeButton).margin },
+                color: { ...controlMetric(backgroundColor),
+                    wrapperPadding: getComputedStyle(backgroundColor, '::-webkit-color-swatch-wrapper').padding,
+                    swatchBorder: getComputedStyle(backgroundColor, '::-webkit-color-swatch').borderWidth }
+            };
+            const config = document.createElement('div');
+            config.className = 'config-dialog'; config.innerHTML = '<select><option>One</option><option>Two</option></select>';
+            document.body.appendChild(config);
+            const navigationStyle = getComputedStyle(editor.navigation);
+            const inspectorStyle = getComputedStyle(editor.root);
+            const navigationOption = getComputedStyle(editor.navigation.querySelector('select option:nth-child(2)'));
+            const configOption = getComputedStyle(config.querySelector('option:nth-child(2)'));
+            const paneStyle = { navBackground: navigationStyle.backgroundImage, inspectorBackground: inspectorStyle.backgroundImage,
+                pipelineBackground: getComputedStyle(pipelineCard).backgroundImage,
+                navBorder: navigationStyle.borderStyle, inspectorBorder: inspectorStyle.borderStyle,
+                navPadding: parseFloat(navigationStyle.paddingLeft), optionBackground: navigationOption.backgroundColor,
+                optionText: navigationOption.color, configBackground: configOption.backgroundColor, configText: configOption.color };
+            const activeListButton = editor.navigation.querySelector('.visualizer-item-list .active');
+            const referenceListButton = document.createElement('button');
+            referenceListButton.className = 'player-playlist-item active'; document.body.appendChild(referenceListButton);
+            const listStyle = { selectedBackground: getComputedStyle(activeListButton).backgroundImage ===
+                    getComputedStyle(referenceListButton).backgroundImage,
+                selectedAccent: getComputedStyle(activeListButton).boxShadow === getComputedStyle(referenceListButton).boxShadow,
+                itemHeight: activeListButton.getBoundingClientRect().height,
+                fits: activeListButton.parentElement.scrollWidth <= activeListButton.parentElement.clientWidth + 1 };
+            referenceListButton.remove();
+            const itemHeading = editor.root.querySelector('.visualizer-item-name').textContent;
+            const itemHeader = editor.root.querySelector('.visualizer-item-header');
+            const itemTitle = itemHeader.querySelector('.visualizer-item-name');
+            const itemOrder = itemHeader.querySelector('.visualizer-editor-actions');
+            const titleBox = itemTitle.getBoundingClientRect();
+            const orderBox = itemOrder.getBoundingClientRect();
+            const headerBox = itemHeader.getBoundingClientRect();
+            const itemHeaderAligned = Math.abs((titleBox.top + titleBox.bottom) / 2 -
+                (orderBox.top + orderBox.bottom) / 2) < 3 &&
+                Math.abs(orderBox.right - headerBox.right) < 2 && titleBox.right < orderBox.left;
+            itemTitle.textContent = 'An unusually long analyzer component name that must leave space for the action buttons';
+            const longTitleFits = itemHeader.scrollWidth <= itemHeader.clientWidth + 1 &&
+                Math.abs(itemOrder.getBoundingClientRect().right - itemHeader.getBoundingClientRect().right) < 2;
+            itemTitle.textContent = itemHeading;
+            const itemActions = [...editor.root.querySelectorAll('.visualizer-editor-actions button')].map(button => ({
+                className: button.className, label: button.getAttribute('aria-label'), svg: !!button.querySelector('svg'),
+                width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height
+            }));
+            const bounds = { count: editor.itemBounds.children.length,
+                pointerEvents: getComputedStyle(editor.itemBounds).pointerEvents,
+                itemId: editor.itemBounds.firstElementChild?.dataset.itemId,
+                handles: editor.overlay.querySelectorAll('.visualizer-handle').length };
+            const selectionRect = editor.overlay.getBoundingClientRect();
+            bounds.sidePlacement = ['n', 'e', 's', 'w'].every(side => {
+                const handle = editor.overlay.querySelector(`.visualizer-handle.${side}`);
+                const box = handle.getBoundingClientRect();
+                const centered = side === 'n' || side === 's' ?
+                    Math.abs((box.left + box.right - selectionRect.left - selectionRect.right) / 2) < 1 :
+                    Math.abs((box.top + box.bottom - selectionRect.top - selectionRect.bottom) / 2) < 1;
+                const onEdge = { n: Math.abs(box.top - selectionRect.top),
+                    e: Math.abs(box.right - selectionRect.right),
+                    s: Math.abs(box.bottom - selectionRect.bottom),
+                    w: Math.abs(box.left - selectionRect.left) }[side] <= 2;
+                return centered && onEdge && getComputedStyle(handle).cursor ===
+                    (side === 'n' || side === 's' ? 'ns-resize' : 'ew-resize');
+            });
+            const boundsRect = editor.itemBounds.firstElementChild.getBoundingClientRect();
+            bounds.hitTestClear = !editor.itemBounds.contains(document.elementFromPoint(boundsRect.left + 2, boundsRect.top + 2));
+            const fields = [...editor.root.querySelectorAll('.visualizer-field')];
+            const rowMetric = row => { const style = getComputedStyle(row);
+                return { height: row.getBoundingClientRect().height, marginTop: style.marginTop,
+                    marginBottom: style.marginBottom, alignItems: style.alignItems };
+            };
+            const visualRows = ['DB Range', 'Points', 'Frequency Scale']
+                .map(label => fields.find(field => field.textContent.includes(label)));
+            const rowPitch = rows => rows.slice(1).map((row, index) =>
+                row.getBoundingClientRect().top - rows[index].getBoundingClientRect().top);
+            const referenceRows = [...reference.children];
+            const propertySection = visualRows[0].parentElement;
+            propertySection.style.display = 'block';
+            const collapsedPitch = rowPitch(visualRows);
+            propertySection.style.display = '';
+            const rowMetrics = {
+                reference: referenceRows.map(rowMetric), visual: visualRows.map(rowMetric),
+                referencePitch: rowPitch(referenceRows), visualPitch: rowPitch(visualRows), collapsedPitch
+            };
+            const associated = [...root.querySelectorAll('label[for]')].every(label =>
+                document.getElementById(label.htmlFor));
+            const clipped = fields.filter(field => field.scrollWidth > field.clientWidth + 1)
+                .map(field => field.textContent.trim());
+            const sectionBorder = getComputedStyle(editor.navigation.querySelector('.visualizer-section')).borderStyle;
+            const axis = fields.find(field => field.textContent.includes('Axes and grid'));
+            axis.querySelector('label').click();
+            const motion = [...editor.root.querySelectorAll('.visualizer-radio')]
+                .find(group => group.getAttribute('aria-label') === 'Color motion');
+            motion.querySelector('input[value="hue"] + label').click();
+            const radioGeometry = group => {
+                const title = group.querySelector('.visualizer-radio-title').getBoundingClientRect();
+                const options = group.querySelector('.visualizer-radio-options');
+                const positions = [...options.children].map(option => option.getBoundingClientRect());
+                return { titleRight: title.right, optionsLeft: options.getBoundingClientRect().left,
+                    wrapped: new Set(positions.map(position => Math.round(position.top))).size > 1,
+                    clipped: options.scrollWidth > options.clientWidth + 1,
+                    widths: [options.scrollWidth, options.clientWidth, ...positions.map(position => position.width)],
+                    indented: positions.every(position => position.left >= title.right - 1) };
+            };
+            const narrowRadio = radioGeometry([...editor.root.querySelectorAll('.visualizer-radio')]
+                .find(group => group.getAttribute('aria-label') === 'Color motion'));
+            const effectAddRow = [...editor.root.querySelectorAll('.visualizer-select-action-row')][1];
+            effectAddRow.querySelector('select').value = 'glow';
+            const actionRowGeometry = row => {
+                const bounds = row.getBoundingClientRect();
+                const labelNode = row.querySelector('label');
+                const buttonNode = row.querySelector('button');
+                const label = labelNode.getBoundingClientRect();
+                const select = row.querySelector('select').getBoundingClientRect();
+                const button = buttonNode.getBoundingClientRect();
+                const textCenter = node => {
+                    const range = document.createRange(); range.selectNodeContents(node);
+                    const text = range.getBoundingClientRect(); return (text.top + text.bottom) / 2;
+                };
+                return { sameLine: Math.abs((label.top + label.bottom) / 2 - (select.top + select.bottom) / 2) < 5 &&
+                        Math.abs((button.top + button.bottom) / 2 - (select.top + select.bottom) / 2) < 5,
+                    captionAligned: Math.abs(textCenter(labelNode) - textCenter(buttonNode)) < 2,
+                    order: label.right < select.left && select.right < button.left,
+                    sameHeight: Math.abs(select.height - button.height) < 2,
+                    rightAligned: Math.abs(button.right - bounds.right) < 5,
+                    fits: row.scrollWidth <= row.clientWidth + 1,
+                    geometry: { row: [bounds.left, bounds.right], label: [label.left, label.right, label.top, label.bottom],
+                        select: [select.left, select.right, select.top, select.bottom],
+                        button: [button.left, button.right, button.top, button.bottom],
+                        text: [textCenter(labelNode), textCenter(buttonNode)] } };
+            };
+            const effectAddGeometry = actionRowGeometry(effectAddRow);
+            effectAddRow.querySelector('button').click();
+            const effect = editor.root.querySelector('.visualizer-effect-heading');
+            const effectBlock = effect.parentElement;
+            const effectGroup = effectBlock.parentElement;
+            const activeAddRow = effectGroup.querySelector('.visualizer-select-action-row');
+            const dividerGeometry = {
+                occupied: effect.getBoundingClientRect().top - activeAddRow.getBoundingClientRect().bottom,
+                lineFromStart: effectBlock.getBoundingClientRect().top + .5 -
+                    activeAddRow.getBoundingClientRect().bottom
+            };
+            const effectFields = [...effect.parentElement.children].filter(child => child.classList.contains('visualizer-field'));
+            const depth = effectFields.find(field => field.textContent.includes('Depth'));
+            const speed = effectFields.find(field => field.textContent.includes('Speed'));
+            const paletteStop = editor.root.querySelector('.visualizer-stop');
+            const colorField = paletteStop.querySelector('.visualizer-stop-color-row .visualizer-field');
+            const positionField = paletteStop.querySelector(':scope > .visualizer-field');
+            const nestedPitch = {
+                effect: speed.getBoundingClientRect().top - depth.getBoundingClientRect().top,
+                palette: positionField.getBoundingClientRect().top - colorField.getBoundingClientRect().top
+            };
+            const actionStyle = [...effect.querySelectorAll('.visualizer-effect-actions button')].map(button => {
+                const computed = getComputedStyle(button);
+                const reference = document.createElement('button');
+                reference.className = button.className; document.body.appendChild(reference);
+                const expected = getComputedStyle(reference);
+                const equal = computed.width === expected.width && computed.height === expected.height &&
+                    computed.color === expected.color && computed.backgroundImage === expected.backgroundImage &&
+                    computed.borderColor === expected.borderColor;
+                reference.remove();
+                return { className: button.className, equal, svg: !!button.querySelector('svg') };
+            });
+            const toggle = effect.querySelector('.toggle-button');
+            toggle.click();
+            const effectDisabled = !layout.items[0].effects[0].enabled &&
+                editor.root.querySelector('.visualizer-effect-heading .toggle-button.off')?.getAttribute('aria-pressed') === 'false' &&
+                editor.root.querySelector('.visualizer-effect-heading')?.parentElement.querySelector('input[type="range"]')?.disabled;
+            const presetRow = editor.root.querySelector('.visualizer-select-action-row');
+            const presetGeometry = actionRowGeometry(presetRow);
+            const addStopRow = editor.root.querySelector('.visualizer-add-stop-row');
+            const addStopIndented = addStopRow.querySelector('button').getBoundingClientRect().left >=
+                addStopRow.getBoundingClientRect().left + 100;
+            addStopRow.querySelector('button').click();
+            const stop = editor.root.querySelector('.visualizer-stop');
+            const color = stop.querySelector('input[type="color"]');
+            const paletteColorMetric = controlMetric(color);
+            color.value = '#00ff00'; color.dispatchEvent(new Event('input', { bubbles: true }));
+            const changedColor = layout.items[0].palette.stops[0].color;
+            const remove = stop.querySelector('.visualizer-stop-color-row > button');
+            const currentPresetRow = editor.root.querySelector('.visualizer-select-action-row');
+            const currentScale = [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(field => field.textContent.includes('Frequency Scale')).querySelector('select');
+            const stopRightEdges = {
+                remove: remove.getBoundingClientRect().right,
+                apply: currentPresetRow.querySelector('button').getBoundingClientRect().right,
+                select: currentScale.getBoundingClientRect().right,
+                stop: stop.getBoundingClientRect().right,
+                colorRow: stop.querySelector('.visualizer-stop-color-row').getBoundingClientRect().right,
+                removeMargin: getComputedStyle(remove).marginRight,
+                applyMargin: getComputedStyle(currentPresetRow.querySelector('button')).marginRight
+            };
+            const colorBounds = color.getBoundingClientRect();
+            const removeBounds = remove.getBoundingClientRect();
+            const positionBounds = stop.querySelector('input[type="range"]').getBoundingClientRect();
+            const stopColorAligned = Math.abs((colorBounds.top + colorBounds.bottom) / 2 -
+                (removeBounds.top + removeBounds.bottom) / 2) < 5 && removeBounds.bottom < positionBounds.top;
+            remove.click();
+            editor.root.querySelector('.visualizer-effect-actions .delete-button').click();
+            const effectRemoved = layout.items[0].effects.length === 0;
+            editor.selection = null; editor.render();
+            const backgroundHeading = editor.root.querySelector('.visualizer-item-name').textContent;
+            editor.selection = layout.items[0].id; editor.render();
+            const axes = layout.items[0].params.showAxes;
+            const motionMode = layout.items[0].palette.motion.mode;
+            const stopCount = layout.items[0].palette.stops.length;
+            editor.root.querySelector('.visualizer-editor-actions .move-up-button').click();
+            const sentFront = layout.items.at(-1)?.id === 'main-spectrum';
+            editor.root.querySelector('.visualizer-editor-actions .move-down-button').click();
+            const sentBack = layout.items[0]?.id === 'main-spectrum';
+            editor.root.querySelector('.visualizer-editor-actions .delete-button').click();
+            const itemDeleted = layout.items.length === 1 && editor.selection === null;
+            const replacement = window.createItem('spectrum');
+            layout.items.unshift(replacement); editor.selection = replacement.id; editor.render();
+            const theme = editor.navigation.querySelector('.visualizer-theme-colors');
+            const themeInputs = [...theme.querySelectorAll('input[type="color"]')];
+            const themeDefaults = themeInputs.length === 8 && themeInputs.every((input, index) =>
+                input.value === DEFAULT_THEME_COLORS[THEME_COLOR_ROLES[index]].slice(0, 7));
+            themeInputs[0].value = '#ff8040';
+            themeInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            const themeSaved = Object.keys(layout.background.themeColors).length === 1 &&
+                layout.background.themeColors['graph-bg-deep'] === '#ff8040';
+            themeInputs[3].value = '#123456';
+            themeInputs[3].dispatchEvent(new Event('input', { bubbles: true }));
+            const themeAlphaSaved = layout.background.themeColors['graph-grid-soft'] === '#12345633';
+            theme.querySelector('button').click();
+            const themeReset = themeAlphaSaved && !Object.hasOwn(layout.background, 'themeColors') &&
+                editor.navigation.querySelector('.visualizer-theme-colors input[type="color"]').value === '#000000';
+            const itemAddRow = editor.navigation.querySelector('.visualizer-navigation-add-row');
+            const itemAddSelect = itemAddRow.querySelector('select');
+            const itemAddButton = itemAddRow.querySelector('button');
+            const itemAddBounds = itemAddRow.getBoundingClientRect();
+            const itemSelectBounds = itemAddSelect.getBoundingClientRect();
+            const itemButtonBounds = itemAddButton.getBoundingClientRect();
+            const itemAddAligned = Math.abs((itemSelectBounds.top + itemSelectBounds.bottom) / 2 -
+                (itemButtonBounds.top + itemButtonBounds.bottom) / 2) < 2 &&
+                Math.abs(itemSelectBounds.height - itemButtonBounds.height) < 2 &&
+                Math.abs(itemButtonBounds.right - itemAddBounds.right) < 2 &&
+                itemSelectBounds.right < itemButtonBounds.left &&
+                itemAddRow.scrollWidth <= itemAddRow.clientWidth + 1;
+            itemAddSelect.value = 'level-meter'; itemAddButton.click();
+            const itemAdded = layout.items.length === 3 && layout.items.at(-1).type === 'level-meter' &&
+                editor.selection === layout.items.at(-1).id;
+            const firstThemedItem = layout.items.at(-1);
+            themeTrace = 'rgba(220, 40, 80, 1)';
+            const secondAddRow = editor.navigation.querySelector('.visualizer-navigation-add-row');
+            secondAddRow.querySelector('button').click();
+            const themeSolidColors = firstThemedItem.palette.color === '#00ff00' &&
+                layout.items.at(-1).palette.color === '#00ff00' && firstThemedItem.palette.mode === 'solid';
+            layout.items.pop();
+            editor.selection = replacement.id; editor.render();
+            const drawn = [];
+            let frameRequests = 0, leakedDeletes = 0;
+            window.requestAnimationFrame = () => ++frameRequests;
+            const visualCanvas = document.createElement('canvas'); stage.appendChild(visualCanvas);
+            Object.assign(view, { stageHost: root.querySelector('.visualizer-stage-host'), canvas: visualCanvas,
+                status: { hidden: true }, sources: { getStatus: () => 'ready' },
+                renderer: { quality: 0, draw: current => drawn.push(current.items.map(value => value.id)) },
+                visible: true, quality: 'high', uiManager: {}, editor });
+            view.frame = window.VisualizerView.prototype.frame;
+            view.frame(0);
+            document.addEventListener('keydown', event => { if (event.key === 'Delete') leakedDeletes++; });
+            stage.focus();
+            const deleteEvent = new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true });
+            stage.dispatchEvent(deleteEvent);
+            view.frame(16);
+            const deleteKeepsDrawing = deleteEvent.defaultPrevented && leakedDeletes === 0 &&
+                editor.selection === null && frameRequests === 2 && drawn.length === 2 &&
+                drawn[0].includes(replacement.id) && !drawn[1].includes(replacement.id) &&
+                drawn[1].includes(layout.items[0].id) && drawn[1].includes(layout.items[1].id);
+            const postDelete = window.createItem('spectrum');
+            layout.items.unshift(postDelete); editor.selection = postDelete.id; editor.render();
+            const notes = window.createItem('notes');
+            layout.items.push(notes); editor.selection = notes.id; editor.render();
+            const noteRow = label => [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(field => field.querySelector('label')?.textContent === label);
+            const lowRow = noteRow('Lowest note'), highRow = noteRow('Highest note');
+            const lowSlider = lowRow.querySelector('input'), highSlider = highRow.querySelector('input');
+            const noteRangeInitial = lowSlider.type === 'range' && highSlider.type === 'range' &&
+                lowSlider.min === '21' && lowSlider.max === '108' && lowSlider.step === '1' &&
+                lowRow.querySelector('output').textContent === 'E1' &&
+                highRow.querySelector('output').textContent === 'G6' &&
+                lowRow.getBoundingClientRect().height === 26 &&
+                highRow.getBoundingClientRect().top - lowRow.getBoundingClientRect().top === 30;
+            lowSlider.value = '100'; lowSlider.dispatchEvent(new Event('input', { bubbles: true }));
+            const noteRangeUp = notes.params.mn === 100 && notes.params.mx === 100 &&
+                lowRow.querySelector('output').textContent === 'E7' &&
+                highRow.querySelector('output').textContent === 'E7';
+            highSlider.value = '21'; highSlider.dispatchEvent(new Event('input', { bubbles: true }));
+            const noteRangeDown = notes.params.mn === 21 && notes.params.mx === 21 &&
+                lowRow.querySelector('output').textContent === 'A0' &&
+                highRow.querySelector('output').textContent === 'A0' &&
+                lowSlider.isConnected && highSlider.isConnected;
+            notes.params.mn = 28; notes.params.mx = 91; editor.render();
+            window.__notesSliderTest = { editor, notes };
+            const keyboard = [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(field => field.querySelector('label')?.textContent === 'Keyboard');
+            const notesKeyboardDefault = notes.params.kb === false && keyboard.querySelector('input').checked === false;
+            keyboard.querySelector('label').click();
+            const notesKeyboardSaved = notes.params.kb === true;
+            const dividerItem = layout.items[0];
+            dividerItem.effects = ['glow', 'opacity'].map(type => window.normalizeEffect({ type }, 'item'));
+            editor.selection = dividerItem.id; editor.render();
+            const effectHeaders = [...editor.root.querySelectorAll('.visualizer-effect-heading')];
+            const nextDivider = {
+                occupied: effectHeaders[1].getBoundingClientRect().top -
+                    effectHeaders[0].parentElement.getBoundingClientRect().bottom,
+                lineFromStart: effectHeaders[1].parentElement.getBoundingClientRect().top + .5 -
+                    effectHeaders[0].parentElement.getBoundingClientRect().bottom
+            };
+            const beforeSideDrag = { ...dividerItem.rect };
+            const north = editor.overlay.querySelector('.visualizer-handle.n');
+            const northBox = north.getBoundingClientRect();
+            stage.setPointerCapture = () => {};
+            north.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1,
+                clientX: (northBox.left + northBox.right) / 2, clientY: (northBox.top + northBox.bottom) / 2 }));
+            stage.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1,
+                clientX: (northBox.left + northBox.right) / 2, clientY: (northBox.top + northBox.bottom) / 2 + 18 }));
+            stage.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+            const sideDrag = dividerItem.rect.y > beforeSideDrag.y &&
+                Math.abs(dividerItem.rect.y + dividerItem.rect.h - beforeSideDrag.y - beforeSideDrag.h) < 1e-9 &&
+                dividerItem.rect.x === beforeSideDrag.x && dividerItem.rect.w === beforeSideDrag.w &&
+                editor.dragging === null;
+            const titleItem = window.createItem('title');
+            layout.items.push(titleItem); editor.selection = titleItem.id; editor.render();
+            const textRows = [...editor.root.querySelectorAll('.visualizer-field')];
+            const fontRow = textRows.find(row => row.querySelector('select option[value="system-ui"]'));
+            const fontSelect = fontRow.querySelector('select');
+            const styleRow = editor.root.querySelector('.visualizer-style-row');
+            const styleButtons = [...styleRow.querySelectorAll('button')];
+            const fontChoices = [...fontSelect.options].map(option => option.value);
+            const fontRowPitch = fontRow.getBoundingClientRect().top - styleRow.getBoundingClientRect().top;
+            const styleGeometry = { rowHeight: styleRow.getBoundingClientRect().height,
+                buttonHeights: styleButtons.map(button => button.getBoundingClientRect().height),
+                sameLine: styleButtons.every(button => Math.abs(button.getBoundingClientRect().top - styleButtons[0].getBoundingClientRect().top) < .5),
+                fits: styleRow.scrollWidth <= styleRow.clientWidth + 1 };
+            const styleGroupLabel = [styleRow.querySelector('span')?.textContent,
+                styleRow.getAttribute('aria-label')];
+            const textStyleOrder = styleButtons.map(button => button.dataset.style);
+            const textStyleLabels = styleButtons.map(button => [button.title, button.getAttribute('aria-label')]);
+            const textStyleIcons = styleButtons.every(button => button.querySelector('svg[aria-hidden="true"]'));
+            const idleBorder = getComputedStyle(styleButtons[0]).borderColor;
+            fontSelect.value = 'Georgia, "Times New Roman", serif';
+            fontSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            for (const button of styleButtons) button.click();
+            const pressedAccent = getComputedStyle(styleButtons[0]).borderColor !== idleBorder;
+            const playerActive = document.createElement('button');
+            playerActive.className = 'player-button'; playerActive.dataset.active = 'true';
+            document.body.appendChild(playerActive);
+            const activeAppearance = element => {
+                const style = getComputedStyle(element);
+                return [style.backgroundImage, style.borderTopColor, style.color, style.boxShadow];
+            };
+            const styleMatchesPlayer = JSON.stringify(activeAppearance(styleButtons[0])) ===
+                JSON.stringify(activeAppearance(playerActive));
+            playerActive.remove();
+            const fontSaved = titleItem.style.fontFamily === fontSelect.value &&
+                titleItem.flipX && titleItem.flipY && titleItem.style.bold && titleItem.style.italic &&
+                styleButtons.every(button => button.getAttribute('aria-pressed') === 'true');
+            editor.render();
+            const textStyleRestored = [...editor.root.querySelectorAll('.visualizer-style-row button')]
+                .every(button => button.getAttribute('aria-pressed') === 'true');
+            editor.selection = notes.id; editor.render();
+            notes.palette.motion.mode = 'hue';
+            const savedStops = JSON.stringify(notes.palette.stops);
+            const paletteMode = () => [...editor.root.querySelectorAll('select')]
+                .find(select => select.querySelector('option[value="note-colors"]'));
+            const modeChoices = [...paletteMode().options].map(option => option.value);
+            const solidPicker = editor.root.querySelector('input[type="color"]');
+            const solidRow = solidPicker.closest('.visualizer-field');
+            const colorModeRow = paletteMode().closest('.visualizer-field');
+            const solidGeometry = [solidPicker.getBoundingClientRect().height,
+                solidRow.getBoundingClientRect().height,
+                solidRow.getBoundingClientRect().top - colorModeRow.getBoundingClientRect().top];
+            const solidDefault = paletteMode().value === 'solid' && solidPicker.value === '#40dfff' &&
+                !editor.root.querySelector('.visualizer-stop');
+            solidPicker.value = '#123456'; solidPicker.dispatchEvent(new Event('input', { bubbles: true }));
+            const solidSaved = notes.palette.color === '#123456';
+            const fixedChoice = paletteMode(); fixedChoice.value = 'note-colors';
+            fixedChoice.dispatchEvent(new Event('change', { bubbles: true }));
+            const fixedPalette = notes.palette.mode === 'note-colors' &&
+                !editor.root.querySelector('.visualizer-stop') &&
+                !editor.root.querySelector('.visualizer-radio[aria-label="Color mapping"]') &&
+                JSON.stringify(notes.palette.stops) === savedStops && notes.palette.motion.mode === 'hue';
+            const gradientChoice = paletteMode(); gradientChoice.value = 'gradient';
+            gradientChoice.dispatchEvent(new Event('change', { bubbles: true }));
+            const restoredPalette = notes.palette.mode === 'gradient' &&
+                !!editor.root.querySelector('.visualizer-stop') &&
+                !!editor.root.querySelector('.visualizer-radio[aria-label="Color mapping"]') &&
+                JSON.stringify(notes.palette.stops) === savedStops && notes.palette.motion.mode === 'hue';
+            const solidAgain = paletteMode(); solidAgain.value = 'solid';
+            solidAgain.dispatchEvent(new Event('change', { bubbles: true }));
+            const solidRestored = notes.palette.color === '#123456' &&
+                editor.root.querySelector('input[type="color"]')?.value === '#123456';
+            const chroma = window.createItem('chroma');
+            chroma.palette.mode = 'gradient';
+            layout.items.push(chroma); editor.selection = chroma.id; editor.render();
+            const chromaField = label => [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(field => field.querySelector('label')?.textContent === label);
+            const display = chromaField('Display').querySelector('select');
+            display.value = '1'; display.dispatchEvent(new Event('change', { bubbles: true }));
+            chromaField('Lowest Octave').querySelector('input').value = '8';
+            chromaField('Lowest Octave').querySelector('input').dispatchEvent(new Event('input', { bubbles: true }));
+            const raisedHigh = chroma.params.lo === 8 && chroma.params.hi === 8;
+            chromaField('Highest Octave').querySelector('input').value = '2';
+            chromaField('Highest Octave').querySelector('input').dispatchEvent(new Event('input', { bubbles: true }));
+            const chromaControls = chroma.params.dm === 1 && raisedHigh &&
+                chroma.params.lo === 2 && chroma.params.hi === 2 &&
+                !!editor.root.querySelector('.visualizer-radio[aria-label="Color mapping"]') &&
+                !chromaField('Input gain');
+            const styleByType = ['title', 'album', 'artist', 'spectrum', 'spectrogram', 'stereo', 'level-meter', 'notes', 'chroma']
+                .map(type => {
+                    const specimen = window.createItem(type);
+                    layout.items.push(specimen); editor.selection = specimen.id; editor.render();
+                    const buttons = [...editor.root.querySelectorAll('.visualizer-style-row button')];
+                    const order = buttons.map(button => button.dataset.style);
+                    const colorMode = [...editor.root.querySelectorAll('select')]
+                        .find(select => select.querySelector('option[value="solid"]'));
+                    const paletteChoices = [...colorMode.options].map(option => option.value);
+                    const picker = editor.root.querySelector('input[type="color"]');
+                    picker.value = '#abcdef'; picker.dispatchEvent(new Event('input', { bubbles: true }));
+                    const paletteSaved = specimen.palette.color === '#abcdef' &&
+                        specimen.palette.mode === 'solid';
+                    const meterFields = type === 'level-meter'
+                        ? [...editor.root.querySelector('.visualizer-section').querySelectorAll('.visualizer-field > label')]
+                            .map(label => label.textContent) : null;
+                    let spectrumOrientationSaved = null, spectrumQuantizeSaved = null;
+                    if (type === 'spectrum') {
+                        const spectrumField = label => [...editor.root.querySelectorAll('.visualizer-field')]
+                            .find(row => row.querySelector('label')?.textContent === label);
+                        const display = spectrumField('Display').querySelector('select');
+                        const quantize = spectrumField('Quantize').querySelector('input');
+                        const defaultQuantize = quantize.checked && quantize.disabled;
+                        display.value = 'bar'; display.dispatchEvent(new Event('change', { bubbles: true }));
+                        const enabledQuantize = !quantize.disabled;
+                        quantize.click();
+                        display.value = 'line'; display.dispatchEvent(new Event('change', { bubbles: true }));
+                        spectrumQuantizeSaved = defaultQuantize && enabledQuantize && quantize.disabled &&
+                            specimen.params.quantizeBars === false;
+                        const field = [...editor.root.querySelectorAll('.visualizer-field')]
+                            .find(row => row.querySelector('label')?.textContent === 'Orientation');
+                        const orientation = field.querySelector('select');
+                        const defaultHorizontal = orientation.value === 'horizontal';
+                        orientation.value = 'vertical'; orientation.dispatchEvent(new Event('change', { bubbles: true }));
+                        spectrumOrientationSaved = defaultHorizontal && specimen.params.orientation === 'vertical' &&
+                            specimen.params.sc === 'log-hq' && specimen.params.dm === 'line';
+                    }
+                    let meterSaved = null;
+                    if (type === 'level-meter') {
+                        const fields = [...editor.root.querySelectorAll('.visualizer-field')];
+                        const dbRange = fields.find(field => field.querySelector('label')?.textContent === 'DB Range').querySelector('input');
+                        const orientation = fields.find(field => field.querySelector('label')?.textContent === 'Orientation').querySelector('select');
+                        const levelValues = fields.find(field => field.querySelector('label')?.textContent === 'Level values').querySelector('input');
+                        dbRange.value = '-61'; dbRange.dispatchEvent(new Event('input', { bubbles: true }));
+                        orientation.value = 'vertical'; orientation.dispatchEvent(new Event('change', { bubbles: true }));
+                        levelValues.click();
+                        meterSaved = specimen.params.dr === -61 && specimen.params.orientation === 'vertical' && specimen.params.showLevelValues === true &&
+                            specimen.params.showAxisNumbers === false;
+                    }
+                    buttons[0].click(); buttons[1].click();
+                    const saved = specimen.flipX && specimen.flipY && buttons.slice(0, 2)
+                        .every(button => button.getAttribute('aria-pressed') === 'true');
+                    layout.items.pop();
+                    return { type, order, saved, paletteChoices, paletteSaved, meterFields, meterSaved,
+                        spectrumOrientationSaved, spectrumQuantizeSaved };
+                });
+            const levelMeterAvailable = !!editor.navigation.querySelector('.visualizer-navigation-add-row option[value="level-meter"]');
+            notes.palette.mode = 'gradient'; editor.selection = notes.id; editor.render();
+            return { fieldCount: fields.length, clipped, associated, sectionBorder, paneStyle, itemHeading,
+                itemHeaderAligned, longTitleFits, rowMetrics, themeDefaults, themeSaved, themeReset,
+                listInitial, listSelects, listStyle, leftMetrics, navControlMetrics, themeColorAlignment, gridLabelWorks, deleteKeepsDrawing, nestedPitch,
+                notesKeyboardDefault, notesKeyboardSaved, noteRangeInitial, noteRangeUp, noteRangeDown,
+                itemAddAligned, itemAdded, themeSolidColors, bounds,
+                fieldsets: root.querySelectorAll('fieldset').length,
+                pipelineClass: editor.root.classList.contains('plugin-parameter-ui'),
+                axes, motion: motionMode,
+                narrowRadio, effectDisabled, duplicateEnabled: !!editor.root.querySelector('.visualizer-effect-heading + .checkbox-row'),
+                presetGeometry, effectAddGeometry, dividerGeometry, nextDivider, sideDrag,
+                fontChoices, fontRowPitch, fontSaved, styleGeometry, textStyleOrder, textStyleLabels,
+                textStyleIcons, textStyleRestored, styleGroupLabel, pressedAccent, styleMatchesPlayer, styleByType,
+                levelMeterAvailable,
+                modeChoices, solidGeometry, solidDefault, solidSaved, solidRestored,
+                fixedPalette, restoredPalette, chromaControls,
+                effectRemoved, backgroundHeading,
+                actionStyle, itemActions, sentFront, sentBack, itemDeleted,
+                addStopIndented, stopRightEdges, stopColorAligned, stopColor: changedColor,
+                paletteColorMetric,
+                stopCount, changes: view.changes };
+        });
+        assert.ok(result.fieldCount > 10);
+        for (const button of [result.navControlMetrics.removeImage, result.navControlMetrics.resetTheme]) {
+            assert.ok(Math.abs(button.left - button.parentLeft) <= .5 &&
+                Math.abs(button.right - button.parentRight) <= .5, JSON.stringify(button));
+        }
+        for (const select of [result.navControlMetrics.aspectSelect, result.navControlMetrics.itemSelect]) {
+            assert.equal(select.height, result.navControlMetrics.standardSelect.height);
+            assert.equal(select.boxSizing, result.navControlMetrics.standardSelect.boxSizing);
+            assert.equal(select.minHeight, result.navControlMetrics.standardSelect.minHeight);
+            assert.equal(select.padding, result.navControlMetrics.standardSelect.padding);
+        }
+        for (const color of [result.navControlMetrics.color, result.paletteColorMetric]) {
+            assert.equal(color.width, 42);
+            assert.equal(color.height, 26);
+            assert.equal(color.border, '1px');
+            assert.equal(color.borderRadius, '4px');
+            assert.equal(color.padding, '2px');
+        }
+        assert.equal(result.leftMetrics.settingPitch, 30, JSON.stringify(result.leftMetrics));
+        assert.equal(result.leftMetrics.addHeight, 26, JSON.stringify(result.leftMetrics));
+        assert.equal(result.leftMetrics.qualityHeight, 26, JSON.stringify(result.leftMetrics));
+        assert.deepEqual(result.leftMetrics.qualityMargin, ['2px', '2px']);
+        assert.equal(result.leftMetrics.listPitch, 30, JSON.stringify(result.leftMetrics));
+        assert.equal(result.leftMetrics.fits && result.gridLabelWorks, true);
+        assert.ok(result.leftMetrics.addParts[1] >= 60, JSON.stringify(result.leftMetrics));
+        assert.deepEqual(result.clipped, []);
+        assert.equal(result.associated, true);
+        assert.equal(result.sectionBorder, 'none');
+        assert.equal(result.paneStyle.navBackground, result.paneStyle.pipelineBackground);
+        assert.equal(result.paneStyle.inspectorBackground, result.paneStyle.pipelineBackground);
+        assert.equal(result.paneStyle.navBorder, 'solid');
+        assert.equal(result.paneStyle.inspectorBorder, 'solid');
+        assert.ok(result.paneStyle.navPadding >= 10);
+        assert.equal(result.paneStyle.optionBackground, result.paneStyle.configBackground);
+        assert.equal(result.paneStyle.optionText, result.paneStyle.configText);
+        assert.notEqual(result.paneStyle.optionBackground, result.paneStyle.optionText);
+        assert.equal(result.itemHeading, '1. Spectrum');
+        assert.equal(result.itemHeaderAligned, true);
+        assert.equal(result.longTitleFits, true);
+        assert.equal(result.listInitial && result.listSelects, true);
+        assert.equal(result.listStyle.selectedBackground && result.listStyle.selectedAccent && result.listStyle.fits, true);
+        assert.equal(result.listStyle.itemHeight, 26);
+        assert.equal(result.deleteKeepsDrawing, true);
+        assert.equal(result.notesKeyboardDefault && result.notesKeyboardSaved, true);
+        assert.equal(result.noteRangeInitial && result.noteRangeUp && result.noteRangeDown, true);
+        assert.deepEqual(result.rowMetrics.visual, result.rowMetrics.reference);
+        assert.deepEqual(result.rowMetrics.referencePitch, [30, 30]);
+        assert.deepEqual(result.rowMetrics.collapsedPitch, [28, 28]);
+        assert.deepEqual(result.rowMetrics.visualPitch, result.rowMetrics.referencePitch);
+        assert.equal(result.nestedPitch.effect, 30);
+        assert.ok(Math.abs(result.nestedPitch.palette - 30) <= 1, JSON.stringify(result.nestedPitch));
+        assert.equal(result.themeDefaults && result.themeSaved && result.themeReset, true);
+        assert.equal(result.themeColorAlignment, true);
+        assert.equal(result.itemAddAligned && result.itemAdded && result.themeSolidColors, true);
+        assert.equal(result.bounds.count, 1);
+        assert.equal(result.bounds.pointerEvents, 'none');
+        assert.equal(result.bounds.hitTestClear, true);
+        assert.equal(result.bounds.handles, 8);
+        assert.equal(result.bounds.sidePlacement, true);
+        assert.equal(result.sideDrag, true);
+        assert.equal(result.fontChoices.length, 9);
+        assert.equal(result.fontRowPitch, 30);
+        assert.equal(result.fontSaved, true);
+        assert.deepEqual(result.textStyleOrder, ['flipX', 'flipY', 'bold', 'italic']);
+        assert.deepEqual(result.textStyleLabels, [['Flip horizontally', 'Flip horizontally'],
+            ['Flip vertically', 'Flip vertically'], ['Bold', 'Bold'], ['Italic', 'Italic']]);
+        assert.equal(result.textStyleIcons && result.textStyleRestored, true);
+        assert.deepEqual(result.styleGroupLabel, ['Style', 'Style']);
+        assert.equal(result.pressedAccent, true);
+        assert.equal(result.styleMatchesPlayer, true);
+        assert.equal(result.styleGeometry.rowHeight, 26);
+        assert.equal(result.styleGeometry.sameLine && result.styleGeometry.fits, true);
+        assert.deepEqual(result.styleGeometry.buttonHeights, [26, 26, 26, 26]);
+        for (const specimen of result.styleByType) {
+            assert.deepEqual(specimen.order, ['title', 'album', 'artist'].includes(specimen.type)
+                ? ['flipX', 'flipY', 'bold', 'italic'] : ['flipX', 'flipY']);
+            assert.equal(specimen.saved, true);
+            assert.deepEqual(specimen.paletteChoices,
+                ['spectrum', 'chroma'].includes(specimen.type)
+                    ? ['solid', 'gradient', 'note-colors', 'heatmap']
+                    : ['spectrogram', 'level-meter'].includes(specimen.type)
+                        ? ['solid', 'gradient', 'heatmap']
+                        : specimen.type === 'notes'
+                            ? ['solid', 'gradient', 'note-colors'] : ['solid', 'gradient']);
+            assert.equal(specimen.paletteSaved, true);
+            if (specimen.type === 'spectrum') {
+                assert.equal(specimen.spectrumOrientationSaved, true);
+                assert.equal(specimen.spectrumQuantizeSaved, true);
+            }
+            if (specimen.type === 'level-meter') {
+                assert.deepEqual(specimen.meterFields, ['Channel', 'DB Range', 'Orientation', 'Level values', 'Axes and grid', 'Axis labels and numbers']);
+                assert.equal(specimen.meterSaved, true);
+            }
+        }
+        assert.equal(result.levelMeterAvailable, true);
+        assert.deepEqual(result.modeChoices, ['solid', 'gradient', 'note-colors']);
+        assert.deepEqual(result.solidGeometry, [26, 26, 30]);
+        assert.equal(result.solidDefault && result.solidSaved && result.solidRestored &&
+            result.fixedPalette && result.restoredPalette && result.chromaControls, true);
+        assert.equal(result.fieldsets, 0);
+        assert.equal(result.pipelineClass, true);
+        assert.equal(result.axes, false);
+        assert.equal(result.motion, 'hue');
+        assert.equal(result.narrowRadio.wrapped, true, JSON.stringify(result.narrowRadio));
+        assert.equal(result.narrowRadio.indented, true);
+        assert.equal(result.narrowRadio.clipped, false, JSON.stringify(result.narrowRadio));
+        assert.equal(result.effectDisabled, true);
+        assert.equal(result.duplicateEnabled, false);
+        assert.ok(['sameLine', 'captionAligned', 'order', 'sameHeight', 'rightAligned', 'fits'].every(key => result.presetGeometry[key]), JSON.stringify(result.presetGeometry));
+        assert.ok(['sameLine', 'captionAligned', 'order', 'sameHeight', 'rightAligned', 'fits'].every(key => result.effectAddGeometry[key]), JSON.stringify(result.effectAddGeometry));
+        assert.ok(Math.abs(result.dividerGeometry.occupied - 30) <= .5 &&
+            Math.abs(result.dividerGeometry.lineFromStart - 15) <= .5,
+        JSON.stringify(result.dividerGeometry));
+        assert.ok(Math.abs(result.nextDivider.occupied - 30) <= .5 &&
+            Math.abs(result.nextDivider.lineFromStart - 15) <= .5,
+        JSON.stringify(result.nextDivider));
+        assert.equal(result.effectRemoved, true);
+        assert.equal(result.backgroundHeading, 'Background');
+        assert.deepEqual(result.actionStyle.map(action => action.className), ['move-up-button', 'move-down-button', 'delete-button']);
+        assert.ok(result.actionStyle.every(action => action.equal && action.svg), JSON.stringify(result.actionStyle));
+        assert.deepEqual(result.itemActions.map(action => action.className), ['move-down-button', 'move-up-button', 'delete-button']);
+        assert.deepEqual(result.itemActions.map(action => action.label), ['Send to back', 'Bring to front', 'Delete']);
+        assert.ok(result.itemActions.every(action => action.svg && action.width === 24 && action.height === 24));
+        assert.equal(result.sentFront && result.sentBack && result.itemDeleted, true);
+        assert.equal(result.addStopIndented, true);
+        assert.ok(Math.abs(result.stopRightEdges.remove - result.stopRightEdges.apply) <= .5,
+            JSON.stringify(result.stopRightEdges));
+        assert.ok(Math.abs(result.stopRightEdges.remove - result.stopRightEdges.select) <= .5,
+            JSON.stringify(result.stopRightEdges));
+        assert.equal(result.stopColorAligned, true);
+        assert.equal(result.stopColor, '#00ff00');
+        assert.equal(result.stopCount, 1);
+        assert.ok(result.changes >= 5);
+        await page.setViewportSize({ width: 1440, height: 760 });
+        const wideRadio = await page.evaluate(() => {
+            const group = [...document.querySelectorAll('.visualizer-radio')]
+                .find(element => element.getAttribute('aria-label') === 'Color motion');
+            const title = group.querySelector('.visualizer-radio-title').getBoundingClientRect();
+            const options = [...group.querySelectorAll('.radio-option')].map(option => option.getBoundingClientRect());
+            const navigation = document.querySelector('.visualizer-editor-navigation');
+            const fields = [...navigation.querySelector('.visualizer-section').querySelectorAll(':scope > .visualizer-field')];
+            const addSelect = navigation.querySelector('.visualizer-navigation-add-row select');
+            return { oneLine: options.every(option => Math.abs(option.top - options[0].top) < 1),
+                indented: options.every(option => option.left >= title.right - 1),
+                leftPitch: fields[1].getBoundingClientRect().top - fields[0].getBoundingClientRect().top,
+                addSelectWidth: addSelect.getBoundingClientRect().width,
+                navigationFits: navigation.scrollWidth <= navigation.clientWidth + 1 };
+        });
+        assert.equal(wideRadio.oneLine, true);
+        assert.equal(wideRadio.indented, true);
+        assert.equal(wideRadio.leftPitch, 30);
+        assert.ok(wideRadio.addSelectWidth >= 60 && wideRadio.navigationFits, JSON.stringify(wideRadio));
+        const sliderBox = await page.evaluate(() => {
+            const { editor, notes } = window.__notesSliderTest;
+            editor.selection = notes.id; editor.render();
+            const row = [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(field => field.querySelector('label')?.textContent === 'Lowest note');
+            const slider = row.querySelector('input');
+            window.__draggedNoteSlider = slider;
+            window.__noteInputCount = 0;
+            slider.addEventListener('input', () => window.__noteInputCount++);
+            const rect = slider.getBoundingClientRect();
+            return { left: rect.left, width: rect.width, y: rect.top + rect.height / 2 };
+        });
+        await page.mouse.move(sliderBox.left + sliderBox.width * .08, sliderBox.y);
+        await page.mouse.down();
+        await page.mouse.move(sliderBox.left + sliderBox.width * .6, sliderBox.y, { steps: 4 });
+        await page.mouse.move(sliderBox.left + sliderBox.width * .97, sliderBox.y, { steps: 4 });
+        await page.mouse.up();
+        const dragResult = await page.evaluate(() => {
+            const { editor, notes } = window.__notesSliderTest;
+            const highRow = [...editor.root.querySelectorAll('.visualizer-field')]
+                .find(field => field.querySelector('label')?.textContent === 'Highest note');
+            return { events: window.__noteInputCount, connected: window.__draggedNoteSlider.isConnected,
+                low: notes.params.mn, high: notes.params.mx,
+                highSlider: Number(highRow.querySelector('input').value),
+                highName: highRow.querySelector('output').textContent };
+        });
+        assert.ok(dragResult.events >= 2 && dragResult.connected && dragResult.low > 91 &&
+            dragResult.high === dragResult.low && dragResult.highSlider === dragResult.high &&
+            dragResult.highName.length >= 2, JSON.stringify(dragResult));
+    } finally {
+        await browser.close();
+    }
+});

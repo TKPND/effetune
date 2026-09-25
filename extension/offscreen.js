@@ -26,9 +26,20 @@ function publish() {
 }
 async function persist() { await runtimeRequest('saveSettings', { settings }); }
 
-async function setDecodeContext(sampleRate) {
+async function setDecodeContext(sampleRate, nextSettings = null) {
+    const candidate = new AudioContext(sampleRate ? { sampleRate } : {});
+    if (nextSettings) {
+        try {
+            await runtimeRequest('saveSettings', { settings: nextSettings });
+        } catch (error) {
+            try { await candidate.close(); } catch (closeError) {
+                console.error('Could not close the unused audio context:', closeError);
+            }
+            throw error;
+        }
+    }
     const previous = window.audioContext;
-    window.audioContext = new AudioContext(sampleRate ? { sampleRate } : {});
+    window.audioContext = candidate;
     await previous?.close();
 }
 
@@ -152,7 +163,9 @@ function synchronizeTelemetry() {
 
 function presetName(value) {
     if (typeof value !== 'string' || !value.trim() || value.length > 160) throw new Error('Enter a preset name.');
-    return value.trim();
+    const name = value.trim();
+    if (['__proto__', 'constructor', 'prototype'].includes(name)) throw new Error('Choose a different preset name.');
+    return name;
 }
 function selectedSession(args) {
     if (args.sessionId == null) return null;
@@ -164,10 +177,10 @@ function saveEditedPipeline(session, plugins) {
     if (session?.state.presetName) settings.presets[session.state.presetName] = { plugins: plugins.map(({ id, ...plugin }) => plugin) };
     else settings.plugins = plugins;
 }
-async function pipelineEdit(session, preset, { unbind = false } = {}) {
+async function pipelineEdit(session, preset, { unbind = false, updateSession = requestSession } = {}) {
     let plugins;
     if (session) {
-        await requestSession(session, 'setPipeline', { plugins: getPresetPluginStates(preset) });
+        await updateSession(session, 'setPipeline', { plugins: getPresetPluginStates(preset) });
         if (unbind) session.state.presetName = null;
         plugins = session.state.plugins;
     } else {
@@ -178,12 +191,12 @@ async function pipelineEdit(session, preset, { unbind = false } = {}) {
     saveEditedPipeline(session, plugins);
 }
 
-async function handle(command, args = {}, clientId = null) {
+async function handle(command, args = {}, clientId = null, updateSession = requestSession) {
     if (command === 'getState') return snapshot();
     if (command === 'readBackupPresets') return structuredClone(settings.presets);
     if (command === 'appendBackupPreset') {
         const name = presetName(args.name);
-        if (['__proto__', 'constructor', 'prototype'].includes(name) || Object.hasOwn(settings.presets, name)) {
+        if (Object.hasOwn(settings.presets, name)) {
             throw new Error('Choose a different preset name.');
         }
         const states = getPresetPluginStates(args.preset);
@@ -219,9 +232,9 @@ async function handle(command, args = {}, clientId = null) {
     else if (command === 'setSampleRate') {
         if (![null, 44100, 48000, 96000, 192000].includes(args.sampleRate)) throw new Error('Choose a supported sample rate.');
         if (args.sampleRate === settings.sampleRate) return snapshot();
-        await setDecodeContext(args.sampleRate);
-        settings.sampleRate = args.sampleRate;
-        await persist();
+        const nextSettings = { ...settings, sampleRate: args.sampleRate };
+        await setDecodeContext(args.sampleRate, nextSettings);
+        settings = nextSettings;
         await Promise.all([...sessions.values()].filter(session => isLive(session.state))
             .map(session => requestSession(session, 'rebuild', { sampleRate: args.sampleRate })));
         return publish();
@@ -230,7 +243,7 @@ async function handle(command, args = {}, clientId = null) {
         delete settings.presets[name];
         settings.rules = settings.rules.map(rule => rule.preset === name ? { ...rule, enabled: false } : rule);
         for (const session of sessions.values()) if (isLive(session.state) && session.state.presetName === name) {
-            await requestSession(session, 'setPipeline', { plugins: settings.plugins });
+            await updateSession(session, 'setPipeline', { plugins: settings.plugins });
             session.state.presetName = null;
         }
     } else {
@@ -250,13 +263,14 @@ async function handle(command, args = {}, clientId = null) {
             await requestSession(session, command, args);
             return publish();
         }
-        if (command === 'setPipeline') await pipelineEdit(session, { plugins: args.plugins });
+        if (command === 'setPipeline') await pipelineEdit(session, { plugins: args.plugins }, { updateSession });
         else if (command === 'applyPreset') {
             if (!Object.hasOwn(settings.presets, args.name)) throw new Error('The preset is no longer available.');
-            await pipelineEdit(session, settings.presets[args.name], { unbind: true });
+            await pipelineEdit(session, settings.presets[args.name], { unbind: true, updateSession });
         } else if (command === 'importPreset') {
-            await pipelineEdit(session, args.preset);
-            if (args.name) settings.presets[presetName(args.name)] = {
+            const name = args.name ? presetName(args.name) : null;
+            await pipelineEdit(session, args.preset, { updateSession });
+            if (name) settings.presets[name] = {
                 plugins: (session?.state.plugins || settings.plugins).map(({ id, ...plugin }) => plugin)
             };
         } else if (command === 'savePreset') settings.presets[presetName(args.name)] = {
@@ -264,7 +278,7 @@ async function handle(command, args = {}, clientId = null) {
         };
         else if (command === 'workletMessage') {
             if (session) {
-                await requestSession(session, command, args);
+                await updateSession(session, command, args);
                 if (args.message?.type !== 'updatePlugin') return snapshot();
                 saveEditedPipeline(session, session.state.plugins);
             } else {
@@ -285,6 +299,35 @@ async function handle(command, args = {}, clientId = null) {
     return publish();
 }
 
+async function editSettings(command, args, clientId) {
+    const previousSettings = settings;
+    const changedSessions = new Map();
+    settings = structuredClone(settings);
+    const updateSession = (session, operation, parameters) => {
+        if (!changedSessions.has(session)) changedSessions.set(session, {
+            plugins: session.state.plugins, presetName: session.state.presetName
+        });
+        return requestSession(session, operation, parameters);
+    };
+    try {
+        return await handle(command, args, clientId, updateSession);
+    } catch (reason) {
+        settings = previousSettings;
+        for (const [session, previous] of changedSessions) {
+            try {
+                await requestSession(session, 'setPipeline', { plugins: previous.plugins });
+            } catch (rollbackError) {
+                console.error('Could not restore the previous audio settings:', rollbackError);
+                await requestSession(session, 'stop');
+            } finally {
+                session.state.presetName = previous.presetName;
+            }
+        }
+        publish();
+        throw reason;
+    }
+}
+
 const ready = (async () => {
     settings = { ...settings, ...await runtimeRequest('loadSettings') };
     manager = await initializePluginModel();
@@ -292,7 +335,10 @@ const ready = (async () => {
     window.irLibraryService = (await getIrLibraryHost()).service;
 })();
 function enqueue(command, args, clientId) {
-    const result = queue.then(() => ready).then(() => handle(command, args, clientId));
+    const editsSettings = ['setRules', 'deletePreset', 'setPipeline', 'applyPreset', 'importPreset', 'savePreset'].includes(command) ||
+        (command === 'workletMessage' && args?.message?.type === 'updatePlugin');
+    const result = queue.then(() => ready).then(() => editsSettings
+        ? editSettings(command, args, clientId) : handle(command, args, clientId));
     queue = result.catch(() => {});
     return result;
 }

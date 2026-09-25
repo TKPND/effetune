@@ -1113,7 +1113,7 @@ test('Room EQ graph hover dots each curve and reads it out beside the legend', (
         dispose() {}
     };
     const response = svgStub(400, 200);
-    response.getBoundingClientRect = () => ({ left: 0, top: 0 });
+    response.getBoundingClientRect = () => ({ left: 20, top: 0, width: 600, height: 300 });
     const curve = context.document.createElementNS();
     curve.setAttribute('class', 'room-eq-phase-before');
     curve.setAttribute('d', 'M 0.00,100.00 L 400.00,50.00');
@@ -1132,7 +1132,7 @@ test('Room EQ graph hover dots each curve and reads it out beside the legend', (
         ]
     };
 
-    plugin._updateResponseHover({ clientX: 200 });
+    plugin._updateResponseHover({ clientX: 320 });
 
     assert.equal(hoverOverlay.children.length, 1);
     assert.equal(hoverOverlay.children[0].attributes.class, 'room-eq-hover-dot');

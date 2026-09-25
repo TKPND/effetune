@@ -94,6 +94,26 @@ class OscilloscopePlugin extends PluginBase {
 
       this.observer = null;
     }
+
+    initializeDisplayState() {
+      this.displayTime = 0.01;
+      this.triggerMode = 'Auto';
+      this.triggerLevel = 0;
+      this.triggerEdge = 'Rising';
+      this.holdoff = 0.0001;
+      this.displayLevel = 0;
+      this.verticalOffset = 0;
+      this.waveformBuffer = new Float32Array(65536);
+      this.sampleRate = 44100;
+      this.scopeSnapshot = null;
+      this.frozenDisplayBuffer = null;
+      this.lastProcessedTriggerIndex = null;
+      this.accumulating = false;
+      this.accumulationBuffer = null;
+      this.accumulationBufferIndex = 0;
+      this.lastAccumulationBufferPos = 0;
+      this.displaySource = null;
+    }
   
     // clearBuffer: Clears the internal circular buffer and accumulation state.
     clearBuffer() {
@@ -669,6 +689,10 @@ class OscilloscopePlugin extends PluginBase {
     handleDspScopeTelemetry(frame) {
       const snapshot = this.parseDspScopeTelemetryFrame(frame);
       if (!snapshot || !this.enabled) return;
+      if (frame.source && frame.source !== this.displaySource) {
+        this.clearBuffer();
+        this.displaySource = frame.source;
+      }
       this.sampleRate = snapshot.sampleRate;
       this.scopeSnapshot = snapshot;
       this.frozenDisplayBuffer = snapshot.encoding === OSCILLOSCOPE_ENCODING_RAW
@@ -824,111 +848,127 @@ class OscilloscopePlugin extends PluginBase {
     drawWaveform() {
       const { ctx, canvas } = this;
       const { width, height } = canvas;
+      const options = this.displayOptions;
+      const theme = role => options?.themePalette?.get(role) ?? window.ThemePalette?.get(role) ?? '';
+      const label = (text, x, y) => (options?.textContext || ctx).fillText(text, x, y);
+      const showAxes = options?.showAxes !== false;
+      const showAxisNumbers = options?.showAxisNumbers !== false;
       const dpr = this.graphDpr || 1;
       const isNarrow = this.graphCssWidth < 500;
-  
+
       // Clear the canvas.
-      ctx.fillStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
-      ctx.fillRect(0, 0, width, height);
-  
+      if (options?.transparent) ctx.clearRect(0, 0, width, height);
+      else {
+        ctx.fillStyle = theme('graph-bg-deep');
+        ctx.fillRect(0, 0, width, height);
+      }
+
       // Left margin for vertical axis labels.
-      const leftMargin = (isNarrow ? 52 : 80) * dpr;
-  
+      const leftMargin = showAxisNumbers ? (isNarrow ? 52 : 80) * dpr : 0;
+
       // Vertical scaling.
       const factor = 1 / Math.pow(10, this.displayLevel / 20);
       // Compute centerY based on Vertical Offset.
       const centerY = height / 2 - (this.verticalOffset * height / 2);
-  
+
       // ---------------------------
       // Draw vertical grid and amplitude scale based on visible amplitude range.
       // ---------------------------
-      ctx.strokeStyle = (window.ThemePalette?.get('graph-grid-subtle') ?? '');
-      ctx.lineWidth = dpr;
-      const tickFontSize = (isNarrow ? 11 : 12) * dpr;
-      ctx.font = `${tickFontSize}px Arial`;
-      ctx.textAlign = 'right';
-      ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? '');
-      ctx.textBaseline = 'middle';
-  
-      // Compute visible amplitude range based on the mapping:
-      // y = centerY - (amp * factor) * (height/2)
-      // => amp = (centerY - y) / ((height/2) * factor)
-      const ampTop = centerY / ((height / 2) * factor);         // amplitude corresponding to y=0 (top)
-      const ampBottom = (centerY - height) / ((height / 2) * factor); // amplitude corresponding to y=height (bottom)
-      const visibleAmpMin = Math.min(ampTop, ampBottom);
-      const visibleAmpMax = Math.max(ampTop, ampBottom);
-  
-      const desiredTickCount = isNarrow ? 8 : 20;
-      const visibleAmpRange = visibleAmpMax - visibleAmpMin;
-      const rawStep = visibleAmpRange / desiredTickCount;
-      const exponent = Math.floor(Math.log10(rawStep));
-      const fraction = rawStep / Math.pow(10, exponent);
-      let niceFraction;
-      if (fraction < 1.5) {
-        niceFraction = 1;
-      } else if (fraction < 3) {
-        niceFraction = 2;
-      } else if (fraction < 7) {
-        niceFraction = 5;
-      } else {
-        niceFraction = 10;
-      }
-      const tickStep = niceFraction * Math.pow(10, exponent);
-  
-      // Calculate starting and ending tick values within the visible amplitude range.
-      const tickStart = Math.ceil(visibleAmpMin / tickStep) * tickStep;
-      const tickEnd = Math.floor(visibleAmpMax / tickStep) * tickStep;
-  
-      // Number of decimals for label formatting.
-      const decimals = exponent < 0 ? -exponent : 0;
-  
-      // Define a margin (in pixels) so that text drawn too near the top or bottom is omitted.
-      const textMargin = tickFontSize * 0.55;
-  
-      for (let tick = tickStart; tick <= tickEnd + tickStep * 0.5; tick += tickStep) {
-        const y = centerY - (tick * factor) * (height / 2);
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-        // Only draw text if it does not overlap the top or bottom edge.
-        if (y - textMargin >= 0 && y + textMargin <= height) {
-          ctx.fillText(tick.toFixed(decimals), leftMargin - (16 * dpr), y);
+      if (showAxes || showAxisNumbers) {
+        ctx.strokeStyle = theme('graph-grid-subtle');
+        ctx.lineWidth = dpr;
+        const tickFontSize = (isNarrow ? 11 : 12) * dpr;
+        ctx.font = `${tickFontSize}px Arial`;
+        ctx.textAlign = 'right';
+        ctx.fillStyle = theme('graph-label');
+        ctx.textBaseline = 'middle';
+
+        // Compute visible amplitude range based on the mapping:
+        // y = centerY - (amp * factor) * (height/2)
+        // => amp = (centerY - y) / ((height/2) * factor)
+        const ampTop = centerY / ((height / 2) * factor);         // amplitude corresponding to y=0 (top)
+        const ampBottom = (centerY - height) / ((height / 2) * factor); // amplitude corresponding to y=height (bottom)
+        const visibleAmpMin = Math.min(ampTop, ampBottom);
+        const visibleAmpMax = Math.max(ampTop, ampBottom);
+
+        const desiredTickCount = isNarrow ? 8 : 20;
+        const visibleAmpRange = visibleAmpMax - visibleAmpMin;
+        const rawStep = visibleAmpRange / desiredTickCount;
+        const exponent = Math.floor(Math.log10(rawStep));
+        const fraction = rawStep / Math.pow(10, exponent);
+        let niceFraction;
+        if (fraction < 1.5) {
+          niceFraction = 1;
+        } else if (fraction < 3) {
+          niceFraction = 2;
+        } else if (fraction < 7) {
+          niceFraction = 5;
+        } else {
+          niceFraction = 10;
         }
-      }
-  
-      // ---------------------------
-      // Draw horizontal grid and time scale.
-      // ---------------------------
-      ctx.strokeStyle = (window.ThemePalette?.get('graph-grid-subtle') ?? '');
-      ctx.lineWidth = dpr;
-      const timeDivisions = isNarrow ? 5 : 10;
-      for (let i = 0; i <= timeDivisions; i++) {
-        const x = leftMargin + ((width - leftMargin) * i) / timeDivisions;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-        if (i !== 0 && i !== timeDivisions) {
-          ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? '');
-          ctx.font = `${tickFontSize}px Arial`;
+        const tickStep = niceFraction * Math.pow(10, exponent);
+
+        // Calculate starting and ending tick values within the visible amplitude range.
+        const tickStart = Math.ceil(visibleAmpMin / tickStep) * tickStep;
+        const tickEnd = Math.floor(visibleAmpMax / tickStep) * tickStep;
+
+        // Number of decimals for label formatting.
+        const decimals = exponent < 0 ? -exponent : 0;
+
+        // Define a margin (in pixels) so that text drawn too near the top or bottom is omitted.
+        const textMargin = tickFontSize * 0.55;
+
+        for (let tick = tickStart; tick <= tickEnd + tickStep * 0.5; tick += tickStep) {
+          const y = centerY - (tick * factor) * (height / 2);
+          if (showAxes) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+          }
+          // Only draw text if it does not overlap the top or bottom edge.
+          if (showAxisNumbers && y - textMargin >= 0 && y + textMargin <= height) {
+            label(tick.toFixed(decimals), leftMargin - (16 * dpr), y);
+          }
+        }
+
+        // ---------------------------
+        // Draw horizontal grid and time scale.
+        // ---------------------------
+        ctx.strokeStyle = theme('graph-grid-subtle');
+        ctx.lineWidth = dpr;
+        const timeDivisions = isNarrow ? 5 : 10;
+        for (let i = 0; i <= timeDivisions; i++) {
+          const x = leftMargin + ((width - leftMargin) * i) / timeDivisions;
+          if (showAxes) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+          }
+          if (showAxisNumbers && i !== 0 && i !== timeDivisions) {
+            ctx.fillStyle = theme('graph-label');
+            ctx.font = `${tickFontSize}px Arial`;
+            ctx.textAlign = 'center';
+            const t_ms = (i / timeDivisions) * (this.displayTime * 1000);
+            label(t_ms.toFixed(2) + ' ms', x, height - ((isNarrow ? 30 : 40) * dpr));
+          }
+        }
+
+        // Draw axis labels.
+        if (showAxisNumbers) {
+          ctx.fillStyle = theme('text-primary');
+          ctx.font = `${(isNarrow ? 12 : 14) * dpr}px Arial`;
           ctx.textAlign = 'center';
-          const t_ms = (i / timeDivisions) * (this.displayTime * 1000);
-          ctx.fillText(t_ms.toFixed(2) + ' ms', x, height - ((isNarrow ? 30 : 40) * dpr));
+          label('Time (ms)', leftMargin + (width - leftMargin) / 2, height - (10 * dpr));
+          ctx.save();
+          ctx.translate((isNarrow ? 16 : 20) * dpr, height / 2);
+          ctx.rotate(-Math.PI / 2);
+          label('Amplitude', 0, 0);
+          ctx.restore();
         }
       }
-  
-      // Draw axis labels.
-      ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? '');
-      ctx.font = `${(isNarrow ? 12 : 14) * dpr}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('Time (ms)', leftMargin + (width - leftMargin) / 2, height - (10 * dpr));
-      ctx.save();
-      ctx.translate((isNarrow ? 16 : 20) * dpr, height / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText('Amplitude', 0, 0);
-      ctx.restore();
-  
+
       // ---------------------------
       // Draw the waveform if a frozen snapshot is available.
       // ---------------------------
@@ -936,25 +976,29 @@ class OscilloscopePlugin extends PluginBase {
       if (displayBuffer) {
         const sampleIndices = this.scopeSnapshot?.sampleIndices;
         const sampleCount = this.scopeSnapshot?.captureSampleCount || displayBuffer.length;
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-trace') ?? '');
-        ctx.lineWidth = 2 * dpr;
-        ctx.beginPath();
-        const denominator = sampleCount > 1 ? sampleCount - 1 : 1;
-        for (let i = 0; i < displayBuffer.length; i++) {
-          const sampleIndex = sampleIndices ? sampleIndices[i] : i;
-          const x = leftMargin + (sampleIndex / denominator) * (width - leftMargin);
-          const sample = displayBuffer[i];
-          const y = centerY - (sample * factor) * (height / 2);
-          if (i === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
+        const drawTrace = target => {
+          target.strokeStyle = options?.traceStyle?.(target) ?? theme('graph-trace');
+          target.lineWidth = 2 * dpr;
+          target.beginPath();
+          const denominator = sampleCount > 1 ? sampleCount - 1 : 1;
+          for (let i = 0; i < displayBuffer.length; i++) {
+            const sampleIndex = sampleIndices ? sampleIndices[i] : i;
+            const x = leftMargin + (sampleIndex / denominator) * (width - leftMargin);
+            const sample = displayBuffer[i];
+            const y = centerY - (sample * factor) * (height / 2);
+            if (i === 0) {
+              target.moveTo(x, y);
+            } else {
+              target.lineTo(x, y);
+            }
           }
-        }
-        ctx.stroke();
+          target.stroke();
+        };
+        if (options?.drawSignal) options.drawSignal(ctx, drawTrace);
+        else drawTrace(ctx);
       }
     }
-  
+
     // ---------------------------
     // cleanup: Cancel the animation and remove event listeners.
     // ---------------------------

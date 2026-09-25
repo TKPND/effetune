@@ -144,6 +144,7 @@ class StereoTelemetryFrame(TelemetryFrame):
 
 
 _ANALYZER_FRAMES = {
+    "ChromaSpiral": (4, (2,)),
     "LevelMeter": (1, (1,)),
     "NoteSpectrogram": (24, (3,)),
     "Oscilloscope": (3, (2,)),

@@ -1043,25 +1043,7 @@ class FifteenBandPEQPlugin extends PluginBase {
   }
 
   getGraphPlotArea(container = this.graphContainer) {
-    const margin = 20;
-    const rect = container?.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
-    const width = container?.clientWidth || rect.width;
-    const height = container?.clientHeight || rect.height;
-    const marginX = width > margin * 2 ? margin : 0;
-    const marginY = height > margin * 2 ? margin : 0;
-    const plotWidth = width - marginX * 2;
-    const plotHeight = height - marginY * 2;
-
-    return {
-      left: rect.left + marginX,
-      top: rect.top + marginY,
-      width: plotWidth > 0 ? plotWidth : width,
-      height: plotHeight > 0 ? plotHeight : height,
-      leftPercent: width > 0 ? (marginX / width) * 100 : 0,
-      topPercent: height > 0 ? (marginY / height) * 100 : 0,
-      widthPercent: width > 0 ? ((plotWidth > 0 ? plotWidth : width) / width) * 100 : 100,
-      heightPercent: height > 0 ? ((plotHeight > 0 ? plotHeight : height) / height) * 100 : 100
-    };
+    return GraphPlotArea.from(container);
   }
 
   updateMarkers() {

@@ -7,7 +7,7 @@ permalink: /dsp/effects/
 ---
 # Effects
 
-Browse all 106 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
+Browse all 107 semantic types registered in the v1 binding catalog. The list remains readable without JavaScript.
 
 <label for="effect-filter">Filter effects</label>
 <input id="effect-filter" type="search" placeholder="Name, type, category, seeded, or asset" data-dsp-effect-filter>
@@ -15,6 +15,7 @@ Browse all 106 semantic types registered in the v1 binding catalog. The list rem
 
 ## Analyzers
 
+- [Chroma Spiral](/dsp/effects/chroma-spiral/) (`ChromaSpiral`) — Passes audio through while exposing a high-resolution spectrum for note-and-octave display. <span data-effect-tags="analyzer  "></span>
 - [Level Meter](/dsp/effects/level-meter/) (`LevelMeter`) — Passes audio through while the host-side EffeTune app can display peak and RMS levels. <span data-effect-tags="analyzer  "></span>
 - [Note Spectrogram](/dsp/effects/note-spectrogram/) (`NoteSpectrogram`) — Passes audio through while exposing detected pitch confidence across the 88-key piano range at five positions per semitone. <span data-effect-tags="analyzer  "></span>
 - [Oscilloscope](/dsp/effects/oscilloscope/) (`Oscilloscope`) — Passes audio through while the host-side EffeTune app can display its waveform. <span data-effect-tags="analyzer  "></span>

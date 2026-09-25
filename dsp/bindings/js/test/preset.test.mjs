@@ -109,6 +109,41 @@ test('legacy Pitch Meter validates and discards its display layout', () => {
   }), ValidationError);
 });
 
+test('legacy analyzer color and Stereo Meter gain are validated and discarded', () => {
+  const effects = [
+    { name: 'Pitch Meter', parameters: { rf: 442, cl: 'Rainbow' }, expected: { referenceA4: 442 } },
+    { name: 'Spectrum Analyzer', parameters: { pt: 10, cl: 'Heatmap' }, expected: { points: 10 } },
+    { name: 'Spectrogram', parameters: { dr: -90, cl: 'Normal' }, expected: { dBRange: -90 } },
+    { name: 'Stereo Meter', parameters: { wt: 0.2, gn: 12.5 }, expected: { windowTime: 0.2 } }
+  ];
+  for (const preset of [
+    { pipeline: effects.map(({ name, parameters }) => ({ name, parameters })) },
+    { plugins: effects.map(({ name, parameters }) => ({ nm: name, ...parameters })) }
+  ]) {
+    const { chain } = importLegacyPreset(preset);
+    for (const [index, { expected }] of effects.entries()) {
+      for (const [key, value] of Object.entries(expected)) {
+        assert.equal(chain[index].parameters[key], value);
+      }
+      assert.equal(Object.hasOwn(chain[index].parameters, 'cl'), false);
+      assert.equal(Object.hasOwn(chain[index].parameters, 'gn'), false);
+    }
+  }
+  for (const [name, parameters] of [
+    ['Pitch Meter', { cl: 'invalid' }],
+    ['Spectrum Analyzer', { cl: 1 }],
+    ['Spectrogram', { cl: 'Rainbow' }],
+    ['Stereo Meter', { gn: -1 }],
+    ['Stereo Meter', { gn: 25 }],
+    ['Stereo Meter', { gn: true }]
+  ]) {
+    assert.throws(() => importLegacyPreset({ pipeline: [{ name, parameters }] }), ValidationError);
+  }
+  assert.throws(() => importLegacyPreset({
+    pipeline: [{ name: 'Pitch Meter', parameters: { cl: 'Normal', mystery: 1 } }]
+  }), ValidationError);
+});
+
 test('legacy analyzer frequency scale maps Log (HQ) and rejects conflicting HQ state', () => {
   for (const name of ['Spectrum Analyzer', 'Spectrogram']) {
     for (const scale of ['log', 'linear']) {
@@ -186,6 +221,33 @@ test('legacy Spectrum Analyzer display mode is validated and discarded', () => {
     error => error instanceof ValidationError &&
       error.message.includes('Unsupported legacy parameter Spectrogram.dm')
   );
+});
+
+test('legacy Chroma Spiral display state is validated and discarded', () => {
+  for (const mode of [0, 1, 2]) {
+    const preset = importLegacyPreset({
+      pipeline: [{ name: 'Chroma Spiral', parameters: {
+        dm: mode, lo: 1, hi: 9, ft: 3, lr: 24, df: -60
+      } }]
+    });
+    assert.equal(preset.chain[0].type, 'ChromaSpiral');
+    assert.deepEqual(preset.chain[0].parameters, {});
+  }
+  const fractional = importLegacyPreset({
+    pipeline: [{ name: 'Chroma Spiral', parameters: { ft: -0.25, lr: 24.5, df: -60.5 } }]
+  });
+  assert.deepEqual(fractional.chain[0].parameters, {});
+  for (const parameters of [
+    { dm: true }, { dm: 3 }, { lo: 0 }, { lo: 9 }, { lo: 1.5 },
+    { hi: 0 }, { hi: 10 }, { hi: '7' },
+    { ft: true }, { ft: -6.1 }, { ft: 6.1 }, { ft: NaN },
+    { lr: false }, { lr: 5.9 }, { lr: 96.1 }, { lr: Infinity },
+    { df: '-60' }, { df: -120.1 }, { df: -23.9 }, { df: -Infinity }
+  ]) {
+    assert.throws(() => importLegacyPreset({
+      pipeline: [{ name: 'Chroma Spiral', parameters }]
+    }), ValidationError);
+  }
 });
 
 test('legacy importer rejects routing and channel values a serial chain cannot represent', () => {

@@ -6,9 +6,11 @@ lang: en
 
 # Version History
 
-### Version 2.11.0 (TBD, 2026)
-- Added Attack Tonal Balance, Bass Extender and Bass Management effects
+### Version 2.11.0 (Sep 25, 2026)
+- Added customizable Visualizer layouts and presets
+- Added Attack Tonal Balance, Bass Extender, Bass Management and Chroma Spiral effects
 - Enhanced the browser extension with multi-tab processing (up to 4), URL preset rules, sample rate selection, slide/sheet transitions, and improved mobile-width layout/controls
+- Added playback speed controls to the music player with pitch preservation
 - Added data backup and restore functionality
 - Various minor improvements
 

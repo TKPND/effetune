@@ -42,8 +42,8 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
 - Middle shows main frequencies (vocals, guitars, piano)
 - Right side shows high frequencies (cymbals, sparkle, air)
 - Higher peaks mean stronger presence of those frequencies
-- Darker green line shows the current sound
-- The brighter green line follows recent peaks and falls smoothly as they fade
+- The thicker line shows the current sound
+- The thinner line follows recent peaks and falls smoothly as they fade
 - In **Bar** display, each bar shows the strongest level in an equal-width portion of the display. **Log** and **Log (HQ)** use equal octave widths; **Linear** uses equal frequency widths.
 - The thin marker above a bar shows its recent peak and falls smoothly.
 - With **Log (HQ)**, nearby bass tones can appear as separate peaks. Their longer low-frequency measurement can take a little longer to settle or fade.
@@ -63,6 +63,7 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
   - Higher numbers: More frequency detail, with slower updates
   - Lower numbers: Quicker updates, with less frequency detail
   - With **Log (HQ)**, Points sets the short analysis window; a four-times-longer window improves low-frequency separation.
+- **Color** - **Normal** (default) keeps the theme’s graph colors. **Heatmap** colors higher levels more brightly, and **Note Colors** follows the note colors across the frequency axis. The choice applies to both Line and Bar displays. With **Bar** and **Note Colors**, each bar and its peak use one color based on the band’s center frequency.
 - **Frequency Scale** - **Log** gives low frequencies more display space. **Log (HQ)** adds a longer measurement for clearer separation of nearby bass frequencies while retaining the short measurement for higher frequencies. It uses more processing and low-frequency changes can take longer to appear or fade; it does not change the audio. **Linear** places equal frequency widths at equal intervals.
 - **Display** - Changes only how the spectrum looks; it does not change the analysis or audio.
   - **Line** (default): Shows the spectrum as continuous lines.

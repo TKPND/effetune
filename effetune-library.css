@@ -1584,6 +1584,10 @@ body:not(.layout-mobile) .library-paged-tracks .library-paged-row > .library-pag
   border-bottom: 1px solid var(--library-row-border);
 }
 
+body:not(.layout-mobile) .library-file-row {
+  grid-template-columns: 34px 34px minmax(0, 1fr) 58px 34px;
+}
+
 .library-paged-row.library-paged-entity-card {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;

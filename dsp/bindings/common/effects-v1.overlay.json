@@ -2,6 +2,13 @@
   "version": 1,
   "effects": [
     {
+      "type": "ChromaSpiral",
+      "internalType": "ChromaSpiralPlugin",
+      "telemetry": [
+        "spectrumHq"
+      ]
+    },
+    {
       "type": "LevelMeter",
       "internalType": "LevelMeterPlugin",
       "telemetry": [
@@ -1280,7 +1287,7 @@
     }
   ],
   "contractDigests": {
-    "publicCatalogSha256": "5aa43b67d131e45ead6b23301fe587bdd36c97fa22eec5e6eeb45f4e4d1724c5",
-    "privateLayoutSha256": "dcc0f7b37b351e1bf8e87084d9887d238b0179d45b78425a96d9823e66348d67"
+    "publicCatalogSha256": "7c47348c37106efbbae06ebf24d6222aecdb492522aa262f7b2743f67912e65a",
+    "privateLayoutSha256": "1cf050bd6c4cde57d4ccc236fef0dffbb9d64247ca9f8a2d16160faf7a7a1f26"
   }
 }

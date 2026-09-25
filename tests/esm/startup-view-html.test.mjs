@@ -31,6 +31,7 @@ function getEarlyStartupViewScript() {
 function runEarlyStartupViewScript({
   search = '',
   config = { startupView: 'library' },
+  historyState = null,
   electron = false,
   throwOnStorage = false
 } = {}) {
@@ -39,6 +40,7 @@ function runEarlyStartupViewScript({
   const stylesheets = [];
   const windowRef = {
     location: { search },
+    history: { state: historyState },
     localStorage: {
       getItem(key) {
         calls.push(['getItem', key]);
@@ -75,6 +77,30 @@ function runEarlyStartupViewScript({
 
   return { calls, classes, stylesheets };
 }
+
+test('effetune.html restores Visualizer unless the URL requests a pipeline', () => {
+  const config = { startupView: 'visualizer' };
+  assert.equal(runEarlyStartupViewScript({ config }).classes.has('view-visualizer'), true);
+  for (const search of ['?p=shared', '?dbt=shared', '?restorePipeline=transient']) {
+    assert.equal(runEarlyStartupViewScript({ config, search }).classes.has('view-visualizer'), false);
+  }
+});
+
+test('effetune.html distinguishes reflected reloads from explicit startup requests', () => {
+  for (const startupView of ['visualizer', 'library']) {
+    const config = { startupView };
+    for (const [search, historyState, expected] of [
+      ['?p=local', { effetuneReflectedPipeline: 'local', effetuneVisualizer: 1 }, true],
+      ['?p=shared', null, false],
+      ['?p=shared', { effetuneReflectedPipeline: 'local' }, false],
+      ['?p=local&dbt=shared', { effetuneReflectedPipeline: 'local' }, false],
+      ['?p=local&restorePipeline=transient', { effetuneReflectedPipeline: 'local' }, false]
+    ]) {
+      assert.equal(runEarlyStartupViewScript({ config, search, historyState }).classes.has(`view-${startupView}`),
+        expected, `${startupView}: ${search}`);
+    }
+  }
+});
 
 test('effetune.html applies the Web library startup class before the app module loads', () => {
   const webLibrary = runEarlyStartupViewScript();

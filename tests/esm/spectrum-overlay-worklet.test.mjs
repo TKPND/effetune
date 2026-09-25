@@ -58,9 +58,13 @@ function createBinding() {
   }
   const views = new Map([...pointers].map(([view, pointer]) => [pointer, view]));
   let nextInstance = 1;
+  let delayBuffers = [];
+  let delayPosition = 0;
+  let activeDelay = 0;
   return {
     calls,
     arena,
+    latencySamples: 0,
     memory: { buffer: arena.buffer },
     createEngine() { calls.push('createEngine'); return 1; },
     prepare() { calls.push('prepare'); return 0; },
@@ -75,7 +79,7 @@ function createBinding() {
     createInstance() { calls.push('createInstance'); return nextInstance++; },
     destroyInstance() { calls.push('destroyInstance'); },
     instanceSetTap() { return 0; },
-    instanceLatency() { return 0; },
+    instanceLatency() { return this.latencySamples; },
     instanceSetParams() { return 0; },
     pointerForArenaView(view) {
       for (const [arenaView, pointer] of pointers) {
@@ -91,7 +95,20 @@ function createBinding() {
     instanceProcess(_id, pointer, channels, frames) {
       calls.push('instanceProcess');
       const view = views.get(pointer);
-      for (let index = 0; index < channels * frames; index++) view[index] *= 0.5;
+      if (activeDelay !== this.latencySamples || delayBuffers.length !== channels) {
+        activeDelay = this.latencySamples;
+        delayBuffers = Array.from({ length: channels }, () => new Float32Array(activeDelay));
+        delayPosition = 0;
+      }
+      for (let frame = 0; frame < frames; frame++) {
+        for (let channel = 0; channel < channels; channel++) {
+          const index = channel * frames + frame;
+          const sample = view[index];
+          view[index] = 0.5 * (activeDelay ? delayBuffers[channel][delayPosition] : sample);
+          if (activeDelay) delayBuffers[channel][delayPosition] = sample;
+        }
+        if (activeDelay) delayPosition = (delayPosition + 1) % activeDelay;
+      }
       return 0;
     },
     pipelineConfigure() { calls.push('pipelineConfigure'); return 0; },
@@ -101,7 +118,11 @@ function createBinding() {
     lastTelemetryDroppedFrames: 0,
     checkMemoryBuffer() { return false; },
     close() { calls.push('close'); },
-    reset() { return 0; }
+    reset() {
+      for (const buffer of delayBuffers) buffer.fill(0);
+      delayPosition = 0;
+      return 0;
+    }
   };
 }
 
@@ -144,6 +165,7 @@ async function instantiateDspBinding() { return globalThis.__binding; }
       if (name === 'plugin-processor') ProcessorClass = constructor;
     }
   };
+  vm.runInNewContext(await fs.readFile(new URL('../../plugins/multires-spectrum.js', import.meta.url), 'utf8'), sandbox);
   vm.runInNewContext(injected, sandbox, { filename: processorPath });
   const processor = new ProcessorClass({
     processorOptions: { initialOutputChannelCount: 2, lowLatencyMode: false }
@@ -275,6 +297,95 @@ test('comparison spectrum tap captures input/output PCM and bypasses measurement
   let peak = 1;
   for (let index = 2; index < levels.length; index++) if (levels[index] > levels[peak]) peak = index;
   assert.ok(Math.abs(peak - Math.round(1000 * FFT_SIZE / 48000)) <= 1);
+});
+
+test('comparison aligns input to output across effect latency changes and processing resets', async () => {
+  const harness = await setupDspPerInstanceHarness(false);
+  await harness.send({ type: 'setSpectrumTap', pluginId: 7, enabled: true, mode: 'compare' });
+  const state = harness.processor.spectrumTapState.get(7);
+  for (const latency of [333, 97, 0]) {
+    harness.binding.latencySamples = latency;
+    await harness.send({ type: 'updatePlugin', plugin: pluginConfig() });
+    harness.posts.length = 0;
+    for (let block = 0; block < 32; block++) {
+      const input = Array.from({ length: 2 }, (_, channel) => Float32Array.from(
+        { length: BLOCK_SIZE }, (_, frame) =>
+          (channel + 1) * ((block * BLOCK_SIZE + frame) % 617) / 1234
+      ));
+      harness.process(input);
+    }
+    assert.equal(state.inputDelaySamples, latency);
+    assert.equal(spectrumMessages(harness).length, 2);
+    for (const { message } of spectrumMessages(harness)) {
+      for (let index = 0; index < FFT_SIZE; index++) {
+        assert.ok(Math.abs(message.inputBuffer[index] * 0.5 - message.outputBuffer[index]) < 1e-7,
+          `latency ${latency}, sample ${index}`);
+      }
+    }
+  }
+
+  harness.binding.latencySamples = 333;
+  await harness.send({ type: 'updatePlugin', plugin: pluginConfig() });
+  harness.process([new Float32Array(BLOCK_SIZE).fill(1), new Float32Array(BLOCK_SIZE).fill(1)]);
+  harness.processor.resetConfiguredProcessingState();
+  assert.equal(state.position, 0);
+  assert.ok(state.inputBuffer.every(value => value === 0));
+  assert.ok(state.outputBuffer.every(value => value === 0));
+  harness.posts.length = 0;
+  for (let block = 0; block < 16; block++) {
+    harness.process([new Float32Array(BLOCK_SIZE), new Float32Array(BLOCK_SIZE)]);
+  }
+  const resetMessage = spectrumMessages(harness).at(-1).message;
+  assert.ok(resetMessage.inputBuffer.every(value => value === 0));
+  assert.ok(resetMessage.outputBuffer.every(value => value === 0));
+});
+
+test('HQ comparison uses aligned continuous analysis and quality changes rebuild the tap', async () => {
+  const harness = await setupDspPerInstanceHarness(false);
+  harness.binding.latencySamples = 333;
+  await harness.send({ type: 'updatePlugin', plugin: pluginConfig() });
+  await harness.send({ type: 'setSpectrumTap', pluginId: 7, enabled: true, mode: 'compare', quality: 'hq' });
+  const hqState = harness.processor.spectrumTapState.get(7);
+  for (let block = 0; block < 320; block++) {
+    const input = Float32Array.from({ length: BLOCK_SIZE }, (_, frame) => {
+      const sample = block * BLOCK_SIZE + frame;
+      return 0.5 * (Math.sin(2 * Math.PI * 93.75 * sample / 48000) +
+        Math.sin(2 * Math.PI * 105.46875 * sample / 48000));
+    });
+    harness.process([input, input]);
+  }
+  const messages = spectrumMessages(harness);
+  assert.ok(messages.length > 5);
+  for (const { message, transfer } of messages) {
+    assert.equal(message.quality, 'hq');
+    assert.equal(message.inputSpectrum.captureEndSample, message.outputSpectrum.captureEndSample);
+    assert.equal(message.inputSpectrum.frameIndex, message.outputSpectrum.frameIndex);
+    assert.equal(transfer.length, 4);
+    assert.equal(transfer[0], message.outputSpectrum.current.buffer);
+    assert.equal('outputBuffer' in message, false);
+    for (let index = 0; index < message.inputSpectrum.validCellCount; index++) {
+      if (message.inputSpectrum.current[index] > -80) {
+        assert.ok(Math.abs(message.inputSpectrum.current[index] - message.outputSpectrum.current[index] -
+          20 * Math.log10(2)) < 0.01);
+      }
+    }
+  }
+  const current = messages.at(-1).message.outputSpectrum.current;
+  const at = frequency => current[Math.round(Math.log(frequency / 20) / Math.log(2000) * 2047)];
+  assert.ok(at(99.609375) < Math.min(at(93.75), at(105.46875)) - 12);
+
+  harness.processor.resetConfiguredProcessingState();
+  harness.posts.length = 0;
+  for (let block = 0; block < 16; block++) harness.process(sineBlock(block * BLOCK_SIZE));
+  assert.equal(spectrumMessages(harness).length, 0, 'HQ history warms again after reset');
+  await harness.send({ type: 'setSpectrumTap', pluginId: 7, enabled: true, mode: 'after', quality: 'hq' });
+  assert.equal(harness.processor.spectrumTapState.get(7).inputAnalyzer, null);
+  await harness.send({ type: 'setSpectrumTap', pluginId: 7, enabled: true, mode: 'compare', quality: 'normal' });
+  const normalState = harness.processor.spectrumTapState.get(7);
+  assert.notEqual(normalState, hqState);
+  assert.equal(normalState.outputAnalyzer, null);
+  for (let block = 0; block < 16; block++) harness.process(sineBlock(block * BLOCK_SIZE));
+  assert.equal(spectrumMessages(harness).at(-1).message.quality, 'normal');
 });
 
 test('After mode omits Before capture and live mode changes reset only the required buffers', async () => {

@@ -1208,6 +1208,7 @@ const ET_DSP_PIPELINE_HEADER_BYTES = 8;
 const ET_DSP_PIPELINE_NODE_BYTES = 12;
 const ET_DSP_PIPELINE_MAX_NODES = 128;
 const DISPLAY_ONLY_DSP_TYPES = new Set([
+    'ChromaSpiralPlugin',
     'LevelMeterPlugin',
     'NoteSpectrogramPlugin',
     'OscilloscopePlugin',
@@ -1351,6 +1352,10 @@ class PluginProcessor extends AudioWorkletProcessor {
         this.dspEnabledTypes = new Set();
         this.wasmKernels = new Map();
         this.wasmInstances = new Map();
+        this.visualizerInstances = new Map();
+        this.visualizerSources = [];
+        this.visualizerTapNeedsPump = false;
+        this.visualizerForceDryOutput = false;
         this.dspInstanceEpoch = 0;
         this.dspAssetCache = new Map();
         this.dspAssetStates = new Map();
@@ -1523,12 +1528,24 @@ class PluginProcessor extends AudioWorkletProcessor {
                     if (data.enabled) {
                         this.spectrumTaps.add(data.pluginId);
                         const mode = data.mode === 'compare' ? 'compare' : 'after';
+                        const quality = data.quality === 'hq' ? 'hq' : 'normal';
                         const state = this.spectrumTapState.get(data.pluginId);
-                        if (!state || state.mode !== mode) {
+                        if (!state || state.mode !== mode || state.quality !== quality) {
+                            const rate = this.dspSampleRate || globalThis.sampleRate;
                             this.spectrumTapState.set(data.pluginId, {
                                 mode,
+                                quality,
                                 inputBuffer: mode === 'compare' ? new Float32Array(4096) : null,
                                 outputBuffer: new Float32Array(4096),
+                                inputDelaySamples: 0,
+                                inputDelayLine: null,
+                                inputBlock: null,
+                                outputBlock: null,
+                                inputAnalyzer: quality === 'hq' && mode === 'compare'
+                                    ? new globalThis.MultiresSpectrum(rate, 4) : null,
+                                outputAnalyzer: quality === 'hq'
+                                    ? new globalThis.MultiresSpectrum(rate, 4) : null,
+                                analysisParameters: { pt: 12, hq: true, dr: -96, channelCount: 1, blockSize: 0 },
                                 position: 0
                             });
                         }
@@ -1596,8 +1613,13 @@ class PluginProcessor extends AudioWorkletProcessor {
                             .filter(type => !this.dspFailedTypes.has(type))
                     );
                     this.reconcileDspInstances();
+                    this.reconcileVisualizerInstances();
                     this.refreshDspPipeline();
                     this.publishWasmOnlyExecutionStates();
+                    break;
+                case 'setVisualizerSources':
+                    this.visualizerSources = Array.isArray(data.sources) ? data.sources : [];
+                    this.reconcileVisualizerInstances();
                     break;
                 case 'dspSetTelemetryRate':
                     if (typeof data.hz === 'number') {
@@ -1684,6 +1706,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                     this.publishWasmOnlyExecutionStates(true, true);
                     this.destroyAllDspInstances();
                     if (this.dspLive) this.dspBinding.reset();
+                    this.reconcileVisualizerInstances();
                     this.plugins = [];
                     this.pluginContexts.clear();
                     this.dspAssetCache.clear();
@@ -1911,6 +1934,15 @@ class PluginProcessor extends AudioWorkletProcessor {
         return this.dspBinding.resetInstance(wasmInstance.id) === 0;
     }
 
+    resetSpectrumTapState(tap) {
+        tap.inputBuffer?.fill(0);
+        tap.outputBuffer.fill(0);
+        tap.inputDelayLine?.reset();
+        tap.inputAnalyzer?.configure(12, false);
+        tap.outputAnalyzer?.configure(12, false);
+        tap.position = 0;
+    }
+
     resetConfiguredProcessingState(requestId = null) {
         let ok = true;
         let error = null;
@@ -1934,6 +1966,9 @@ class PluginProcessor extends AudioWorkletProcessor {
                 action.inputDelayLine?.reset();
             }
             this.dspLatencyPlan?.outputDelayLine?.reset();
+            for (const tap of this.spectrumTapState.values()) {
+                this.resetSpectrumTapState(tap);
+            }
             this.outputDelayLine?.reset();
         } catch (resetError) {
             ok = false;
@@ -2550,6 +2585,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                 () => new Uint8Array(ET_DSP_TELEMETRY_BYTES)
             );
             this.reconcileDspInstances();
+            this.reconcileVisualizerInstances();
             this.dspExecutionInitializing = false;
             this.refreshDspPipeline();
             this.publishWasmOnlyExecutionStates();
@@ -2666,6 +2702,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         this.dspLive = false;
         this.dspPipelineReady = false;
         this.wasmInstances.clear();
+        this.visualizerInstances.clear();
         this.dspPendingInstanceDestroy = [];
         this.dspEngineNeedsCleanup = true;
         this.installBufferPool(this.createLegacyBufferPool());
@@ -2719,8 +2756,65 @@ class PluginProcessor extends AudioWorkletProcessor {
             for (const entry of this.wasmInstances.values()) {
                 this.dspBinding.destroyInstance(entry.id);
             }
+            for (const entry of this.visualizerInstances.values()) {
+                this.dspBinding.destroyInstance(entry.id);
+            }
         }
         this.wasmInstances.clear();
+        this.visualizerInstances.clear();
+    }
+
+    reconcileVisualizerInstances() {
+        if (!this.dspLive) {
+            this.visualizerInstances.clear();
+            return;
+        }
+        const wanted = new Map();
+        for (const source of this.visualizerSources) {
+            if (!Number.isInteger(source.tapId) || source.tapId < 0xf0000000 ||
+                source.tapId > 0xffffffff || !(source.params instanceof Float32Array) ||
+                !this.dspEnabledTypes.has(source.type) || this.dspFailedTypes.has(source.type) ||
+                this.wasmKernels.get(source.type)?.paramsHash !== (source.paramsHash >>> 0)) continue;
+            wanted.set(source.tapId, { ...source,
+                gain: Number.isFinite(source.gain) && source.gain > 0 ? source.gain : 1 });
+        }
+        for (const [tapId, entry] of this.visualizerInstances) {
+            const source = wanted.get(tapId);
+            if (source && entry.type === source.type && entry.channel === source.channel &&
+                entry.gain === source.gain &&
+                entry.paramsHash === source.paramsHash &&
+                entry.params.length === source.params.length &&
+                entry.params.every((value, index) => value === source.params[index])) continue;
+            this.dspBinding.destroyInstance(entry.id);
+            this.visualizerInstances.delete(tapId);
+        }
+        for (const [tapId, source] of wanted) {
+            if (this.visualizerInstances.has(tapId)) continue;
+            const previousMemory = this.bufferPool.combined?.buffer;
+            let id = 0;
+            try {
+                id = this.dspBinding.createInstance(source.type);
+            } finally {
+                if (this.dspBinding.memory?.buffer !== previousMemory) this.adoptDspArena();
+            }
+            if (!id) continue;
+            if (this.dspBinding.instanceSetTap(id, tapId) !== 0 ||
+                this.dspBinding.instanceSetParams(id, source.params, source.paramsHash) !== 0) {
+                this.dspBinding.destroyInstance(id);
+                continue;
+            }
+            this.visualizerInstances.set(tapId, {
+                id, type: source.type, paramsHash: source.paramsHash,
+                params: source.params, channel: source.channel, gain: source.gain,
+                channels: source.channel === 'L' ? [0, 0] :
+                    source.channel === 'R' ? [1, 1] :
+                    source.channel == null ? [0, 1] :
+                    (['34', '56', '78', '910', '1112', '1314', '1516'].includes(source.channel)
+                        ? [Number(source.channel.slice(0, source.channel.length / 2)) - 1,
+                            Number(source.channel.slice(source.channel.length / 2)) - 1]
+                        : [Number(source.channel) - 1, Number(source.channel) - 1])
+            });
+        }
     }
 
     destroyDspInstance(pluginId) {
@@ -3851,6 +3945,9 @@ class PluginProcessor extends AudioWorkletProcessor {
     }
 
     applyOutputDelay(output, channelCount, frameCount) {
+        if (!this.visualizerForceDryOutput) {
+            this.captureVisualizerTap(output, channelCount, frameCount, this.currentFrame - frameCount);
+        }
         if (!this.outputDelayLine || this.outputDelaySamples === 0) return;
         const channels = output.length < channelCount ? output.length : channelCount;
         for (let channel = 0; channel < channels; channel++) {
@@ -4019,6 +4116,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         if (failures >= 3) {
             this.dspFailedTypes.add(plugin.type);
             this.dspEnabledTypes.delete(plugin.type);
+            this.reconcileVisualizerInstances();
             for (const candidate of this.plugins) {
                 if (candidate.type !== plugin.type) continue;
                 const candidateEntry = this.wasmInstances.get(candidate.id);
@@ -4036,8 +4134,10 @@ class PluginProcessor extends AudioWorkletProcessor {
     }
 
     pumpDspTelemetry(blockSize = 128) {
+        this.visualizerTapNeedsPump = false;
         if (!this.dspLive || this.dspPacketPool.length === 0 ||
-            (this.powerPolicy.enabled && !this.powerPolicy.uiTelemetryEnabled)) return;
+            (this.powerPolicy.enabled && !this.powerPolicy.uiTelemetryEnabled &&
+                this.visualizerInstances.size === 0)) return;
         const packetView = this.dspPacketPool.pop();
         try {
             const bytes = this.dspBinding.telemetryRead(packetView);
@@ -4097,7 +4197,8 @@ class PluginProcessor extends AudioWorkletProcessor {
     }
 
     prepareSpectrumAnalyzerContext(pluginConfig) {
-        if ((pluginConfig?.type === 'SpectrumAnalyzerPlugin' || pluginConfig?.type === 'SpectrogramPlugin') &&
+        if ((pluginConfig?.type === 'SpectrumAnalyzerPlugin' || pluginConfig?.type === 'SpectrogramPlugin' ||
+            pluginConfig?.type === 'ChromaSpiralPlugin') &&
             typeof globalThis.MultiresSpectrum === 'function') {
             if (!this.hqPacketPool) {
                 this.hqPacketPool = Array.from({ length: ET_DSP_PACKET_POOL_SIZE }, () => {
@@ -4111,7 +4212,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                 this.pluginContexts.set(pluginConfig.id, context);
             }
             globalThis.MultiresSpectrum.prepare(context, sampleRate,
-                pluginConfig.type === 'SpectrumAnalyzerPlugin' ? 4 : 5);
+                pluginConfig.type === 'SpectrogramPlugin' ? 5 : 4);
         }
     }
 
@@ -4129,6 +4230,44 @@ class PluginProcessor extends AudioWorkletProcessor {
         };
     }
 
+    captureVisualizerTap(output, channelCount, frameCount, blockStartFrame) {
+        if (!this.dspLive || this.visualizerInstances.size === 0 ||
+            frameCount > this.maxFrameCount) return;
+        const scratch = this.bufferPool?.stereo;
+        if (!scratch || scratch.length < 2 * frameCount) return;
+        const ptr = this.dspBinding.pointerForArenaView(scratch);
+        if (ptr === null) return;
+        for (const [tapId, entry] of this.visualizerInstances) {
+            const [left, right] = entry.channels;
+            const leftData = left >= 0 && left < channelCount ? output[left] : null;
+            const rightData = right >= 0 && right < channelCount ? output[right] : null;
+            const gain = entry.gain;
+            for (let frame = 0; frame < frameCount; frame++) {
+                scratch[frame] = (leftData?.[frame] || 0) * gain;
+                scratch[frameCount + frame] = (rightData?.[frame] || 0) * gain;
+            }
+            try {
+                const status = this.dspBinding.instanceProcess(entry.id, ptr, 2, frameCount,
+                    blockStartFrame / (this.dspSampleRate || globalThis.sampleRate));
+                if (status !== 0) {
+                    this.dspBinding.destroyInstance(entry.id);
+                    this.visualizerInstances.delete(tapId);
+                    this.reportDspFailure(`visualizer:${tapId}`, `status ${status}`);
+                }
+            } catch (error) {
+                this.failDspEngine('runtime', error?.message || String(error));
+                break;
+            }
+        }
+        this.visualizerTapNeedsPump = true;
+    }
+
+    hasSamePluginRouting(left, right) {
+        return left.id === right.id && left.type === right.type &&
+            left.enabled === right.enabled && left.inputBus === right.inputBus &&
+            left.outputBus === right.outputBus && left.channel === right.channel;
+    }
+
     updatePlugin(pluginConfig) {
         if (!pluginConfig) return;
         ++this.dspExecutionGeneration;
@@ -4138,12 +4277,13 @@ class PluginProcessor extends AudioWorkletProcessor {
                 pluginConfig,
                 this.plugins[index]
             );
+            const preserveLatencyHistory = this.hasSamePluginRouting(this.plugins[index], normalizedPlugin);
             this.dspPipelineReady = false;
             try {
                 this.plugins[index] = normalizedPlugin;
                 this.reconcileDspPluginSafely(normalizedPlugin);
             } finally {
-                this.refreshDspPipeline();
+                this.refreshDspPipeline(null, preserveLatencyHistory);
                 this.publishWasmOnlyExecutionStates();
             }
 
@@ -4159,6 +4299,10 @@ class PluginProcessor extends AudioWorkletProcessor {
     updatePlugins(pluginConfigs) {
         ++this.dspExecutionGeneration;
         const normalizedPlugins = pluginConfigs.map(p => this.normalizePluginConfig(p));
+        // Parameter updates retain queued audio; topology changes start new routes.
+        // The latency planner also checks each delay before reusing its history.
+        const preserveLatencyHistory = this.plugins.length === normalizedPlugins.length &&
+            this.plugins.every((plugin, index) => this.hasSamePluginRouting(plugin, normalizedPlugins[index]));
         this.dspPipelineReady = false;
         try {
             this.plugins = normalizedPlugins;
@@ -4170,7 +4314,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             }
             this.reconcileDspInstances();
         } finally {
-            this.refreshDspPipeline();
+            this.refreshDspPipeline(null, preserveLatencyHistory);
             this.publishWasmOnlyExecutionStates();
         }
         // Clear contexts for plugins that might have been removed?
@@ -4613,7 +4757,11 @@ class PluginProcessor extends AudioWorkletProcessor {
         power.counters.fullProcessQuanta++;
         if (runtime === 'wasm') power.counters.fullWasmProcessQuanta++;
         else if (runtime === 'js') power.counters.fullJsProcessQuanta++;
-        if (forceDryOutput) this._copyPowerInput(input, output);
+        if (forceDryOutput) {
+            this._copyPowerInput(input, output);
+            this.captureVisualizerTap(output, this.outputChannelCount, blockSize,
+                this.currentFrame - blockSize);
+        }
         const outputPower = this._measurePowerWithDcBlock(
             output,
             power.outputDcX,
@@ -4736,6 +4884,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         const blockSize = inputBlockSize || outputBlockSize || ET_DSP_DEFAULT_MAX_FRAMES;
         const startedAt = this.audioProcessingClockNow();
         const keepAlive = this.processPipeline(inputs, outputs, parameters);
+        if (this.visualizerTapNeedsPump) this.pumpDspTelemetry(blockSize);
         this.finishPipelineCpuMeasurement(startedAt, blockSize);
         return keepAlive;
     }
@@ -4900,6 +5049,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                 return true;
             } else if (directive === 'bypass-transport') {
                 this._copyPowerInput(input, output);
+                this.captureVisualizerTap(output, outputChannelCount, blockSize, currentFrame);
                 power.counters.bypassQuanta++;
                 power.skippedFrameCount += blockSize;
                 this.currentFrame += blockSize;
@@ -4913,6 +5063,7 @@ class PluginProcessor extends AudioWorkletProcessor {
         // path remains dry while master bypass is engaged, including the
         // automatic-monitoring arm and a monitoring-to-active wake block.
         const forceDryOutput = powerEnabled && this.masterBypass;
+        this.visualizerForceDryOutput = forceDryOutput;
 
         if (this.dspLive) {
             if (this.dspBinding.checkMemoryBuffer()) {
@@ -4999,6 +5150,7 @@ class PluginProcessor extends AudioWorkletProcessor {
             for (let channel = channelsToCopy; channel < numOutputChannels; channel++) {
                  output[channel].fill(0);
             }
+            this.captureVisualizerTap(output, outputChannelCount, blockSize, currentFrame);
 
             // IMPORTANT: Still need to advance the frame counter even when bypassed/sleeping
             this.currentFrame += blockSize;
@@ -5365,14 +5517,31 @@ class PluginProcessor extends AudioWorkletProcessor {
                 ? this.spectrumTapState.get(plugin.id)
                 : null;
             if (spectrumTap?.inputBuffer) {
+                const tapPosition = this.dspLatencyPlan?.tapPositions[plugin.id];
+                const delaySamples = tapPosition ? tapPosition.output - tapPosition.input : 0;
+                if (spectrumTap.inputDelaySamples !== delaySamples) {
+                    spectrumTap.inputDelaySamples = delaySamples;
+                    spectrumTap.inputDelayLine = delaySamples > 0
+                        ? new WorkletSampleDelayLine(1, delaySamples) : null;
+                    this.resetSpectrumTapState(spectrumTap);
+                }
+                if (spectrumTap.inputBlock?.length !== blockSize) {
+                    spectrumTap.inputBlock = new Float32Array(blockSize);
+                }
+                const inputBlock = spectrumTap.inputBlock;
                 const scale = 1 / numProcessingChannels;
-                let position = spectrumTap.position;
                 for (let frame = 0; frame < blockSize; frame++) {
                     let sum = processingBuffer[frame];
                     for (let channel = 1; channel < numProcessingChannels; channel++) {
                         sum += processingBuffer[channel * blockSize + frame];
                     }
-                    spectrumTap.inputBuffer[position] = sum * scale;
+                    inputBlock[frame] = sum * scale;
+                }
+                // Compare the same source interval despite the effect's processing latency.
+                spectrumTap.inputDelayLine?.processChannel(inputBlock, 0, blockSize, 0, delaySamples);
+                let position = spectrumTap.position;
+                for (let frame = 0; frame < blockSize; frame++) {
+                    spectrumTap.inputBuffer[position] = inputBlock[frame];
                     position = (position + 1) & 4095;
                 }
             }
@@ -5495,11 +5664,18 @@ class PluginProcessor extends AudioWorkletProcessor {
              if (!finalResultBuffer) continue; // Skip if result is invalid
 
              if (spectrumTap) {
+                 if (spectrumTap.quality === 'hq' && spectrumTap.outputBlock?.length !== blockSize) {
+                     spectrumTap.outputBlock = new Float32Array(blockSize);
+                 }
                  const scale = 1 / numProcessingChannels;
                  for (let frame = 0; frame < blockSize; frame++) {
                      let sum = finalResultBuffer[frame];
                      for (let channel = 1; channel < numProcessingChannels; channel++) {
                          sum += finalResultBuffer[channel * blockSize + frame];
+                     }
+                     if (spectrumTap.quality === 'hq') {
+                         spectrumTap.outputBlock[frame] = sum * scale;
+                         continue;
                      }
                      spectrumTap.outputBuffer[spectrumTap.position] = sum * scale;
                      spectrumTap.position = (spectrumTap.position + 1) & 4095;
@@ -5512,6 +5688,7 @@ class PluginProcessor extends AudioWorkletProcessor {
                              endFrame: globalThis.currentFrame + blockSize,
                              spectrumPluginId: plugin.id,
                              mode: spectrumTap.mode,
+                             quality: spectrumTap.quality,
                              outputBuffer,
                              bufferPosition: spectrumTap.position,
                              sampleRate,
@@ -5525,6 +5702,31 @@ class PluginProcessor extends AudioWorkletProcessor {
                          }
                          port.postMessage(message, transfer);
                      }
+                 }
+                 if (spectrumTap.quality === 'hq') {
+                     const parameters = spectrumTap.analysisParameters;
+                     parameters.blockSize = blockSize;
+                     const inputFrame = spectrumTap.inputAnalyzer?.process(spectrumTap.inputBlock, parameters);
+                     const outputFrame = spectrumTap.outputAnalyzer.process(spectrumTap.outputBlock, parameters);
+                     if (outputFrame && !(this.powerPolicy.enabled && !this.powerPolicy.uiTelemetryEnabled)) {
+                         const outputSpectrum = globalThis.MultiresSpectrum.decode(outputFrame, 4);
+                         const inputSpectrum = inputFrame ? globalThis.MultiresSpectrum.decode(inputFrame, 4) : null;
+                         const transfer = [outputSpectrum.current.buffer, outputSpectrum.peaks.buffer];
+                         if (inputSpectrum) transfer.push(inputSpectrum.current.buffer, inputSpectrum.peaks.buffer);
+                         port.postMessage({
+                             type: 'spectrumOverlay',
+                             endFrame: globalThis.currentFrame + blockSize,
+                             spectrumPluginId: plugin.id,
+                             mode: spectrumTap.mode,
+                             quality: spectrumTap.quality,
+                             outputSpectrum,
+                             inputSpectrum,
+                             sampleRate,
+                             time: currentTime
+                         }, transfer);
+                     }
+                     spectrumTap.inputAnalyzer?.release(inputFrame);
+                     spectrumTap.outputAnalyzer.release(outputFrame);
                  }
              }
 

@@ -1,0 +1,210 @@
+import { createDefaultLayout, normalizeLayout, layoutsEqual } from './visualizer-model.js';
+import { VisualizerPresetStore } from './visualizer-preset-store.js';
+import { VisualizerSources } from './visualizer-sources.js';
+import { VisualizerRenderer } from './visualizer-renderer.js';
+import { VisualizerEditor } from './visualizer-editor.js';
+
+export class VisualizerView {
+    constructor(uiManager) {
+        this.uiManager = uiManager;
+        this.layout = createDefaultLayout();
+        this.store = new VisualizerPresetStore({ onError: () => this.notice('visualizer.saveFailed', 'Your layout could not be saved. Check that browser storage is available and try again.') });
+        this.sources = new VisualizerSources(uiManager.audioManager);
+        this.currentPresetName = '';
+        this.quality = localStorage.getItem('effetune_visualizer_quality') || 'auto';
+        this.historyDepth = 0;
+        this.root = document.createElement('section');
+        this.root.id = 'visualizerView';
+        this.root.setAttribute('aria-label', 'Visualizer');
+        this.root.innerHTML = '<div class="visualizer-toolbar"><button type="button" class="visualizer-edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false" aria-hidden="true"><path d="m16 3 5 5L8 21H3v-5L16 3zm-3 3 5 5"/></svg><span>Edit</span></button><button type="button" class="visualizer-presets"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><span></span></button><label class="visualizer-quality-label"><span></span><select class="visualizer-quality"></select></label></div><div class="visualizer-workspace"><div class="visualizer-stage-host"><div class="visualizer-stage"><canvas></canvas><button type="button" class="visualizer-expand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button></div><p class="visualizer-status" role="status" hidden></p></div></div>';
+        const main = document.querySelector('.main-container');
+        main?.parentNode.insertBefore(this.root, main.nextSibling);
+        this.stageHost = this.root.querySelector('.visualizer-stage-host');
+        this.stage = this.root.querySelector('.visualizer-stage');
+        this.canvas = this.stage.querySelector('canvas');
+        this.status = this.root.querySelector('.visualizer-status');
+        this.renderer = new VisualizerRenderer(this.canvas);
+        this.editor = new VisualizerEditor(this);
+        const workspace = this.root.querySelector('.visualizer-workspace');
+        workspace.insertBefore(this.editor.navigation, this.stageHost);
+        workspace.appendChild(this.editor.root);
+        this.presetButton = this.root.querySelector('.visualizer-presets');
+        this.presetButton.querySelector('span').textContent = this.t('ui.title.visualizerPresets', 'Visualizer Presets');
+        this.presetButton.addEventListener('click', () => this.openPresets().catch(error => this.fail(error)));
+        this.editButton = this.root.querySelector('.visualizer-edit');
+        this.editButton.addEventListener('click', () => this.setEditing(!this.editor.open));
+        this.expandButton = this.root.querySelector('.visualizer-expand');
+        this.stageHost.appendChild(this.expandButton);
+        this.updateExpandButtonLabel();
+        this.expandButton.addEventListener('click', () => this.setExpanded(!this.expanded));
+        this.stage.addEventListener('pointermove', () => this.showControls());
+        this.stage.addEventListener('pointerdown', () => this.showControls());
+        this.stageHost.addEventListener('pointermove', () => this.showControls());
+        this.stageHost.addEventListener('pointerdown', () => this.showControls());
+        this.toolbar = this.root.querySelector('.visualizer-toolbar');
+        this.qualityLabel = this.root.querySelector('.visualizer-quality-label');
+        this.qualityLabel.querySelector('span').textContent = this.t('visualizer.quality', 'Quality');
+        const quality = this.qualityLabel.querySelector('select');
+        for (const value of ['auto', 'high', 'low']) {
+            const option = document.createElement('option'); option.value = value; option.textContent = this.t(`visualizer.quality.${value}`, value); quality.appendChild(option);
+        }
+        quality.value = this.quality;
+        quality.addEventListener('change', () => { this.quality = quality.value; localStorage.setItem('effetune_visualizer_quality', quality.value); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden) this.flush(); this.updateVisibility(); });
+        window.electronAPI?.onWindowVisibilityChanged?.(() => this.updateVisibility());
+        window.addEventListener('pagehide', () => this.flush());
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && this.expanded) { event.preventDefault(); event.stopPropagation(); this.setExpanded(false); }
+        }, true);
+        window.addEventListener('popstate', event => this.popState(event));
+        this.initialized = this.initialize();
+    }
+
+    t(key, fallback) { const value = this.uiManager.t(key); return value && value !== key ? value : fallback; }
+    notice(key, fallback) { this.status.textContent = this.t(key, fallback); this.status.hidden = false; this.noticeActive = true; }
+    fail(error) { console.error('Visualizer operation failed:', error); this.notice('visualizer.loadFailed', 'Visualizer could not be opened. Try again.'); }
+    async initialize() {
+        try {
+            const [saved, systems] = await Promise.all([this.store.loadCurrent(), this.store.loadSystemPresets()]);
+            this.systems = systems;
+            this.setLayout(saved || Object.values(systems['16:9'])[0]);
+        } catch (error) { this.fail(error); this.sources.setLayout(this.layout); }
+    }
+    setLayout(layout) {
+        this.layout = normalizeLayout(layout);
+        this.changed();
+        if (this.editor.open) this.editor.render();
+        this.editor.updateSelection();
+    }
+    changed() {
+        this.sources.setLayout(this.layout);
+        this.store.saveCurrent(this.layout);
+        this.stage.style.aspectRatio = this.layout.aspect.replace(':', '/');
+    }
+    flush() { void this.store.flushCurrent().catch(error => { console.error('Visualizer save failed:', error); this.notice('visualizer.saveFailed', 'Your layout could not be saved. Check that browser storage is available and try again.'); }); }
+    show() {
+        this.noticeActive = false;
+        if (this.uiManager.layoutMode?.isMobile && this.historyDepth === 0) {
+            this.previousMobileView ||= this.uiManager.mobileNav?.getCurrentView() || 'player';
+            const depth = history.state?.effetuneVisualizer;
+            if (depth === 1 || depth === 2) {
+                this.historyDepth = depth;
+                this.setExpanded(depth === 2, { fromHistory: true });
+            } else {
+                this.historyDepth = 1;
+                history.pushState({ ...history.state, effetuneVisualizer: 1 }, '');
+            }
+        }
+        this.updateVisibility(); this.showControls();
+    }
+    hide({ mini = false, fromHistory = false } = {}) {
+        this.setEditing(false);
+        this.setExpanded(false, { fromHistory: true });
+        this.visible = false;
+        clearTimeout(this.controlsTimer);
+        cancelAnimationFrame(this.frameRequest); this.frameRequest = null;
+        this.sources.setVisible(false);
+        if (!mini && this.historyDepth && !fromHistory) {
+            const depth = this.historyDepth; this.historyDepth = 0; this.ignorePopState = true; history.go(-depth);
+        }
+    }
+    setEditing(open) {
+        this.editor.setOpen(open);
+        if (open) this.editor.navigation.insertBefore(this.qualityLabel, this.editor.navigationContent);
+        else this.toolbar.appendChild(this.qualityLabel);
+        this.editButton.setAttribute('aria-pressed', String(open));
+    }
+    updateExpandButtonLabel() {
+        const label = this.expanded
+            ? this.t('visualizer.restore', 'Restore Visualizer size')
+            : this.t('visualizer.expand', 'Fill app window');
+        this.expandButton.title = label;
+        this.expandButton.setAttribute('aria-label', label);
+        this.expandButton.setAttribute('aria-pressed', String(!!this.expanded));
+    }
+    setExpanded(expanded, { fromHistory = false } = {}) {
+        if (this.expanded === expanded) return;
+        this.expanded = expanded;
+        document.body.classList.toggle('visualizer-expanded', expanded);
+        this.updateExpandButtonLabel();
+        if (expanded) {
+            this.setEditing(false);
+            if (this.uiManager.layoutMode?.isMobile && !fromHistory) { this.historyDepth++; history.pushState({ ...history.state, effetuneVisualizer: this.historyDepth }, ''); }
+        } else if (this.historyDepth > 1 && !fromHistory) {
+            this.historyDepth--; this.ignorePopState = true; history.back();
+        }
+        this.showControls();
+    }
+    prepareMiniPlayer() { this.setEditing(false); this.setExpanded(false); }
+    popState(event) {
+        if (this.ignorePopState) { this.ignorePopState = false; return; }
+        if (!document.body.classList.contains('view-visualizer')) return;
+        const depth = event.state?.effetuneVisualizer || 0;
+        this.historyDepth = depth;
+        if (depth === 1) this.setExpanded(false, { fromHistory: true });
+        else if (!depth) {
+            this.uiManager.hideVisualizerView({ fromHistory: true });
+            this.uiManager.mobileNav?.setView(this.previousMobileView === 'visualizer' ? 'player' : this.previousMobileView || 'player');
+        }
+    }
+    showControls() {
+        this.stageHost.classList.add('show-controls');
+        clearTimeout(this.controlsTimer);
+        this.controlsTimer = setTimeout(() => this.stageHost.classList.remove('show-controls'), 2500);
+    }
+    updateVisibility() {
+        const hostHidden = this.sources.hostHidden ?? this.uiManager.audioManager.powerPolicyController?.hostHidden;
+        const visible = document.body.classList.contains('view-visualizer') && !document.hidden && !hostHidden && !this.uiManager.isDoubleBlindActive();
+        this.visible = visible;
+        this.sources.setVisible(visible);
+        if (visible && !this.frameRequest) this.frameRequest = requestAnimationFrame(time => this.frame(time));
+        if (!visible && this.frameRequest) { cancelAnimationFrame(this.frameRequest); this.frameRequest = null; }
+    }
+    frame(milliseconds) {
+        this.frameRequest = null;
+        if (!this.visible) return;
+        const rect = this.stageHost.getBoundingClientRect();
+        const zoom = parseFloat(document.body.style.zoom) || 1;
+        const [aw, ah] = this.layout.aspect.split(':').map(Number), aspect = aw / ah;
+        const cover = this.expanded || document.body.classList.contains('layout-mini-player');
+        const availableWidth = rect.width / zoom, availableHeight = rect.height / zoom;
+        const width = cover ? Math.max(availableWidth, availableHeight * aspect) : Math.min(availableWidth, availableHeight * aspect);
+        const height = width / aspect;
+        this.stage.style.width = `${Math.max(1, width)}px`; this.stage.style.height = `${Math.max(1, height)}px`;
+        const dpr = Math.min(window.devicePixelRatio || 1, this.renderer.quality >= 3 ? 1 : 2);
+        const cw = Math.max(1, Math.round(width * dpr)), ch = Math.max(1, Math.round(height * dpr));
+        if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
+        const state = this.sources.getStatus();
+        if (state === 'ready') {
+            if (!this.noticeActive) this.status.hidden = true;
+            const player = this.uiManager.audioPlayer;
+            const snapshot = player?.stateManager?.getStateSnapshot();
+            const metadata = snapshot?.currentTrack ? player.mediaSessionManager?.buildMetadata(snapshot) : null;
+            this.renderer.draw(this.layout, this.sources, metadata, milliseconds / 1000, { editing: this.editor.open, quality: this.quality, pixelRatio: dpr });
+        } else {
+            this.canvas.getContext('2d').clearRect(0, 0, cw, ch);
+            this.status.hidden = false;
+            this.status.textContent = state === 'disabled' ? this.t('visualizer.disabled', 'Enable WebAssembly DSP in Config to use Visualizer.') : this.t('visualizer.unavailable', 'Visualizer is unavailable. Reload the app to try again.');
+        }
+        this.frameRequest = requestAnimationFrame(time => this.frame(time));
+    }
+    async openPresets() {
+        this.systems ||= await this.store.loadSystemPresets();
+        const groups = Object.entries(this.systems).map(([aspect, entries]) => ({ label: aspect, presets: Object.entries(entries).map(([name, layout]) => ({ id: `${aspect}/${name}`, label: name, layout })) }));
+        const all = groups.flatMap(group => group.presets);
+        const provider = {
+            getTitleKey: () => 'ui.title.visualizerPresets', getSystemPresetGroups: () => groups,
+            getActiveSystemPresetId: () => all.find(preset => layoutsEqual(preset.layout, this.layout))?.id || '',
+            getActiveUserPresetName: () => this.currentPresetName, getDefaultSaveName: () => this.currentPresetName,
+            getPresetContext: () => this,
+            listUserPresetNames: () => this.store.listUserPresetNames(),
+            applySystemPreset: id => { const preset = all.find(value => value.id === id); if (!preset) return false; this.setLayout(preset.layout); this.currentPresetName = ''; return true; },
+            applyUserPreset: async name => { const layout = await this.store.getUserPreset(name); if (!layout) return false; this.setLayout(layout); this.currentPresetName = name; return true; },
+            saveUserPreset: async name => { await this.store.saveUserPreset(name, this.layout); this.currentPresetName = name; return true; },
+            renameUserPreset: async (oldName, newName) => { const result = await this.store.renameUserPreset(oldName, newName); if (this.currentPresetName === oldName) this.currentPresetName = newName; return result; },
+            deleteUserPresets: async names => { const result = await this.store.deleteUserPresets(names); if (names.includes(this.currentPresetName)) this.currentPresetName = ''; return result; },
+            errorKeys: { save: 'error.failedToSavePreset', delete: 'error.failedToDeletePreset' }
+        };
+        return this.uiManager.pipelineManager.core.pluginPresetDialog.show(provider, this.presetButton);
+    }
+}

@@ -273,6 +273,9 @@ if((BUILD_TESTING AND NOT EMSCRIPTEN) OR ET_NATIVE_TEST_WARNING_CHECK)
   et_add_dsp_test(
     effetune_dsp_oscilloscope_tests SOURCES test/oscilloscope_frame_test.cpp)
   et_add_dsp_test(
+    effetune_dsp_chroma_spiral_tests
+    SOURCES plugins/analyzer/chroma_spiral/native_test.cpp)
+  et_add_dsp_test(
     effetune_dsp_spectrum_analyzer_tests
     SOURCES plugins/analyzer/spectrum_analyzer/native_test.cpp)
   et_add_dsp_test(

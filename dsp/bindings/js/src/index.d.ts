@@ -1,4 +1,5 @@
 export type {
+  ChromaSpiralOptions,
   LevelMeterOptions,
   NoteSpectrogramOptions,
   OscilloscopeOptions,
@@ -113,6 +114,7 @@ export type {
   WowFlutterOptions
 } from './generated-effects.js';
 export {
+  ChromaSpiral,
   LevelMeter,
   NoteSpectrogram,
   Oscilloscope,
@@ -222,6 +224,7 @@ export {
   VinylArtifacts,
   VinylSimulator,
   WowFlutter,
+  createChromaSpiral,
   createLevelMeter,
   createNoteSpectrogram,
   createOscilloscope,

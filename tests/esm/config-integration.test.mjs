@@ -847,6 +847,7 @@ test('showConfigDialog opens in Web and hides Electron-only settings', async () 
     assert.equal(harness.document.getElementById('start-min'), null);
     assert.equal(harness.document.getElementById('tray'), null);
     assert.equal(harness.document.getElementById('check-updates'), null);
+    assert.equal(harness.document.getElementById('hardware-acceleration'), null);
     assert.notEqual(harness.document.getElementById('power-saving-section'), null);
     assert.equal(harness.document.getElementById('power-mode-balanced').checked, true);
     assert.equal(harness.document.getElementById('power-silence-threshold').value, '-80');
@@ -869,7 +870,7 @@ test('showConfigDialog opens in Web and hides Electron-only settings', async () 
     assert.equal(initialLibraryStartupViewSelect.value, 'artists');
     assert.equal(initialLibraryStartupViewSelect.disabled, false);
     assert.deepEqual(initialLibraryStartupViewSelect.children.map(option => option.value), [
-      'tracks', 'albums', 'artists', 'genres', 'subfolders', 'folders', 'playlists'
+      'tracks', 'albums', 'artists', 'genres', 'subfolders', 'files', 'folders', 'playlists'
     ]);
     assert.equal(harness.document.getElementById('preset-select').value, 'WebPreset');
 
@@ -882,12 +883,18 @@ test('showConfigDialog opens in Web and hides Electron-only settings', async () 
     assert.equal(JSON.parse(localStorage.snapshot().effetune_app_config).startupView, 'effects');
     assert.equal(harness.document.getElementById('library-startup-view-select').disabled, true);
 
+    await harness.document.getElementById('startup-view-visualizer').dispatchEvent('change');
+    assert.equal(JSON.parse(localStorage.snapshot().effetune_app_config).startupView, 'visualizer');
+    assert.equal(harness.document.getElementById('startup-view-visualizer').checked, true);
+    assert.equal(harness.document.getElementById('startup-view-effects').checked, false);
+    assert.equal(harness.document.getElementById('library-startup-view-select').disabled, true);
+
     await harness.document.getElementById('startup-view-library').dispatchEvent('change');
     const libraryStartupViewSelect = harness.document.getElementById('library-startup-view-select');
     assert.equal(libraryStartupViewSelect.disabled, false);
-    libraryStartupViewSelect.value = 'playlists';
+    libraryStartupViewSelect.value = 'files';
     await libraryStartupViewSelect.dispatchEvent('change');
-    assert.equal(JSON.parse(localStorage.snapshot().effetune_app_config).libraryStartupView, 'playlists');
+    assert.equal(JSON.parse(localStorage.snapshot().effetune_app_config).libraryStartupView, 'files');
   });
 });
 
@@ -1199,6 +1206,7 @@ test('showConfigDialog renders settings, saves changes, and closes from the butt
       startMinimized: true,
       minimizeToTray: false,
       checkForUpdatesOnStartup: false,
+      hardwareAcceleration: false,
       language: 'ja',
       startupView: 'library',
       libraryStartupView: 'albums',
@@ -1236,6 +1244,7 @@ test('showConfigDialog renders settings, saves changes, and closes from the butt
     assert.equal(harness.document.getElementById('auto-launch').checked, true);
     assert.equal(harness.document.getElementById('start-min').checked, true);
     assert.equal(harness.document.getElementById('check-updates').checked, false);
+    assert.equal(harness.document.getElementById('hardware-acceleration').checked, false);
     assert.equal(harness.document.getElementById('startup-view-library').checked, true);
     assert.equal(harness.document.getElementById('library-startup-view-select').value, 'albums');
     assert.equal(harness.document.getElementById('library-startup-view-select').disabled, false);
@@ -1259,6 +1268,11 @@ test('showConfigDialog renders settings, saves changes, and closes from the butt
     const checkUpdates = harness.document.getElementById('check-updates');
     checkUpdates.checked = true;
     await checkUpdates.dispatchEvent('change');
+
+    const hardwareAcceleration = harness.document.getElementById('hardware-acceleration');
+    hardwareAcceleration.checked = true;
+    await hardwareAcceleration.dispatchEvent('change');
+    assert.equal(harness.window.appConfig.hardwareAcceleration, true);
 
     const pipelineDefault = harness.document.getElementById('pl-default');
     await pipelineDefault.dispatchEvent('change');
@@ -1614,6 +1628,49 @@ test('all locales include the Web power-saving settings copy', () => {
   assert.equal(japanese.includes(
     '最大省電力では、バックグラウンドの無音またはPlayerモードで音声入力が未使用の状態が設定時間続くと、EffeTuneは音声入力を停止します。Playerの再生は継続する場合があります。外部入力の信号が戻っても入力は自動再開されません。アプリを開いて「音声処理を再開」を選んでください。'
   ), true);
+});
+
+test('overlay spectrum settings persist and apply to the running display', async () => {
+  const applied = [];
+  const harness = createConfigHarness({
+    window: { SpectrumOverlay: { setSettings: settings => applied.push(settings) } }
+  });
+
+  await withGlobals({ window: harness.window, document: harness.document }, async () => {
+    await showConfigDialog(true, {});
+    const quality = harness.document.getElementById('spectrum-overlay-quality');
+    const display = harness.document.getElementById('spectrum-overlay-display');
+    assert.equal(harness.document.getElementById('spectrum-overlay-title').textContent,
+      'label:dialog.config.spectrumOverlay.title');
+    assert.equal(harness.document.getElementById('spectrum-overlay-quality-label').textContent,
+      'label:dialog.config.spectrumOverlay.quality');
+    assert.equal(harness.document.getElementById('spectrum-overlay-display-label').textContent,
+      'label:dialog.config.spectrumOverlay.display');
+    assert.equal(quality.value, 'normal');
+    assert.equal(display.value, 'instant');
+
+    quality.value = 'hq';
+    await quality.dispatchEvent('change');
+    display.value = 'peakHold';
+    await display.dispatchEvent('change');
+
+    assert.equal(harness.window.appConfig.spectrumOverlayQuality, 'hq');
+    assert.equal(harness.window.appConfig.spectrumOverlayPeakHold, true);
+    assert.deepEqual(applied, [
+      { quality: 'hq', peakHold: false },
+      { quality: 'hq', peakHold: true }
+    ]);
+  });
+});
+
+test('all locales include grouped overlay spectrum labels', () => {
+  for (const locale of ['en', 'ja', 'ar', 'es', 'fr', 'hi', 'ko', 'pt', 'ru', 'zh']) {
+    const source = readFileSync(new URL(`../../js/locales/${locale}.json5`, import.meta.url), 'utf8');
+    for (const key of ['title', 'quality', 'display']) {
+      assert.equal(source.includes(`"dialog.config.spectrumOverlay.${key}":`), true,
+        `${locale} is missing overlay spectrum ${key}`);
+    }
+  }
 });
 
 test('all locales include the Visual Sync setting copy', () => {

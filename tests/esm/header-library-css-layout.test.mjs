@@ -18,16 +18,16 @@ function getRule(css, selector) {
 
 test('desktop view switch buttons match neighboring header icon button size', () => {
   const css = readCss('../../effetune.css');
-  const pipelineButtonRule = getRule(css, '.effect-pipeline-button');
-  const libraryButtonRule = getRule(css, '.open-library-button');
+  const viewButtonRule = getRule(css, '.view-switch-button');
   const desktopSubtitleContainerRule = getRule(css, 'body:not(.layout-mobile) .subtitle-container');
+  const html = fs.readFileSync(new URL('../../effetune.html', import.meta.url), 'utf8');
 
-  assert.match(pipelineButtonRule, /width:\s*36px;/);
-  assert.match(pipelineButtonRule, /height:\s*36px;/);
-  assert.match(pipelineButtonRule, /padding:\s*8px;/);
-  assert.match(libraryButtonRule, /width:\s*36px;/);
-  assert.match(libraryButtonRule, /height:\s*36px;/);
-  assert.match(libraryButtonRule, /padding:\s*8px;/);
+  for (const id of ['effectPipelineButton', 'openLibraryButton', 'visualizerButton']) {
+    assert.match(html, new RegExp(`<button class="[^"]*\\bview-switch-button\\b[^"]*" id="${id}"`));
+  }
+  assert.match(viewButtonRule, /width:\s*36px;/);
+  assert.match(viewButtonRule, /height:\s*36px;/);
+  assert.match(viewButtonRule, /padding:\s*8px;/);
   assert.match(desktopSubtitleContainerRule, /height:\s*36px;/);
 });
 

@@ -516,6 +516,46 @@ class PresetAndAssetTests(unittest.TestCase):
                 }]
             })
 
+    def test_legacy_analyzer_color_and_stereo_gain_are_validated_and_discarded(self) -> None:
+        effects = (
+            ("Pitch Meter", {"rf": 442, "cl": "Rainbow"}, {"referenceA4": 442}),
+            ("Spectrum Analyzer", {"pt": 10, "cl": "Heatmap"}, {"points": 10}),
+            ("Spectrogram", {"dr": -90, "cl": "Normal"}, {"dBRange": -90}),
+            ("Stereo Meter", {"wt": 0.2, "gn": 12.5}, {"windowTime": 0.2}),
+        )
+        for preset in (
+            {"pipeline": [{"name": name, "parameters": parameters}
+                          for name, parameters, _ in effects]},
+            {"plugins": [{"nm": name, **parameters}
+                         for name, parameters, _ in effects]},
+        ):
+            with self.subTest(preset=preset):
+                document, _ = presets.import_legacy_preset(preset)
+                for entry, (_, _, expected) in zip(document["chain"], effects):
+                    for key, value in expected.items():
+                        self.assertEqual(entry["parameters"][key], value)
+                    self.assertNotIn("cl", entry["parameters"])
+                    self.assertNotIn("gn", entry["parameters"])
+        for name, parameters in (
+            ("Pitch Meter", {"cl": "invalid"}),
+            ("Spectrum Analyzer", {"cl": 1}),
+            ("Spectrogram", {"cl": "Rainbow"}),
+            ("Stereo Meter", {"gn": -1}),
+            ("Stereo Meter", {"gn": 25}),
+            ("Stereo Meter", {"gn": True}),
+        ):
+            with self.subTest(name=name, parameters=parameters):
+                with self.assertRaises(effetune.ValidationError):
+                    presets.import_legacy_preset({
+                        "pipeline": [{"name": name, "parameters": parameters}]
+                    })
+        with self.assertRaises(effetune.ValidationError):
+            presets.import_legacy_preset({
+                "pipeline": [{
+                    "name": "Pitch Meter", "parameters": {"cl": "Normal", "mystery": 1},
+                }]
+            })
+
     def test_legacy_analyzer_frequency_scale_maps_hq_and_rejects_conflicts(
         self,
     ) -> None:
@@ -649,6 +689,36 @@ class PresetAndAssetTests(unittest.TestCase):
             effetune.Chain.from_legacy_preset(
                 {"pipeline": [{"name": "Spectrogram", "parameters": {"dm": "bar"}}]}
             )
+
+    def test_legacy_chroma_spiral_display_state_is_validated_and_discarded(self) -> None:
+        for mode in (0, 1, 2):
+            with self.subTest(mode=mode):
+                chain, _ = effetune.Chain.from_legacy_preset(
+                    {"pipeline": [{"name": "Chroma Spiral", "parameters": {
+                        "dm": mode, "lo": 1, "hi": 9,
+                        "ft": 3, "lr": 24, "df": -60,
+                    }}]}
+                )
+                self.assertEqual(chain.effects[0].type, "ChromaSpiral")
+                self.assertEqual(chain.effects[0].parameters, {})
+        chain, _ = effetune.Chain.from_legacy_preset(
+            {"pipeline": [{"name": "Chroma Spiral", "parameters": {
+                "ft": -0.25, "lr": 24.5, "df": -60.5,
+            }}]}
+        )
+        self.assertEqual(chain.effects[0].parameters, {})
+        for parameters in (
+            {"dm": True}, {"dm": 3}, {"lo": 0}, {"lo": 9},
+            {"lo": 1.5}, {"hi": 0}, {"hi": 10}, {"hi": "7"},
+            {"ft": True}, {"ft": -6.1}, {"ft": 6.1}, {"ft": math.nan},
+            {"lr": False}, {"lr": 5.9}, {"lr": 96.1}, {"lr": math.inf},
+            {"df": "-60"}, {"df": -120.1}, {"df": -23.9}, {"df": -math.inf},
+        ):
+            with self.subTest(parameters=parameters):
+                with self.assertRaises(effetune.ValidationError):
+                    effetune.Chain.from_legacy_preset(
+                        {"pipeline": [{"name": "Chroma Spiral", "parameters": parameters}]}
+                    )
 
     def test_legacy_null_channel_preserves_stereo_and_unsupported_routing_fails(self) -> None:
         chain, _ = effetune.Chain.from_legacy_preset(

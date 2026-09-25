@@ -35,6 +35,11 @@ function phaseSelectAge(params, sampleRate, execution) {
     return size / 2 + size / 4;
 }
 const rules = {
+    ChromaSpiralPlugin: rule((p, rate, execution) => {
+        let pt = 8;
+        while (pt < 14 && rate / (4 * (1 << pt)) > 1.5) pt++;
+        return spectrumAge({ pt, sc: 'log-hq' }, rate, execution, true);
+    }),
     LevelMeterPlugin: rule(),
     PhaseSelectEqPlugin: rule(phaseSelectAge, 'input'),
     SpectrumAnalyzerPlugin: rule((p, rate, execution) => spectrumAge(p, rate, execution, true)),
@@ -49,7 +54,8 @@ const rules = {
     }),
     OscilloscopePlugin: rule((p, rate) => clamp(Math.floor(rate * bounded(p.dt, 0.01, 0.001, 0.1)), 1, 65536) / 2),
     StereoMeterPlugin: rule((p, rate) => Math.ceil(rate * bounded(p.wt, 0.1, 0.01, 1)) / 2),
-    spectrumOverlay: rule(() => 2048)
+    spectrumOverlay: rule((params, rate) => params?.quality === 'hq'
+        ? spectrumAge({ pt: 12, sc: 'log-hq' }, rate, 'js', true) : 2048)
 };
 for (const name of [
     'CompressorPlugin', 'GatePlugin', 'ExpanderPlugin', 'BrickwallLimiterPlugin',

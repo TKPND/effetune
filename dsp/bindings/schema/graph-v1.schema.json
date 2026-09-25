@@ -91,6 +91,9 @@
     "effect": {
       "oneOf": [
         {
+          "$ref": "#/$defs/ChromaSpiral"
+        },
+        {
           "$ref": "#/$defs/LevelMeter"
         },
         {
@@ -409,6 +412,36 @@
           "$ref": "#/$defs/StereoBlend"
         }
       ]
+    },
+    "ChromaSpiral": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "ChromaSpiral"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "channel": {
+          "$ref": "#/$defs/channel"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      }
     },
     "LevelMeter": {
       "type": "object",

@@ -531,7 +531,8 @@ test('5Band FIR PEQ source keeps phase, taps, latency, and narrow-Q UI choices v
     pluginCss,
     /body\.layout-mobile .*\.five-band-fir-peq-slope-slider \{[^}]*--et-mobile-effect-slider-min-width/s
   );
-  assert.match(pluginCss, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(pluginCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(pluginCss, /\.five-band-fir-peq-settings \.radio-group \{\s*grid-column: 1 \/ -1/);
   assert.match(pluginCss, /flex: 0 0 90px/);
   assert.match(pluginCss, /body\.layout-mobile \.five-band-fir-peq-plugin-ui/);
 });

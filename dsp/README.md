@@ -448,7 +448,7 @@ exact payload size for the selected format version. The default format version
 is 1; `TAP_SCOPE_SNAPSHOT` (type 3), `TAP_STEREO_FIELD` (type 6), and
 `TAP_AM_RADIO_SIMULATOR` (type 17) use version 2. `TAP_NOTE_SPECTROGRAM`
 (type 24) uses version 3. `TAP_SPECTRUM` (type 4) and `TAP_SPECTROGRAM`
-(type 5) use version 2 when `highQualityLog` is enabled.
+(type 5) use version 2 for HQ output; Chroma Spiral always uses type 4 version 2.
 
 #### Frame Types
 
@@ -456,7 +456,8 @@ is 1; `TAP_SCOPE_SNAPSHOT` (type 3), `TAP_STEREO_FIELD` (type 6), and
   nonnegative float32 dB value and is shared by Compressor, Gate, Expander, and
   BrickwallLimiter.
 - **Types 4 and 5 — `TAP_SPECTRUM` and `TAP_SPECTROGRAM`.** Format version 2
-  is emitted only for `highQualityLog`. It has a 48-byte header with sample rate,
+  is emitted for the HQ spectrum and spectrogram paths, including Chroma Spiral's
+  type 4 spectrum. It has a 48-byte header with sample rate,
   FFT-size exponent, nominal hop, analysis generation, capture-end sample index,
   frame index, log-grid count and bounds, and the first valid grid index and count.
   Type 4 then carries current and peak-held float32 dBFS values for every grid cell;

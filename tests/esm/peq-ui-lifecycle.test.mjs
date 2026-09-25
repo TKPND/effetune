@@ -412,6 +412,53 @@ test('FifteenBand PEQ aligns markers and drag with the inset SVG plot area', () 
   assertPeqUsesInsetPlotArea('../../plugins/eq/fifteen_band_peq.js', 'FifteenBandPEQPlugin', 15, 'fifteen-band-peq');
 });
 
+test('all PEQ handles reach the pointer at CSS zoom levels', () => {
+  const effects = [
+    ['../../plugins/eq/five_band_peq.js', 'FiveBandPEQPlugin'],
+    ['../../plugins/eq/fifteen_band_peq.js', 'FifteenBandPEQPlugin'],
+    ['../../plugins/eq/five_band_fir_peq.js', 'FiveBandFIRPEQPlugin'],
+    ['../../plugins/eq/group_delay_peq.js', 'GroupDelayPEQPlugin'],
+    ['../../plugins/eq/room_eq.js', 'RoomEqPlugin']
+  ];
+  for (const [path, name] of effects) {
+    const PluginClass = loadPeqClass(path, name, []);
+    const plugin = name === 'RoomEqPlugin'
+      ? PluginClass.createAdditionalEqEditor()
+      : Object.create(PluginClass.prototype);
+    plugin.graphContainer = {
+      clientWidth: 1000,
+      clientHeight: 500,
+      getBoundingClientRect() {
+        return { left: 100, top: 70, width: this.clientWidth * 1.5,
+          height: this.clientHeight * 1.5 };
+      }
+    };
+    const plot = plugin.getGraphPlotArea();
+    assert.equal(plot.left, 130, name);
+    assert.equal(plot.top, 100, name);
+    assert.equal(plot.width, 1440, name);
+    assert.equal(plot.height, 690, name);
+    assert.equal(plot.leftPercent, 2, name);
+    assert.equal(plot.widthPercent, 96, name);
+    plugin.activeDragMarker = 0;
+    plugin.hasMoved = true;
+    plugin.xToFreq = value => value;
+    plugin.yToGain = value => value;
+    plugin.yToDelay = value => value;
+    plugin._expandGraphScaleForDrag = () => false;
+    plugin.updateMarkers = () => {};
+    plugin.updateResponse = () => {};
+    plugin.setUIBandValues = () => {};
+    let bandValue;
+    plugin.setBand = (...args) => { bandValue = args; };
+    plugin.handleDragMove({ clientX: plot.left + plot.width / 2,
+      clientY: plot.top + plot.height / 4 });
+    assert.equal(bandValue[0], 0, name);
+    assert.equal(name === 'GroupDelayPEQPlugin' ? bandValue[1].frequency : bandValue[1], 50, name);
+    assert.equal(name === 'GroupDelayPEQPlugin' ? bandValue[1].delayMs : bandValue[2], 25, name);
+  }
+});
+
 test('FiveBand PEQ Shift-drag changes only frequency or gain', () => {
   assertPeqShiftAxisLock('../../plugins/eq/five_band_peq.js', 'FiveBandPEQPlugin');
 });
@@ -421,28 +468,36 @@ test('FifteenBand PEQ Shift-drag changes only frequency or gain', () => {
 });
 
 test('FifteenBand PEQ resolves mobile graph taps to the nearest band without toggling enable state', () => {
-  const calls = [];
-  const PluginClass = loadPeqClass('../../plugins/eq/fifteen_band_peq.js', 'FifteenBandPEQPlugin', calls);
-  const plugin = new PluginClass();
-  plugin.uiCreated = false;
-  plugin.graphContainer = {
-    clientWidth: 375,
-    clientHeight: 281,
-    getBoundingClientRect() {
-      return { left: 10, top: 20, width: this.clientWidth, height: this.clientHeight };
-    }
-  };
+  for (const zoom of [0.75, 1, 1.5]) {
+    const calls = [];
+    const PluginClass = loadPeqClass('../../plugins/eq/fifteen_band_peq.js', 'FifteenBandPEQPlugin', calls);
+    const plugin = new PluginClass();
+    plugin.uiCreated = false;
+    plugin.graphContainer = {
+      clientWidth: 375,
+      clientHeight: 281,
+      getBoundingClientRect() {
+        return { left: 10, top: 20, width: this.clientWidth * zoom,
+          height: this.clientHeight * zoom };
+      }
+    };
 
-  const targetBand = 8;
-  const plotArea = plugin.getGraphPlotArea();
-  const clientX = plotArea.left + (plugin.freqToX(plugin[`f${targetBand}`]) / 100) * plotArea.width;
-  const clientY = plotArea.top + (plugin.gainToY(plugin[`g${targetBand}`]) / 100) * plotArea.height;
-  const enabledBefore = plugin[`e${targetBand}`];
-  const selectedBand = plugin.selectNearestBandFromGraphPoint(clientX, clientY);
+    const targetBand = 8;
+    const rect = plugin.graphContainer.getBoundingClientRect();
+    const plotArea = plugin.getGraphPlotArea();
+    const xPercent = plotArea.leftPercent +
+      plugin.freqToX(plugin[`f${targetBand}`]) / 100 * plotArea.widthPercent;
+    const yPercent = plotArea.topPercent +
+      plugin.gainToY(plugin[`g${targetBand}`]) / 100 * plotArea.heightPercent;
+    const clientX = rect.left + xPercent / 100 * rect.width;
+    const clientY = rect.top + yPercent / 100 * rect.height;
+    const enabledBefore = plugin[`e${targetBand}`];
+    const selectedBand = plugin.selectNearestBandFromGraphPoint(clientX, clientY);
 
-  assert.equal(selectedBand, targetBand);
-  assert.equal(plugin.currentBandIndex, targetBand);
-  assert.equal(plugin[`e${targetBand}`], enabledBefore);
+    assert.equal(selectedBand, targetBand, `zoom ${zoom}`);
+    assert.equal(plugin.currentBandIndex, targetBand);
+    assert.equal(plugin[`e${targetBand}`], enabledBefore);
+  }
 });
 
 test('FiveBand PEQ redraws markers and response when the graph is resized', () => {

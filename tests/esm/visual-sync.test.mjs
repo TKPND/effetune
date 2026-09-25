@@ -62,3 +62,12 @@ test('Phase Select EQ sync follows the input window and staged completion before
     sampleRate: 48000, outputTimestamp: { contextTime: 1, performanceTime: 1000 } });
   assert.ok(Math.abs(due - (1000 + 2048 / 48)) < 1e-10);
 });
+
+
+test('Chroma Spiral automatic HQ capture age matches fixed sample-rate contracts', () => {
+  for (const [rate, age] of [[44100, 20528], [48000, 20528], [88200, 41008], [96000, 41008], [192000, 41008]]) {
+    for (const execution of ['js', 'wasm']) {
+      assert.equal(rules.ChromaSpiralPlugin.generationFrames({}, rate, execution), age);
+    }
+  }
+});

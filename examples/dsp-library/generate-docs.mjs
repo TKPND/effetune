@@ -42,6 +42,7 @@ const categoryOrder = Object.freeze([
   'others'
 ]);
 const publicTelemetryTypes = new Set([
+  'ChromaSpiral',
   'LevelMeter',
   'NoteSpectrogram',
   'Oscilloscope',
@@ -997,7 +998,7 @@ function landingPage(catalog, version, convenienceExports) {
     '',
     'EffeTune DSP does not host VST/AU plugins, decode or encode audio in JavaScript, ' +
       'resample audio, call ffmpeg, or expose integrated-LUFS/true-peak measurements. ' +
-      'Seven analyzers expose opt-in decoded observations; all other catalog ' +
+      'Eight analyzers expose opt-in decoded observations; all other catalog ' +
       'telemetry remains metadata-only. ' +
       'MCP is planned only after its implementation and acceptance exist.',
     '',
@@ -2382,7 +2383,7 @@ integrated-LUFS/true-peak measurement.
 
 ## Analyzers and telemetry
 
-\`LevelMeter\`, \`NoteSpectrogram\`, \`Oscilloscope\`, \`PitchMeter\`,
+\`ChromaSpiral\`, \`LevelMeter\`, \`NoteSpectrogram\`, \`Oscilloscope\`, \`PitchMeter\`,
 \`SpectrumAnalyzer\`, \`Spectrogram\`, and \`StereoMeter\` expose decoded semantic observations in Python, JavaScript offline and
 streaming processing, and AudioWorklet. Telemetry is opt-in: the first callback or
 subscriber enables it and the last unsubscribe disables it. Long renders drain after

@@ -1,4 +1,4 @@
-const KIND_ORDER = ['pipeline', 'plugin', 'ir', 'measurement'];
+const KIND_ORDER = ['pipeline', 'plugin', 'visualizer', 'ir', 'measurement'];
 const RESTORE_BLOCKING_STATUSES = new Set(['missing', 'unavailable']);
 
 function element(tag, className, text) {
@@ -29,6 +29,7 @@ function kindLabel(t, kind) {
   const labels = {
     pipeline: ['backupRestore.kind.pipeline', 'Pipeline presets'],
     plugin: ['backupRestore.kind.plugin', 'Effect presets'],
+    visualizer: ['backupRestore.kind.visualizer', 'Visualizer presets'],
     ir: ['backupRestore.kind.ir', 'Impulse responses'],
     measurement: ['backupRestore.kind.measurement', 'Measurements']
   };

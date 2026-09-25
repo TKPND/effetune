@@ -16,8 +16,12 @@ function collectFiles(relativePath, extension) {
   return files;
 }
 
-// ThemePalette converts CSS colors to canvas strings and is tested directly.
-const excludedFiles = new Set(['plugins/theme-palette.js']);
+const excludedFiles = new Set([
+  // ThemePalette converts CSS colors to canvas strings and is tested directly.
+  'plugins/theme-palette.js',
+  // Data-only palettes selected by users for saved visualizer scenes, independent of the app theme.
+  'js/visualizer/visualizer-palette-presets.js'
+]);
 const targets = [
   'effetune.css',
   'effetune-mobile.css',
@@ -39,6 +43,11 @@ const namedCssColorPattern = /:\s*(?:white|black)(?![\w-])/g;
 const commonRgbaPattern = /^rgba\((?:0,\s*0,\s*0|255,\s*255,\s*255),\s*[\d.]+\)$/;
 
 function isAllowedCommonColor(line, literals, isJavaScript) {
+  // A theme token remains authoritative; this literal only covers missing theme CSS.
+  if (isJavaScript && literals.length === 1 &&
+      /getPropertyValue\(['"]--et-[\w-]+['"]\)\??\.trim\(\)\s*\|\|\s*['"]#[0-9a-fA-F]{3,8}['"]/.test(line)) {
+    return true;
+  }
   if (/\b(?:box-shadow|text-shadow|filter)\s*:|\.style\.(?:boxShadow|textShadow|filter)\s*=/.test(line)) {
     return literals.every(literal => commonRgbaPattern.test(literal));
   }
@@ -79,10 +88,20 @@ test('theme color census has no unapproved literals in the themed application su
       if (declarations.every(declaration => {
         const colors = [...declaration.matchAll(literalPattern),
           ...(isCssLike ? declaration.matchAll(namedCssColorPattern) : [])].map(match => match[0]);
-        return colors.length === 0 || isAllowedCommonColor(declaration, colors, isJavaScript);
+        // RGB serialization of palette channels does not define a fixed theme color.
+        const fixedColors = colors.filter(color => !/^rgba?\(\$\{/.test(color));
+        return fixedColors.length === 0 || isAllowedCommonColor(declaration, fixedColors, isJavaScript);
       })) return;
       findings.push(`${relativePath}:${index + 1}: ${line.trim()}`);
     });
   }
   assert.deepEqual(findings, []);
+});
+
+test('theme token fallbacks do not authorize unrelated fixed colors', () => {
+  const themed = "ctx.fillStyle = style.getPropertyValue('--et-danger').trim() || '#b91c1c'";
+  assert.equal(isAllowedCommonColor(themed, ['#b91c1c'], true), true);
+  assert.equal(isAllowedCommonColor("ctx.fillStyle = '#b91c1c'", ['#b91c1c'], true), false);
+  assert.equal(isAllowedCommonColor(themed.replace('--et-danger', '--other-color'), ['#b91c1c'], true), false);
+  assert.equal(isAllowedCommonColor(themed + ", other = '#fff'", ['#b91c1c', '#fff'], true), false);
 });

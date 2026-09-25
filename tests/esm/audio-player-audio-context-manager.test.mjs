@@ -493,6 +493,335 @@ function installMaterializedPlaybackManager(harness, tracks = harness.playlist) 
   return { playbackManager, entries };
 }
 
+test('playback speed selects media and applies pitch-preserving rates before play and adoption', async () => {
+  await withAudioContextGlobals({}, async ({ calls }) => {
+    const track = { name: 'Speed', path: '/speed.wav' };
+    const harness = createHarness({ calls, currentTrack: track, state: { playbackSpeed: 1.5 } });
+    const descriptor = harness.manager.createPlaybackSourceDescriptor(track);
+    const record = harness.manager.createPlaybackDecisionRecord(track, descriptor);
+    assert.equal(record.committedMode, 'media');
+    assert.equal(record.decision.reason, 'gapless-disabled-media');
+    let releasePlay;
+    const candidate = new Audio();
+    candidate.play = () => {
+      assert.equal(candidate.playbackRate, 1.5);
+      assert.equal(candidate.defaultPlaybackRate, 1.5);
+      assert.equal(candidate.preservesPitch, true);
+      return new Promise(resolve => { releasePlay = resolve; });
+    };
+    const starting = harness.manager.startMediaElementPlayback(candidate);
+    releasePlay();
+    await starting.finished;
+    starting.dispose();
+
+    let releaseCandidatePlay;
+    FakeAudioElement.nextOptions.push({
+      playPromise: new Promise(resolve => { releaseCandidatePlay = resolve; })
+    });
+    const transitioning = harness.manager.transitionToNextTrack(track, 0);
+    const adopting = await waitForPendingMediaStartCandidate();
+    assert.equal(adopting.playbackRate, 1.5);
+    harness.state.playbackSpeed = 3;
+    harness.manager.applyPlaybackSpeed();
+    releaseCandidatePlay();
+    assert.equal(await transitioning, true);
+    assert.equal(harness.audioPlayer.audioElement, adopting);
+    assert.equal(adopting.playbackRate, 3);
+    assert.equal(adopting.defaultPlaybackRate, 3);
+    assert.equal(adopting.preservesPitch, true);
+  });
+});
+
+test('speed changes stop the old buffer before media readiness and preserve position and latest pause', async () => {
+  for (const pauseDuringSwitch of [false, true]) {
+    await withAudioContextGlobals({ audioElements: [{ readyState: 0 }] }, async ({ calls }) => {
+      const track = { name: 'Speed', path: '/speed.wav' };
+      const harness = createHarness({ calls, currentTrack: track, isPlaying: true });
+      harness.manager.currentBuffer = { duration: 20 };
+      harness.manager.currentBufferSource = createNode(calls, 'old-speed-buffer');
+      harness.manager.bufferStartTime = 6;
+      harness.manager.bufferDuration = 20;
+      const operations = observePlaybackRebinds(harness.manager);
+      harness.state.playbackSpeed = 2;
+      harness.manager.applyPlaybackSpeed();
+      assert.equal(calls.some(call => call[0] === 'node.stop' && call[1] === 'old-speed-buffer'), true);
+      assert.equal(harness.manager.currentBufferSource, null);
+      assert.equal(operations.length, 1);
+      await flushMicrotasks();
+      const candidate = FakeAudioElement.instances.at(-1);
+      assert.ok(candidate);
+      if (pauseDuringSwitch) await harness.manager.pause();
+      candidate.readyState = 1;
+      candidate.dispatch('loadedmetadata');
+      await operations[0];
+      assert.equal(harness.state.playbackMode, 'audioElement');
+      assert.equal(harness.state.currentTrackPosition, 4);
+      assert.equal(candidate.currentTime, 4);
+      assert.equal(candidate.paused, pauseDuringSwitch);
+      assert.equal(harness.state.isPlaying, !pauseDuringSwitch);
+      assert.equal(candidate.playbackRate, 2);
+      assert.equal(operations.length, 1);
+      harness.state.playbackSpeed = 1;
+      harness.manager.applyPlaybackSpeed();
+      assert.equal(candidate.playbackRate, 1);
+      assert.equal(harness.state.playbackMode, 'audioElement');
+      assert.equal(operations.length, 1);
+    });
+  }
+});
+
+test('a speed change invalidates a buffer Play awaiting its activation stage', async () => {
+  await withAudioContextGlobals({}, async ({ calls }) => {
+    const track = { name: 'Staged speed', path: '/staged-speed.wav' };
+    let releaseStage;
+    const harness = createHarness({ calls, currentTrack: track, isPaused: true, currentTrackPosition: 3 });
+    harness.manager.currentBuffer = { duration: 20 };
+    harness.manager.stagePlaybackActivation = () => new Promise(resolve => { releaseStage = resolve; });
+    const playing = harness.manager.playBufferSource();
+    const operations = observePlaybackRebinds(harness.manager);
+    harness.state.playbackSpeed = 2;
+    harness.manager.applyPlaybackSpeed();
+    await operations[0];
+    releaseStage(null);
+    assert.equal(await playing, false);
+    assert.equal(calls.some(call => call[0] === 'audioContext.createBufferSource'), false);
+    assert.equal(harness.state.playbackMode, 'audioElement');
+    assert.equal(harness.state.isPaused, true);
+    assert.equal(harness.audioPlayer.audioElement.paused, true);
+    assert.equal(harness.audioPlayer.audioElement.currentTime, 3);
+  });
+});
+
+test('speed changes discard partial-decode reuse and do not retry a failed media rebind', async () => {
+  for (const failMedia of [false, true]) {
+    await withAudioContextGlobals({}, async ({ calls }) => {
+      const track = { name: 'Partial speed', path: '/partial-speed.flac' };
+      const harness = createHarness({ calls, currentTrack: track, isPaused: true, currentTrackPosition: 3 });
+      harness.manager.currentBuffer = { duration: 20 };
+      harness.manager.currentPlaybackDecision = {
+        playableTrack: track,
+        partialDecodeFallbackAdmission: {},
+        committedMode: 'buffer'
+      };
+      harness.manager.prepareTrackBuffer = () => { throw new Error('speed must not decode'); };
+      if (failMedia) harness.manager.prepareMediaTransitionCandidate = async () => null;
+      const operations = observePlaybackRebinds(harness.manager);
+      harness.state.playbackSpeed = 2;
+      harness.manager.applyPlaybackSpeed();
+      await operations[0];
+      await flushMicrotasks();
+      assert.equal(operations.length, 1);
+      assert.equal(harness.manager.activeGraphRebuildRequest, null);
+      assert.equal(harness.state.isPaused, true);
+      assert.equal(harness.state.isTransitioning, false);
+      assert.equal(harness.state.currentTrackPosition, 3);
+      if (!failMedia) assert.equal(harness.state.playbackMode, 'audioElement');
+    });
+  }
+});
+
+test('speed changes wait for a stale 1x load or transition decision to settle before switching', async () => {
+  for (const operation of ['loadTrack', 'transitionToNextTrack']) {
+    await withAudioContextGlobals({}, async ({ calls }) => {
+      const track = { name: 'Loaded speed', file: new FakeFile('loaded-speed.wav') };
+      const harness = createHarness({ calls, currentTrack: track, isPaused: true });
+      const prepare = harness.manager.prepareTrackTransitionRequest.bind(harness.manager);
+      let releasePreparation;
+      harness.manager.prepareTrackTransitionRequest = async (...args) => {
+        const prepared = await prepare(...args);
+        await new Promise(resolve => { releasePreparation = resolve; });
+        return prepared;
+      };
+      const operations = observePlaybackRebinds(harness.manager);
+      const loading = harness.manager[operation](track, 0);
+      for (let attempt = 0; attempt < 20; attempt++) {
+        if (releasePreparation) break;
+        await flushMicrotasks();
+      }
+      assert.ok(releasePreparation);
+      const owner = operation === 'loadTrack'
+        ? harness.manager.activeLoadRequest : harness.manager.activeTransitionRequest;
+      harness.state.playbackSpeed = 2;
+      harness.manager.applyPlaybackSpeed();
+      assert.equal(operations.length, 0);
+      assert.equal(operation === 'loadTrack'
+        ? harness.manager.activeLoadRequest : harness.manager.activeTransitionRequest, owner);
+      releasePreparation();
+      assert.equal(await loading, true);
+      assert.equal(operations.length, 1);
+      await operations[0];
+      assert.equal(harness.state.playbackMode, 'audioElement');
+      assert.equal(harness.audioPlayer.audioElement.playbackRate, 2);
+    });
+  }
+});
+
+test('Pause and Stop take over pending speed convergence when cancelling a load or transition', async () => {
+  for (const operation of ['loadTrack', 'transitionToNextTrack']) {
+    for (const command of ['pause', 'stop']) {
+      await withAudioContextGlobals({}, async ({ calls }) => {
+        const track = { name: 'Retained', file: new FakeFile('retained.wav') };
+        const harness = createHarness({ calls, currentTrack: track, isPlaying: true });
+        harness.manager.currentBuffer = { duration: 20 };
+        harness.manager.currentBufferSource = createNode(calls, 'retained-buffer');
+        harness.manager.bufferStartTime = 6;
+        harness.manager.bufferDuration = 20;
+        let releasePreparation;
+        harness.manager.prepareTrackTransitionRequest = () => new Promise(resolve => {
+          releasePreparation = resolve;
+        });
+        const operations = observePlaybackRebinds(harness.manager);
+        const loading = harness.manager[operation]({ name: 'Next', path: '/next.wav' }, 1);
+        assert.ok(releasePreparation);
+        harness.state.playbackSpeed = 2;
+        harness.manager.applyPlaybackSpeed();
+        assert.equal(operations.length, 0);
+        await harness.manager[command]();
+        releasePreparation(null);
+        assert.equal(await loading, false);
+        assert.equal(operations.length, 1, `${operation} cancelled by ${command}`);
+        await operations[0];
+        assert.equal(harness.state.currentTrack, track);
+        assert.equal(harness.state.playbackMode, 'audioElement');
+        assert.equal(harness.state.currentTrackPosition, command === 'stop' ? 0 : 4);
+        assert.equal(harness.state.isPaused, command === 'pause');
+        assert.equal(harness.state.isStopped, command === 'stop');
+        assert.equal(harness.audioPlayer.audioElement.paused, true);
+        assert.equal(await harness.manager.play(), true);
+        assert.equal(harness.audioPlayer.audioElement.playbackRate, 2);
+        assert.equal(harness.state.isPlaying, true);
+      });
+    }
+  }
+});
+
+test('Pause and Stop take over pending speed convergence when cancelling a rolling seek', async () => {
+  for (const command of ['pause', 'stop']) {
+    await withAudioContextGlobals({}, async ({ calls }) => {
+      const track = { name: 'Rolling', file: new FakeFile('rolling.wav') };
+      const harness = createHarness({ calls, currentTrack: track, playbackMode: 'rollingPcm', isPlaying: true });
+      let releaseSeek;
+      const transport = {
+        metadata: { durationSec: 20, sampleRate: 48000 },
+        currentTime: 4,
+        playing: true,
+        async pause() { this.playing = false; },
+        async dispose() { this.disposed = true; },
+        seek() { return new Promise(resolve => { releaseSeek = resolve; }); }
+      };
+      harness.manager.rollingTransport = transport;
+      const operations = observePlaybackRebinds(harness.manager);
+      const seeking = harness.manager.seekRollingPcm(6);
+      await flushMicrotasks();
+      harness.state.playbackSpeed = 2;
+      harness.manager.applyPlaybackSpeed();
+      assert.equal(operations.length, 0);
+      await harness.manager[command]();
+      releaseSeek(false);
+      await seeking;
+      assert.equal(operations.length, 1, command);
+      await operations[0];
+      assert.equal(transport.disposed, true);
+      assert.equal(harness.state.playbackMode, 'audioElement');
+      assert.equal(harness.state.currentTrackPosition, command === 'stop' ? 0 : 4);
+      assert.equal(harness.state.isPaused, command === 'pause');
+      assert.equal(harness.state.isStopped, command === 'stop');
+      assert.equal(await harness.manager.play(), true);
+      assert.equal(harness.audioPlayer.audioElement.playbackRate, 2);
+      assert.equal(harness.state.isPlaying, true);
+    });
+  }
+});
+
+test('speed convergence after rolling seek captures the adopted position', async () => {
+  await withAudioContextGlobals({}, async ({ calls }) => {
+    const track = { name: 'Rolling speed', path: '/rolling-speed.wav' };
+    const harness = createHarness({ calls, currentTrack: track, playbackMode: 'rollingPcm', isPaused: true });
+    let releaseSeek;
+    const transport = {
+      metadata: { durationSec: 20, sampleRate: 48000 },
+      currentTime: 2,
+      playing: false,
+      async dispose() { this.disposed = true; },
+      seek() { return new Promise(resolve => { releaseSeek = resolve; }); }
+    };
+    harness.manager.rollingTransport = transport;
+    const operations = observePlaybackRebinds(harness.manager);
+    const seeking = harness.manager.seekRollingPcm(6);
+    await flushMicrotasks();
+    harness.state.playbackSpeed = 2;
+    harness.manager.applyPlaybackSpeed();
+    assert.equal(operations.length, 0);
+    transport.currentTime = 6;
+    releaseSeek({ adoptedFrame: 6 * 48000 });
+    await seeking;
+    assert.equal(operations.length, 1);
+    await operations[0];
+    assert.equal(transport.disposed, true);
+    assert.equal(harness.state.playbackMode, 'audioElement');
+    assert.equal(harness.audioPlayer.audioElement.currentTime, 6);
+    assert.equal(harness.state.isPaused, true);
+  });
+});
+
+test('a speed change during graph buffer preparation converges only after the graph commits', async () => {
+  await withAudioContextGlobals({}, async ({ calls }) => {
+    const track = { name: 'Rebuilt speed', file: new FakeFile('rebuilt-speed.wav') };
+    const harness = createHarness({ calls, currentTrack: track, isPaused: true, currentTrackPosition: 3 });
+    let releaseBuffer;
+    harness.manager.prepareTrackBuffer = () => new Promise(resolve => { releaseBuffer = resolve; });
+    const operations = observePlaybackRebinds(harness.manager);
+    const rebuilding = harness.manager.handleAudioGraphRebuilt();
+    assert.ok(releaseBuffer);
+    harness.state.playbackSpeed = 2;
+    harness.manager.applyPlaybackSpeed();
+    assert.equal(operations.length, 1);
+    releaseBuffer({ duration: 20 });
+    await rebuilding;
+    assert.equal(operations.length, 2);
+    await operations[1];
+    assert.equal(harness.state.playbackMode, 'audioElement');
+    assert.equal(harness.audioPlayer.audioElement.currentTime, 3);
+    assert.equal(harness.audioPlayer.audioElement.playbackRate, 2);
+    assert.equal(harness.state.isPaused, true);
+  });
+});
+
+test('a failed load still converges the retained buffer after a speed change', async () => {
+  await withAudioContextGlobals({}, async ({ calls }) => {
+    const track = { name: 'Retained speed', file: new FakeFile('retained-speed.wav') };
+    const harness = createHarness({ calls, currentTrack: track, isPaused: true, currentTrackPosition: 3 });
+    harness.manager.currentBuffer = { duration: 20 };
+    let rejectPreparation;
+    harness.manager.prepareTrackTransitionRequest = () => new Promise((resolve, reject) => {
+      rejectPreparation = reject;
+    });
+    const operations = observePlaybackRebinds(harness.manager);
+    const loading = harness.manager.loadTrack({ name: 'Other', path: '/other.wav' }, 1);
+    harness.state.playbackSpeed = 2;
+    harness.manager.applyPlaybackSpeed();
+    assert.equal(operations.length, 0);
+    rejectPreparation(new Error('track unavailable'));
+    assert.equal(await loading, false);
+    assert.equal(operations.length, 1);
+    await operations[0];
+    assert.equal(harness.state.currentTrack, track);
+    assert.equal(harness.state.playbackMode, 'audioElement');
+    assert.equal(harness.audioPlayer.audioElement.currentTime, 3);
+  });
+});
+
+function observePlaybackRebinds(manager) {
+  const rebind = manager.rebindCurrentPlayback.bind(manager);
+  const operations = [];
+  manager.rebindCurrentPlayback = options => {
+    const operation = rebind(options);
+    operations.push(operation);
+    return operation;
+  };
+  return operations;
+}
+
 function runTimers(timers) {
   timers.splice(0).forEach(timer => timer.fn());
 }

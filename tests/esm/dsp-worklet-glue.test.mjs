@@ -315,6 +315,9 @@ async function instantiateDspBinding(payload, options) {
       }
     }
   };
+  if (options.multiresSpectrum) {
+    vm.runInNewContext(await fs.readFile(path.join(repoRoot, 'plugins/multires-spectrum.js'), 'utf8'), sandbox);
+  }
   vm.runInNewContext(injected, sandbox, { filename: processorPath });
   assert.ok(ProcessorClass);
   assert.ok(KeepaliveProcessorClass);
@@ -596,6 +599,43 @@ function processBlock(processor, value = 1, channelCount = 2, frameCount = 128) 
 function messagesOf(posts, type) {
   return posts.filter(entry => entry.message.type === type);
 }
+
+test('Visualizer taps analyze pre-delay output without changing audio and release with visibility', async () => {
+  const captured = [];
+  const binding = createBinding({
+    capabilities: { abiVersion: 1, simd: false, kernels: [
+      { name: 'SpectrumAnalyzerPlugin', hash: 0x3e6e0819, byteCapacity: 0, kernelIndex: 0 }
+    ] },
+    instanceProcessImpl(_id, view, channels, frames) {
+      captured.push([view[0], view[frames], channels]);
+      view.fill(99, 0, channels * frames);
+    }
+  });
+  const h = await createWorkletHarness({ binding });
+  const tapId = 0xf0000000;
+  await h.send({ type: 'setVisualizerSources', sources: [{ tapId,
+    type: 'SpectrumAnalyzerPlugin', params: Float32Array.of(-96, 12, 0),
+    paramsHash: 0x3e6e0819, channel: 'L', gain: 2 }] });
+  await h.send({ type: 'dspEnableTypes', types: ['SpectrumAnalyzerPlugin'] });
+  await h.send({ type: 'dspModule', module: {} });
+  assert.equal(h.processor.visualizerInstances.size, 1);
+  await h.send({ type: 'setOutputDelay', samples: 128 });
+  const output = processBlock(h.processor, 0.25);
+  assert.deepEqual(captured[0], [0.5, 0.5, 2]);
+  assert.equal(output[0][0], 0);
+  assert.equal(output[1][0], 0);
+  assert.equal(processBlock(h.processor, 0.5)[0][0], 0.25);
+  h.processor.masterBypass = true;
+  const beforePump = binding.calls.filter(call => call[0] === 'telemetryRead').length;
+  assert.equal(processBlock(h.processor, 0.75)[0][0], 0.75);
+  assert.deepEqual(captured.at(-1), [1.5, 1.5, 2]);
+  assert.equal(binding.calls.filter(call => call[0] === 'telemetryRead').length, beforePump + 1);
+  await h.send({ type: 'setVisualizerSources', sources: [] });
+  assert.equal(h.processor.visualizerInstances.size, 0);
+  const count = captured.length;
+  processBlock(h.processor);
+  assert.equal(captured.length, count);
+});
 
 test('frequency preview mixes only source channels before JS, WASM and bypass processing', async () => {
   for (const mode of ['js', 'wasm', 'bypass']) {
@@ -2240,6 +2280,12 @@ test('JS lookahead and oversampling report latency for routing compensation', as
     }) });
     assert.equal(harness.processor.dspPipelineLatencySamples,
       type === 'BrickwallLimiterPlugin' ? 1 : 0, `${type}: changed parameters`);
+    const output = processBlock(harness.processor);
+    for (let frame = 0; frame < 128; frame++) {
+      const expected = type === 'BrickwallLimiterPlugin' && frame === 0 ? 0 : 1;
+      assert.ok(Math.abs(output[1][frame] - expected) < 1e-6,
+        `${type}: updated compensation at ${frame}`);
+    }
   }
 });
 
@@ -4353,7 +4399,7 @@ test('new power identities adopt the configured UI telemetry gate directly', asy
   assert.equal(harness.processor.powerPolicy.uiTelemetryEnabled, true);
 });
 
-test('display changes preserve warmed compensation in JS and WASM graphs', async () => {
+test('parameter and display changes preserve warmed compensation in JS and WASM graphs', async () => {
   for (const execution of ['js', 'wasm']) {
     for (const routing of ['output', 'merge', 'input']) {
       const binding = createBinding({
@@ -4390,6 +4436,17 @@ test('display changes preserve warmed compensation in JS and WASM graphs', async
         : routing === 'input' ? plan.nodeActions.get(8).inputDelayLine : plan.outputDelayLine;
       const originalLine = delayLine(originalPlan);
       assert.ok(originalLine);
+      for (const type of ['updatePlugin', 'batchUpdatePlugins', 'updatePlugins']) {
+        for (let change = 1; change <= 3; change++) {
+          // Ordinary effect parameters leave the routing and latency unchanged.
+          delayed.parameters = { enabled: true, gain: change };
+          delayed.wasmParams = Float32Array.of(change);
+          await harness.send({ type, plugin: delayed,
+            plugins: type === 'updatePlugins' ? plugins : [delayed], masterBypass: false });
+          assertContinuous();
+          assert.equal(delayLine(harness.processor.dspLatencyPlan), originalLine);
+        }
+      }
       if (execution === 'wasm') await harness.send({ type: 'setSpectrumTapRoute', pluginId: 7, enabled: true });
       for (const type of ['setDisplayDspBypassed', 'configurePowerPolicy']) {
         for (const bypassed of [true, false]) {
@@ -4405,6 +4462,29 @@ test('display changes preserve warmed compensation in JS and WASM graphs', async
       assertContinuous();
       assert.equal(binding.calls.filter(call => call[0] === 'pipelineConfigure').length, 0);
     }
+  }
+});
+
+test('routing changes discard compensation audio from the previous source bus', async () => {
+  for (const type of ['updatePlugin', 'updatePlugins']) {
+    const harness = await createWorkletHarness();
+    await registerIdentityFallback(harness);
+    await registerFrequencyShifterFallback(harness);
+    const plugins = routedLatencyPlugins();
+    await harness.send({ type: 'updatePlugins', plugins, masterBypass: false });
+    processBlock(harness.processor);
+    assert.ok(processBlock(harness.processor)[1].every(sample => sample === 3));
+
+    // Both routes need the same delay, but bus 2 has no audio. Reusing bus 0's
+    // queued samples would mix audio from the disconnected source into bus 1.
+    const previousAction = harness.processor.dspLatencyPlan.nodeActions.get(8);
+    plugins[1] = { ...plugins[1], inputBus: 2 };
+    await harness.send({ type, plugin: plugins[1], plugins, masterBypass: false });
+    const action = harness.processor.dspLatencyPlan.nodeActions.get(8);
+    assert.deepEqual([...action.delays], [...previousAction.delays]);
+    processBlock(harness.processor);
+    assert.ok(harness.processor.busBuffers.get(1).subarray(0, 256).every(sample => sample === 1), type);
+    assert.ok(processBlock(harness.processor)[1].every(sample => sample === 2), type);
   }
 });
 
@@ -4503,6 +4583,7 @@ test('background display DSP bypass keeps normal WASM active and leaves the nati
   });
   assert.equal(harness.processor.dspPipelineReady, false);
   const analyzerTypes = [
+    'ChromaSpiralPlugin',
     'LevelMeterPlugin',
     'NoteSpectrogramPlugin',
     'OscilloscopePlugin',
@@ -4513,7 +4594,7 @@ test('background display DSP bypass keeps normal WASM active and leaves the nati
   ];
   assert.deepEqual(
     analyzerTypes.map(type => harness.processor.isDisplayDspExecutionBypassed({ type })),
-    [true, true, true, true, true, true, true]
+    analyzerTypes.map(() => true)
   );
   binding.calls.length = 0;
   const output = processBlock(harness.processor);
@@ -4532,7 +4613,7 @@ test('background display DSP bypass keeps normal WASM active and leaves the nati
   assert.equal(harness.processor.dspPipelineReady, true);
   assert.deepEqual(
     analyzerTypes.map(type => harness.processor.isDisplayDspExecutionBypassed({ type })),
-    [false, false, false, false, false, false, false]
+    analyzerTypes.map(() => false)
   );
 });
 
@@ -6850,4 +6931,16 @@ test('latency telemetry identifies recreated WASM analyzers even when their dela
   h.processor.rebuildDspLatencyPlan(new Map([[7, 0]]));
   assert.equal(messagesOf(h.posts, 'dspLatency').length, count + 1);
   assert.equal(messagesOf(h.posts, 'dspLatency').at(-1).message.taps[7].instanceId, 200);
+});
+
+
+test('Chroma Spiral JS fallback prepares a spectrum HQ analyzer and packet pool', async () => {
+  const harness = await createWorkletHarness({ multiresSpectrum: true });
+  await harness.send({ type: 'updatePlugins', plugins: [pluginConfig({
+    id: 208, type: 'ChromaSpiralPlugin', wasmParams: undefined
+  })], masterBypass: false });
+  const context = harness.processor.pluginContexts.get(208);
+  assert.equal(context.multiresSpectrum.type, 4);
+  assert.equal(context.multiresSpectrum.count, 2048);
+  assert.ok(harness.processor.hqPacketPool.length > 0);
 });

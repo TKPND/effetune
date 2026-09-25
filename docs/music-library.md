@@ -6,7 +6,7 @@ lang: en
 
 # How to Use Music Library
 
-Music Library indexes selected music folders so you can browse your local collection by tracks, albums, artists, genres, subfolders, folders, recently added tracks, or playlists. Playback still goes through the current EffeTune effect pipeline, so you can listen with the same effects used for normal music file playback.
+Music Library indexes selected music folders so you can browse your local collection by tracks, files, albums, artists, genres, subfolders, folders, recently added tracks, or playlists. Playback still goes through the current EffeTune effect pipeline, so you can listen with the same effects used for normal music file playback.
 
 Music Library stores its catalog, artwork cache, and playlists inside the app. It does not edit, rename, move, or delete your audio files.
 
@@ -26,7 +26,7 @@ Music Library indexes common media file extensions such as MP3, WAV, OGG, FLAC, 
 
 To return to effect editing, click the **Effect Pipeline** button in the PC layout, switch back to the **Effects** tab in the mobile layout, or use **View > Effect Pipeline** or **Ctrl+E** (**Command+E** on macOS) in the desktop app.
 
-You can also make Music Library the first view shown at startup: open **Settings > Config...**, then set **Startup view:** to **Music Library**. Use the list beside Music Library to choose whether **Tracks**, **Albums**, **Artists**, **Genres**, **Subfolders**, **Folders**, or **Playlists** appears first.
+You can also make Music Library the first view shown at startup: open **Settings > Config...**, then set **Startup view:** to **Music Library**. Use the list beside Music Library to choose whether **Tracks**, **Files**, **Albums**, **Artists**, **Genres**, **Subfolders**, **Folders**, or **Playlists** appears first.
 
 ## Adding Music Folders
 
@@ -42,6 +42,7 @@ If you add a folder that is already inside an existing library folder, EffeTune 
 Use the navigation tabs to browse the catalog:
 
 - **Tracks** - All indexed tracks. PC layout shows a sortable table; mobile layout shows a compact list.
+- **Files** - Indexed tracks listed by their file locations, so you can choose a track directly. The desktop app shows absolute paths; web browsers show the library root name and relative path. Tracks from the same CUE audio file remain separate entries and can be selected individually.
 - **Albums** - Albums grouped from metadata.
 - **Artists** - Artists and album artists from metadata.
 - **Genres** - Genre groups from metadata.

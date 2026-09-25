@@ -98,6 +98,7 @@ export async function updateApplicationMenu(isElectron) {
       'view.zoomOut': { label: t('menu.view.zoomOut') },
       'view.effectPipeline': { label: t('menu.view.effectPipeline') },
       'view.musicLibrary': { label: t('menu.view.musicLibrary') },
+      'view.visualizer': { label: t('menu.view.visualizer'), enabled: !dbtActive },
       'view.pipelineAnalyzer': {
         label: t('menu.view.pipelineAnalyzer'),
         checked: (window.uiManager.isPipelineAnalyzerOpen?.() ??

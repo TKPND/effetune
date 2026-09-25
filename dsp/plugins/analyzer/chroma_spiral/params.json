@@ -1,0 +1,8 @@
+{
+  "type": "ChromaSpiralPlugin",
+  "tolerance": {
+    "abs": 0.000001,
+    "policy": "per-sample"
+  },
+  "fields": []
+}

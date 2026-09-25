@@ -12,46 +12,7 @@ class StereoMeterPlugin extends PluginBase {
   constructor() {
     super('Stereo Meter', 'Stereo balance and phase visualization');
 
-    // Parameter initialization (Window: 10–1000 ms, default 100 ms)
-    this.windowTime = 0.1; // 0.1 sec = 100 ms
-
-    // Canvas and drawing setup
-    this.canvas = null;
-    this.ctx = null;
-    this.animationId = null;
-    this.animationFrameId = null;
-    this.lastDrawTime = 0;
-    this.resizeGraphDisposer = null;
-    this.graphDpr = 1;
-    this.graphCssWidth = 480;
-
-    // Sample rate (will be updated from processor parameters)
-    this.sampleRate = 44100;
-
-    // Internal event listener bookkeeping
-    this.boundEventListeners = new Map();
-
-    // Cache opaque sample colors, rebuilding only when the theme colors change.
-    this._colorLookup = new Array(256);
-    this._colorLookupBackground = null;
-    this._colorLookupTrace = null;
-    this.observer = null;
-
-    // Persistent buffers for drawing
-    this.buckets = new Array(256);
-    for (let i = 0; i < 256; i++) {
-      this.buckets[i] = [];
-    }
-    this.smoothedPeaks = new Float32Array(360);
-    this.dspStereoFieldSnapshot = null;
-    this.dspXBuffer = null;
-    this.dspYBuffer = null;
-    this.dspBufferPosition = 0;
-    this.dspLastTelemetrySequence = null;
-    this._dspTelemetryHub = null;
-    this._dspTelemetryTapId = null;
-    this._dspTelemetryUnsubscribe = null;
-    this._boundDspStereoFieldTelemetry = frame => this.handleDspStereoFieldTelemetry(frame);
+    this.initializeDisplayState();
 
     // Register the Audio Worklet Processor
     this.registerProcessor(`
@@ -193,6 +154,51 @@ class StereoMeterPlugin extends PluginBase {
     `);
   }
 
+  initializeDisplayState() {
+    // Display parameters
+    this.windowTime = 0.1; // 0.1 sec = 100 ms
+    this.gainDb = 0;
+
+    // Canvas and drawing setup
+    this.canvas = null;
+    this.ctx = null;
+    this.animationId = null;
+    this.animationFrameId = null;
+    this.lastDrawTime = 0;
+    this.resizeGraphDisposer = null;
+    this.graphDpr = 1;
+    this.graphCssWidth = 480;
+
+    // Sample rate (will be updated from processor parameters)
+    this.sampleRate = 44100;
+
+    // Internal event listener bookkeeping
+    this.boundEventListeners = new Map();
+
+    // Cache opaque sample colors, rebuilding only when the theme colors change.
+    this._colorLookup = new Array(256);
+    this._colorLookupBackground = null;
+    this._colorLookupTrace = null;
+    this.observer = null;
+
+    // Persistent buffers for drawing
+    this.buckets = new Array(256);
+    for (let i = 0; i < 256; i++) {
+      this.buckets[i] = [];
+    }
+    this.smoothedPeaks = new Float32Array(360);
+    this.dspStereoFieldSnapshot = null;
+    this.dspXBuffer = null;
+    this.dspYBuffer = null;
+    this.dspBufferPosition = 0;
+    this.dspLastTelemetrySequence = null;
+    this._dspTelemetryHub = null;
+    this._dspTelemetryTapId = null;
+    this._dspTelemetryUnsubscribe = null;
+    this._boundDspStereoFieldTelemetry = frame => this.handleDspStereoFieldTelemetry(frame);
+
+  }
+
   createUI() {
     if (this.observer) {
       this.observer.disconnect();
@@ -211,6 +217,12 @@ class StereoMeterPlugin extends PluginBase {
       (value) => this.setWindowTime(value / 1000),
       'ms',
       'windowTime', (value) => value * 1000, true // Widget is shown in ms, the model stores seconds
+    ));
+    container.appendChild(this.createParameterControl(
+      'Gain', 0, 24, 1,
+      this.gainDb,
+      (value) => this.setGain(value),
+      'dB', 'gainDb'
     ));
 
     // Create the graph container and canvas.
@@ -249,17 +261,26 @@ class StereoMeterPlugin extends PluginBase {
     this.updateParameters();
   }
 
+  setGain(value) {
+    const newValue = typeof value === 'number' ? value : parseFloat(value);
+    if (!Number.isFinite(newValue)) return;
+    this.gainDb = newValue < 0 ? 0 : (newValue > 24 ? 24 : newValue);
+    this.updateParameters();
+  }
+
   getParameters() {
     this.ensureDspTelemetrySubscription();
     return {
       type: this.constructor.name,
       enabled: this.enabled,
-      wt: this.windowTime
+      wt: this.windowTime,
+      gn: this.gainDb
     };
   }
 
   setParameters(params) {
     if (params.wt !== undefined) this.setWindowTime(params.wt);
+    if (params.gn !== undefined) this.setGain(params.gn);
     this.updateParameters();
   }
 
@@ -518,8 +539,13 @@ class StereoMeterPlugin extends PluginBase {
     const centerY = height / 2;
     const size = Math.min(width, height);
     const radius = size * 0.45;
+    const signalRadius = radius * 10 ** (this.gainDb / 20);
 
-    const background = (window.ThemePalette?.get('graph-bg-deep') ?? '');
+    const background = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '');
+    const tickPalette = this.displayOptions?.themePalette ?? window.ThemePalette;
+    const tickColor = tickPalette?.get('graph-trace-tertiary') ?? '';
+    const tickLabelColor = tickPalette?.get(this.displayOptions?.visualizerAxisLabels
+      ? 'graph-label' : 'graph-trace-tertiary') ?? '';
     const trace = (window.ThemePalette?.get('graph-trace') ?? '');
     if (this._colorLookupBackground !== background || this._colorLookupTrace !== trace) {
       // ThemePalette returns normalized rgba colors. Blend once, not during canvas drawing.
@@ -536,10 +562,11 @@ class StereoMeterPlugin extends PluginBase {
 
     // Clear the canvas.
     ctx.fillStyle = background;
-    ctx.fillRect(0, 0, width, height);
+    if (this.displayOptions?.transparent) ctx.clearRect(0, 0, width, height);
+    else ctx.fillRect(0, 0, width, height);
 
     // Draw the diamond shape.
-    ctx.strokeStyle = (window.ThemePalette?.get('graph-grid-subtle') ?? '');
+    ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-grid-subtle') ?? '');
     ctx.lineWidth = dpr;
     ctx.beginPath();
     ctx.moveTo(centerX, centerY - radius);
@@ -547,7 +574,7 @@ class StereoMeterPlugin extends PluginBase {
     ctx.lineTo(centerX, centerY + radius);
     ctx.lineTo(centerX - radius, centerY);
     ctx.closePath();
-    ctx.stroke();
+    if (this.displayOptions?.showAxes !== false) ctx.stroke();
 
     // Draw vertical and horizontal grid lines.
     ctx.beginPath();
@@ -555,7 +582,7 @@ class StereoMeterPlugin extends PluginBase {
     ctx.lineTo(centerX, centerY + radius);
     ctx.moveTo(centerX - radius, centerY);
     ctx.lineTo(centerX + radius, centerY);
-    ctx.stroke();
+    if (this.displayOptions?.showAxes !== false) ctx.stroke();
 
     // Draw additional 45-degree grid lines.
     ctx.beginPath();
@@ -567,90 +594,94 @@ class StereoMeterPlugin extends PluginBase {
       const scale = Math.min(Math.abs(radius / x), Math.abs(radius / y));
       ctx.lineTo(centerX + x * scale, centerY + y * scale);
     }
-    ctx.stroke();
+    if (this.displayOptions?.showAxes !== false) ctx.stroke();
 
     // Draw labels.
-    ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? '');
+    ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-label') ?? '');
     ctx.font = `${14 * dpr}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const labelOffset = size * 0.2;
-    ctx.fillText('L+', centerX - radius + labelOffset, centerY - radius + labelOffset);
-    ctx.fillText('R-', centerX - radius + labelOffset, centerY + radius - labelOffset);
-    ctx.fillText('R+', centerX + radius - labelOffset, centerY - radius + labelOffset);
-    ctx.fillText('L-', centerX + radius - labelOffset, centerY + radius - labelOffset);
+    if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText('L+', centerX - radius + labelOffset, centerY - radius + labelOffset);
+    if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText('R-', centerX - radius + labelOffset, centerY + radius - labelOffset);
+    if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText('R+', centerX + radius - labelOffset, centerY - radius + labelOffset);
+    if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText('L-', centerX + radius - labelOffset, centerY + radius - labelOffset);
 
-    // Draw every sample in the selected window with the original age grading.
-    const samplesNeeded = Math.ceil(this.windowTime * this.sampleRate);
-    const { xBuffer, yBuffer } = this.currentMeasurements;
-    const bufferLength = xBuffer.length;
-    const endPos = this.currentMeasurements.currentPosition;
-    const startIndex = (endPos - samplesNeeded + bufferLength) % bufferLength;
+    const drawField = ctx => {
+      // Draw every sample in the selected window with the original age grading.
+      const samplesNeeded = Math.ceil(this.windowTime * this.sampleRate);
+      const { xBuffer, yBuffer } = this.currentMeasurements;
+      const bufferLength = xBuffer.length;
+      const endPos = this.currentMeasurements.currentPosition;
+      const startIndex = (endPos - samplesNeeded + bufferLength) % bufferLength;
 
-    const buckets = this.buckets;
-    for (let i = 0; i < 256; i++) {
-      buckets[i].length = 0;
-    }
+      const buckets = this.buckets;
+      for (let i = 0; i < 256; i++) {
+        buckets[i].length = 0;
+      }
 
-    for (let i = 0; i < samplesNeeded; i++) {
-      const pos = (startIndex + i) % bufferLength;
-      const sampleX = xBuffer[pos];
-      const sampleY = yBuffer[pos];
-      const screenX = centerX + (sampleX * 0.5) * radius;
-      const screenY = centerY - (sampleY * 0.5) * radius;
-      const intensity = samplesNeeded > 1 ? (i / (samplesNeeded - 1)) : 0;
-      const green = Math.floor(255 * intensity);
-      buckets[green].push({ x: screenX, y: screenY });
-    }
+      for (let i = 0; i < samplesNeeded; i++) {
+        const pos = (startIndex + i) % bufferLength;
+        const sampleX = xBuffer[pos];
+        const sampleY = yBuffer[pos];
+        const screenX = centerX + (sampleX * 0.5) * signalRadius;
+        const screenY = centerY - (sampleY * 0.5) * signalRadius;
+        const intensity = samplesNeeded > 1 ? (i / (samplesNeeded - 1)) : 0;
+        const green = Math.floor(255 * intensity);
+        buckets[green].push({ x: screenX, y: screenY });
+      }
 
-    const pointSize = (isNarrow ? 2 : 1) * dpr;
-    const pointOffset = pointSize * 0.5;
-    for (let g = 0; g < 256; g++) {
-      const points = buckets[g];
-      if (points.length === 0) continue;
+      const pointSize = (isNarrow ? 2 : 1) * dpr;
+      const pointOffset = pointSize * 0.5;
+      for (let g = 0; g < 256; g++) {
+        const points = buckets[g];
+        if (points.length === 0) continue;
 
-      ctx.fillStyle = this._colorLookup[g];
+        ctx.fillStyle = this.displayOptions?.sampleStyle?.(ctx, centerX, centerY, g) ?? this._colorLookup[g];
+        ctx.beginPath();
+        for (let j = 0; j < points.length; j++) {
+          ctx.rect(points[j].x - pointOffset, points[j].y - pointOffset, pointSize, pointSize);
+        }
+        ctx.fill();
+      }
+
+      // Smooth the 360° peak buffer using a Gaussian (sigma = 5°).
+      const smoothedPeaks = this.smoothedPeaks;
+      const sigma = 5;
+      const gaussianRange = Math.ceil(sigma * 3);
+      const { peakBuffer } = this.currentMeasurements;
+
+      for (let i = 0; i < 360; i++) {
+        let sum = 0;
+        let weightSum = 0;
+        for (let j = -gaussianRange; j <= gaussianRange; j++) {
+          const angle = ((i + j) % 360 + 360) % 360;
+          const weight = Math.exp(-(j * j) / (2 * sigma * sigma));
+          sum += peakBuffer[angle] * weight;
+          weightSum += weight;
+        }
+        smoothedPeaks[i] = sum / weightSum;
+      }
+
+      ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('text-primary') ?? '');
+      ctx.lineWidth = dpr;
       ctx.beginPath();
-      for (let j = 0; j < points.length; j++) {
-        ctx.rect(points[j].x - pointOffset, points[j].y - pointOffset, pointSize, pointSize);
+      for (let i = 0; i < 360; i++) {
+        const rad = i * Math.PI / 180;
+        const r = smoothedPeaks[i] * 0.5 * signalRadius;
+        const x = centerX + Math.cos(rad) * r;
+        const y = centerY + Math.sin(rad) * r;
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
       }
-      ctx.fill();
-    }
-
-    // Smooth the 360° peak buffer using a Gaussian (sigma = 5°).
-    const smoothedPeaks = this.smoothedPeaks;
-    const sigma = 5;
-    const gaussianRange = Math.ceil(sigma * 3);
-    const { peakBuffer } = this.currentMeasurements;
-    
-    for (let i = 0; i < 360; i++) {
-      let sum = 0;
-      let weightSum = 0;
-      for (let j = -gaussianRange; j <= gaussianRange; j++) {
-        const angle = ((i + j) % 360 + 360) % 360;
-        const weight = Math.exp(-(j * j) / (2 * sigma * sigma));
-        sum += peakBuffer[angle] * weight;
-        weightSum += weight;
-      }
-      smoothedPeaks[i] = sum / weightSum;
-    }
-    
-    ctx.strokeStyle = (window.ThemePalette?.get('text-primary') ?? '');
-    ctx.lineWidth = dpr;
-    ctx.beginPath();
-    for (let i = 0; i < 360; i++) {
-      const rad = i * Math.PI / 180;
-      const r = smoothedPeaks[i] * 0.5 * radius;
-      const x = centerX + Math.cos(rad) * r;
-      const y = centerY + Math.sin(rad) * r;
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.closePath();
-    ctx.stroke();
+      ctx.closePath();
+      ctx.stroke();
+    };
+    if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(ctx, drawField);
+    else drawField(ctx);
 
     let correlation = 0;
     let energyDiff = 0;
@@ -689,75 +720,93 @@ class StereoMeterPlugin extends PluginBase {
       energyDiff = energyR_dB - energyL_dB;
     }
 
-    // Draw the correlation bar on the left edge.
     const barThickness = 16 * dpr;
-    const corrBarHeight = (correlation >= 0 ? correlation : -correlation) * centerY;
-    ctx.fillStyle = (window.ThemePalette?.get('graph-trace-fill') ?? '');
-    if (correlation >= 0) {
-      ctx.fillRect(0, centerY - corrBarHeight, barThickness, corrBarHeight);
-    } else {
-      ctx.fillRect(0, centerY, barThickness, corrBarHeight);
+    const barStyle = context => this.displayOptions?.sampleStyle?.(context, centerX, centerY, 255) ??
+      (window.ThemePalette?.get('graph-trace-fill') ?? '');
+    if (this.displayOptions?.showCorrelation !== false) {
+      const drawCorrelation = ctx => {
+        // Draw the correlation bar on the left edge.
+        const corrBarHeight = (correlation >= 0 ? correlation : -correlation) * centerY;
+        ctx.fillStyle = barStyle(ctx);
+        if (correlation >= 0) {
+          ctx.fillRect(0, centerY - corrBarHeight, barThickness, corrBarHeight);
+        } else {
+          ctx.fillRect(0, centerY, barThickness, corrBarHeight);
+        }
+      };
+      if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(ctx, drawCorrelation);
+      else drawCorrelation(ctx);
+
+      // Draw correlation tick marks and labels.
+      ctx.fillStyle = tickLabelColor;
+      ctx.strokeStyle = tickColor;
+      ctx.lineWidth = dpr;
+      const corrTickX = 2 * dpr;
+      const correlationTicks = [0.5, 0, -0.5];
+      correlationTicks.forEach(tick => {
+        const yTick = centerY - (tick * centerY);
+        ctx.beginPath();
+        ctx.moveTo(corrTickX + (16 * dpr), yTick);
+        ctx.lineTo(corrTickX + (21 * dpr), yTick);
+        if (this.displayOptions?.showAxes !== false) ctx.stroke();
+        ctx.font = `${12 * dpr}px Arial`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText(tick.toFixed(1), corrTickX + (23 * dpr), yTick);
+      });
     }
 
-    // Draw correlation tick marks and labels.
-    ctx.fillStyle = (window.ThemePalette?.get('graph-trace-tertiary') ?? '');
-    ctx.strokeStyle = (window.ThemePalette?.get('graph-trace-tertiary') ?? '');
-    ctx.lineWidth = dpr;
-    const corrTickX = 2 * dpr;
-    const correlationTicks = [0.5, 0, -0.5];
-    correlationTicks.forEach(tick => {
-      const yTick = centerY - (tick * centerY);
-      ctx.beginPath();
-      ctx.moveTo(corrTickX + (16 * dpr), yTick);
-      ctx.lineTo(corrTickX + (21 * dpr), yTick);
-      ctx.stroke();
-      ctx.font = `${12 * dpr}px Arial`;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(tick.toFixed(1), corrTickX + (23 * dpr), yTick);
-    });
+    if (this.displayOptions?.showBalance !== false) {
+      const energyMax = 18;
+      const halfCanvasWidth = width / 2;
+      const drawBalance = ctx => {
+        // Draw the energy difference bar at the bottom.
+        const energyDiffClamped = energyDiff < -energyMax ? -energyMax : (energyDiff > energyMax ? energyMax : energyDiff);
+        const energyBarLength = (energyDiffClamped / energyMax) * halfCanvasWidth;
+        const energyBarY = height - barThickness;
+        ctx.fillStyle = barStyle(ctx);
+        if (energyBarLength >= 0) {
+          ctx.fillRect(centerX, energyBarY, energyBarLength, barThickness);
+        } else {
+          ctx.fillRect(centerX + energyBarLength, energyBarY, -energyBarLength, barThickness);
+        }
+      };
+      if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(ctx, drawBalance);
+      else drawBalance(ctx);
 
-    // Draw the energy difference bar at the bottom.
-    const energyMax = 18;
-    const energyDiffClamped = energyDiff < -energyMax ? -energyMax : (energyDiff > energyMax ? energyMax : energyDiff);
-    const halfCanvasWidth = width / 2;
-    const energyBarLength = (energyDiffClamped / energyMax) * halfCanvasWidth;
-    const energyBarY = height - barThickness;
-    ctx.fillStyle = (window.ThemePalette?.get('graph-trace-fill') ?? '');
-    if (energyBarLength >= 0) {
-      ctx.fillRect(centerX, energyBarY, energyBarLength, barThickness);
-    } else {
-      ctx.fillRect(centerX + energyBarLength, energyBarY, -energyBarLength, barThickness);
+      // Draw energy tick marks and labels.
+      ctx.fillStyle = tickLabelColor;
+      ctx.strokeStyle = tickColor;
+      ctx.lineWidth = dpr;
+      const energyTicks = [-12, -6, 0, 6, 12];
+      const energyTickY = height - (2 * dpr);
+      energyTicks.forEach(tick => {
+        const xTick = centerX + (tick / energyMax) * halfCanvasWidth;
+        ctx.beginPath();
+        ctx.moveTo(xTick, energyTickY - (21 * dpr));
+        ctx.lineTo(xTick, energyTickY - (16 * dpr));
+        if (this.displayOptions?.showAxes !== false) ctx.stroke();
+        ctx.font = `${12 * dpr}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText(tick.toString() + 'dB', xTick, energyTickY - (23 * dpr));
+      });
     }
 
-    // Draw energy tick marks and labels.
-    ctx.fillStyle = (window.ThemePalette?.get('graph-trace-tertiary') ?? '');
-    ctx.strokeStyle = (window.ThemePalette?.get('graph-trace-tertiary') ?? '');
-    ctx.lineWidth = dpr;
-    const energyTicks = [-12, -6, 0, 6, 12];
-    const energyTickY = height - (2 * dpr);
-    energyTicks.forEach(tick => {
-      const xTick = centerX + (tick / energyMax) * halfCanvasWidth;
-      ctx.beginPath();
-      ctx.moveTo(xTick, energyTickY - (21 * dpr));
-      ctx.lineTo(xTick, energyTickY - (16 * dpr));
-      ctx.stroke();
-      ctx.font = `${12 * dpr}px Arial`;
+    // Draw labels for the enabled meters.
+    if (this.displayOptions?.showAxisNumbers !== false) {
+      ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('text-primary') ?? '');
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(tick.toString() + 'dB', xTick, energyTickY - (23 * dpr));
-    });
-
-    // Draw axis labels.
-    ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? '');
-    ctx.textAlign = 'center';
-    ctx.font = `${12 * dpr}px Arial`;
-    ctx.fillText('LR Balance', width / 2, height - dpr);
-    ctx.save();
-    ctx.translate(20 * dpr, height / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText('LR Correlation', 0, -3 * dpr);
-    ctx.restore();
+      ctx.font = `${12 * dpr}px Arial`;
+      if (this.displayOptions?.showBalance !== false) (this.displayOptions?.textContext ?? ctx).fillText('LR Balance', width / 2, height - dpr);
+      if (this.displayOptions?.showCorrelation !== false) {
+        ctx.save();
+        ctx.translate(20 * dpr, height / 2);
+        ctx.rotate(-Math.PI / 2);
+        (this.displayOptions?.textContext ?? ctx).fillText('LR Correlation', 0, -3 * dpr);
+        ctx.restore();
+      }
+    }
   }
 
   cleanup() {

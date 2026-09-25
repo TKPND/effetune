@@ -1,6 +1,6 @@
 ---
 title: "Plugins de Análise - EffeTune"
-description: "Plugins de análise de áudio, incluindo Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer e Stereo Meter."
+description: "Plugins de análise de áudio, incluindo Chroma Spiral, Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer e Stereo Meter."
 lang: pt
 ---
 
@@ -10,6 +10,7 @@ Uma coleção de plugins que permitem visualizar sua música de maneiras fascina
 
 ## Lista de Plugins
 
+- [Chroma Spiral](#chroma-spiral) - Distribui os componentes de frequência numa espiral de notas e oitavas
 - [Level Meter](#level-meter) - Mostra o nível do sinal digital e possível clipping
 - [Note Spectrogram](#note-spectrogram) - Mostra as alturas estimadas ao longo do tempo em um piano roll
 - [Oscilloscope](#oscilloscope) - Exibe visualização da forma de onda em tempo real
@@ -17,6 +18,36 @@ Uma coleção de plugins que permitem visualizar sua música de maneiras fascina
 - [Spectrogram](#spectrogram) - Cria padrões visuais bonitos a partir da sua música
 - [Spectrum Analyzer](#spectrum-analyzer) - Mostra as diferentes frequências na sua música
 - [Stereo Meter](#stereo-meter) - Visualiza o balanço estéreo e o movimento do som
+
+## Chroma Spiral
+
+Mostra onde os componentes de frequência da música se situam entre as 12 notas e as oitavas, sem alterar o som. Use-o para observar harmônicos sobrepostos, comparar a faixa de uma voz e de um baixo ou examinar a extensão de um instrumento.
+
+### Guia de uso
+
+- Sustente uma nota e observe sua posição e as posições iluminadas pelos harmônicos. Uma nota só pode iluminar vários nomes; isso não significa que todas foram tocadas separadamente.
+- Acompanhe um acorde ou uma melodia para ver a mudança das posições ativas. O gráfico pode sugerir padrões tonais, mas não identifica acordes nem tonalidades.
+- Para observar a afinação, veja se um ponto brilhante ou a borda de uma área colorida aparece entre as marcas das notas. Para ler em cents o desvio de uma frequência fundamental, use Pitch Meter.
+- Pressione o gráfico com o mouse, o dedo ou uma caneta para ouvir uma onda senoidal na posição escolhida da espiral. Arraste para mudar o tom; solte ou cancele o gesto para parar o som. Essa prévia funciona com todas as opções de **Color**.
+
+### Parâmetros
+
+- **Color** - Escolhe como o espectro é desenhado. A mesma espiral de referência permanece visível ao fundo com todas as opções, mesmo durante o silêncio.
+  - **Normal** (padrão): mostra cada célula de frequência como um ponto na cor do traçado do gráfico do tema. Seu brilho acompanha o nível da célula e sua área cresce proporcionalmente a esse nível, facilitando a visualização das frequências mais fracas. No nível máximo, o raio do ponto alcança metade da distância até a volta seguinte.
+  - **Normal 2**: colore da posição de cada frequência na espiral até seu nível na cor do traçado do gráfico, sem traçar o contorno dos dados.
+  - **Note Colors**: mostra os mesmos pontos de Normal, mas com uma cor diferente para cada nota, repetida em todas as oitavas.
+- **Lowest Octave** (1 a 8; padrão: 1) - Define a oitava mais interna. Aumente para se concentrar nos sons agudos.
+- **Highest Octave** (1 a 9; padrão: 7) - Define a oitava mais externa. Reduza para focar graves e médios. Os dois limites permanecem na ordem correta.
+- **Frequency Tilt** (de -6 a +6 dB/oct em passos de 0,5; padrão: +3) - Ajusta o nível exibido das frequências acima de 100 Hz sem mudar o som. Valores positivos destacam as frequências mais altas; valores negativos as tornam menos evidentes no gráfico. Em 0, não há correção por frequência.
+- **Level Range** (de 6 a 96 dB em passos de 1 dB; padrão: 24) - Define a largura da faixa móvel de exibição. Reduza-a para destacar diferenças de nível ou amplie-a para ver componentes mais fracos junto dos mais fortes.
+- **Display Floor** (de -120 a -24 dB em passos de 1 dB; padrão: -60) - Define até onde a faixa móvel pode descer em trechos silenciosos. Reduza-o para permitir que componentes mais fracos apareçam dentro do **Level Range** escolhido. A faixa também acompanha os picos recentes, então esse ajuste não garante que todos os componentes fracos sejam visíveis.
+
+### Como ler o gráfico
+
+- Cada volta representa uma oitava. C fica no topo e as notas seguem no sentido horário; voltas internas são mais graves. As marcas C indicam o número da oitava.
+- Em **Normal** e **Note Colors**, pontos mais claros e maiores indicam componentes mais fortes em suas posições, inclusive entre notas. Em **Normal 2**, a região colorida se estende mais para fora onde os componentes são mais fortes; sua borda externa mostra a variação do espectro sem um traço separado.
+- O brilho e a área dos pontos, assim como a extensão da área colorida, mostram intensidade relativa, não nível absoluto: a escala acompanha os picos recentes.
+- Nas oitavas graves, notas próximas ficam menos distintas e a resposta é mais lenta; elas podem parecer sobrepostas.
 
 ## Level Meter
 
@@ -63,7 +94,7 @@ Mostra as frequências fundamentais (F0) estimadas de A0 a C8 em um piano roll q
   - **1/12 Octave** (padrão): uma linha por semitom, usando a estimativa mais forte dessa nota.
   - **High (1/60 Octave)**: cinco linhas por semitom para mostrar variações de altura mais detalhadas.
 - **Layout** - Seleciona **Horizontal** (padrão) ou **Vertical**. O histórico é preservado ao mudar a disposição.
-- **Volume** - Mostra o volume relativo pela espessura das barras e por medidores semicirculares. Fica ativado por padrão; ao desativá-lo, permanecem as linhas originais baseadas apenas na confiança.
+- **Volume** - Mostra o volume relativo pela espessura das barras e por medidores semicirculares. Fica ativado por padrão; ao desativá-lo, a intensidade das linhas indica a confiança.
 - **Time Span** (de 1 a 10 s) - Define quanto tempo o piano roll mostra
   - Valores menores facilitam a observação de mudanças de tempo
   - Valores maiores mostram um trecho musical mais longo de uma só vez
@@ -125,6 +156,7 @@ Acompanha uma frequência fundamental (F0) por vez em um piano roll móvel de do
 ### Parâmetros
 
 - **Layout** - Seleciona **Horizontal** (padrão) ou **Vertical**.
+- **Color** - Muda a cor da linha sem alterar a detecção de altura. **Normal** (padrão) usa a cor do gráfico do tema; **Heatmap** mostra o volume na mesma escala de 24 dB do Note Spectrogram; **Note Colors** acompanha a altura entre as cores das notas.
 - **Reference A4** (400 a 480 Hz) - Define a referência de afinação usada nos nomes das notas e nos cents. Padrão: 440 Hz.
 - **Lowest Note** - Define o limite inferior da faixa exibida e analisada. Padrão: C2. O menor ajuste disponível é A0.
 - **Highest Note** - Define o limite superior da faixa exibida e analisada. Padrão: C7. O maior ajuste disponível é C8.
@@ -154,6 +186,7 @@ O gráfico se desloca da direita para a esquerda a uma velocidade constante, com
 - Diferentes instrumentos criam padrões únicos
 
 ### Parâmetros
+- **Color** - **Normal** usa a cor do gráfico do tema e fica mais claro nas frequências fortes. **Heatmap** (padrão) mantém a escala multicolorida original. A troca recolore o histórico existente.
 - **DB Range** - Quão vibrantes são as cores (-144dB a -48dB)
   - Números menores: Veja mais detalhes sutis
   - Números maiores: Foque nos sons principais
@@ -174,8 +207,8 @@ Cria uma exibição visual em tempo real das frequências da sua música, dos gr
 - Meio mostra frequências principais (vocais, guitarras, piano)
 - Lado direito mostra frequências altas (pratos, brilho, ar)
 - Picos mais altos significam presença mais forte dessas frequências
-- A linha verde mais escura mostra o som atual
-- A linha verde mais clara acompanha os picos recentes e desce suavemente à medida que desaparecem
+- A linha mais grossa mostra o som atual
+- A linha mais fina acompanha os picos recentes e desce suavemente enquanto desaparecem
 - Na visualização **Bar**, cada barra mostra o nível mais alto em uma parte de largura igual da tela. **Log** e **Log (HQ)** usam larguras de oitava iguais; **Linear** usa larguras de frequência iguais.
 - A marca fina acima de uma barra mostra seu pico recente e desce suavemente.
 - Observe como diferentes instrumentos criam padrões diferentes
@@ -187,6 +220,7 @@ Cria uma exibição visual em tempo real das frequências da sua música, dos gr
 - Mix Completo: Como todas as frequências trabalham juntas
 
 ### Parâmetros
+- **Color** - **Normal** (padrão) mantém as cores do gráfico do tema. **Heatmap** ilumina os níveis mais altos e **Note Colors** acompanha as cores das notas no eixo de frequências. A escolha vale para **Line** e **Bar**. Com **Bar** e **Note Colors**, cada barra e sua marca de pico usam uma única cor conforme a frequência central da faixa.
 - **DB Range** - Quão sensível é o display (-144dB a -48dB)
   - Números menores: Veja mais detalhes sutis
   - Números maiores: Foque nos sons principais
@@ -254,6 +288,7 @@ Uma ferramenta fascinante de visualização que permite ver como sua música cri
   - Valores menores: Veja mudanças musicais rápidas
   - Valores maiores: Veja padrões sonoros gerais
   - Padrão: 100 ms funciona bem para a maioria das músicas
+- **Gain** (0 a 24 dB; padrão: 0 dB) - Amplia apenas os pontos e a linha de picos no gráfico em forma de losango. Aumente o valor para ver melhor os padrões dos trechos mais baixos. Não altera o áudio nem as leituras de correlação e equilíbrio.
 
 ### Aproveite Sua Música
 1. **Observe Diferentes Estilos**

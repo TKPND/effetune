@@ -22,7 +22,7 @@
     "policy": "per-sample"
   },
   "referenceEngine": "production-native-promoted-v1",
-  "referenceHash": "sha256:066c76ed952a0c6d943804e9d5ecad5536e70a7df1e98bccaee945ba840bcc10",
+  "referenceHash": "sha256:ab76b1f0c4a0045bf4528e8f346455aec0a9fb5b55848fd28bb90d163a054c5a",
   "generationCommand": "node tools/dsp-parity/generate.mjs --type PitchMeterPlugin --promote-production-native",
   "outputFloats": 24000,
   "byteLength": 96000,

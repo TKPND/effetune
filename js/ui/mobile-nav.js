@@ -46,7 +46,8 @@ export class MobileNav {
             this.mountAudioPlayer('mobile');
             const hasSharedPipeline = new URLSearchParams(window.location.search).has('p');
             const currentView = this.getCurrentView();
-            this.setView(currentView === 'library' ? 'library' : (currentView === 'effects' || hasSharedPipeline ? 'effects' : 'player'));
+            if (currentView === 'visualizer') this.applyViewState('visualizer', { fromLibraryView: true });
+            else this.setView(currentView === 'library' ? 'library' : (currentView === 'effects' || hasSharedPipeline ? 'effects' : 'player'));
             this.attachPlayerState();
             this.updateMiniPlayer();
             this.updatePlayerPlaceholder();
@@ -55,6 +56,7 @@ export class MobileNav {
         }
 
         this.mountAudioPlayer('desktop');
+        this.uiManager.visualizerView?.setEditing(false);
         this.closePluginList({ immediate: true });
         document.body.classList.remove('view-player', 'view-effects');
         this.removeMobileElements();
@@ -75,6 +77,12 @@ export class MobileNav {
                 document.getElementById('openMusicButton')?.click();
             });
             this.playerView.appendChild(this.emptyPlayer);
+            const visualizerButton = document.createElement('button');
+            visualizerButton.type = 'button';
+            visualizerButton.className = 'header-button mobile-open-visualizer';
+            visualizerButton.textContent = 'Visualizer';
+            visualizerButton.addEventListener('click', () => this.uiManager.showVisualizerView());
+            this.playerView.appendChild(visualizerButton);
             this.resumePrompt = document.createElement('button');
             this.resumePrompt.type = 'button';
             this.resumePrompt.className = 'mobile-audio-resume-prompt';
@@ -196,6 +204,7 @@ export class MobileNav {
     }
 
     setView(view, options = {}) {
+        if (!options.fromLibraryView && document.body.classList.contains('view-visualizer')) this.uiManager.hideVisualizerView?.();
         const nextView = view === 'library' ? 'library' : (view === 'effects' ? 'effects' : 'player');
         if (nextView === 'library' && !options.fromLibraryView) {
             return this.showLibraryViewFromNav(options);
@@ -239,6 +248,7 @@ export class MobileNav {
     }
 
     applyViewState(nextView, options = {}) {
+        if (nextView === 'visualizer') nextView = 'player';
         document.body.classList.toggle('view-player', nextView === 'player');
         document.body.classList.toggle('view-effects', nextView === 'effects');
         document.body.classList.toggle('view-library', nextView === 'library');
@@ -269,6 +279,7 @@ export class MobileNav {
     }
 
     getCurrentView() {
+        if (document.body.classList.contains('view-visualizer')) return 'visualizer';
         if (document.body.classList.contains('view-library')) return 'library';
         if (document.body.classList.contains('view-effects')) return 'effects';
         return 'player';

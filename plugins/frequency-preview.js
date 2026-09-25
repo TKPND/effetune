@@ -26,7 +26,9 @@
             if (getComputedStyle(mount).position === 'static') mount.style.position = 'relative';
             this.previousTouchAction = mount.style.touchAction;
             this.resize();
-            if (this.axis.orientation === 'x' && getComputedStyle(mount).touchAction !== 'none') {
+            if (this.axis.orientation === 'polar') {
+                mount.style.touchAction = 'none';
+            } else if (this.axis.orientation === 'x' && getComputedStyle(mount).touchAction !== 'none') {
                 mount.style.touchAction = 'pan-y';
             }
             mount.appendChild(this.canvas);
@@ -58,17 +60,23 @@
 
         resize() {
             const rect = this.mount.getBoundingClientRect();
+            const style = getComputedStyle(this.mount);
+            const layoutWidth = parseFloat(style.width) || this.mount.offsetWidth || this.mount.clientWidth || rect.width;
+            const layoutHeight = parseFloat(style.height) || this.mount.offsetHeight || this.mount.clientHeight || rect.height;
+            const scaleX = rect.width / layoutWidth || 1;
+            const scaleY = rect.height / layoutHeight || 1;
             const inset = this.target.inset;
-            this.box = inset ? { left: rect.left + inset, top: rect.top + inset,
-                width: Math.max(0, rect.width - 2 * inset), height: Math.max(0, rect.height - 2 * inset) }
+            this.box = inset ? { left: rect.left + inset * scaleX, top: rect.top + inset * scaleY,
+                width: Math.max(0, rect.width - 2 * inset * scaleX),
+                height: Math.max(0, rect.height - 2 * inset * scaleY) }
                 : this.plot.getBoundingClientRect();
             this.axis = axes.getAxis(this.plugin, this.target, this.box);
             const { left, top, width, height } = this.box;
-            Object.assign(this.canvas.style, { left: `${left - rect.left - this.mount.clientLeft}px`,
-                top: `${top - rect.top - this.mount.clientTop}px` });
-            // The measured plot owns this box, including under mobile canvas rules.
-            this.canvas.style.setProperty('width', `${width}px`, 'important');
-            this.canvas.style.setProperty('height', `${height}px`, 'important');
+            // Pointer and graph drawing use viewport pixels; CSS positioning uses layout pixels.
+            Object.assign(this.canvas.style, { left: `${(left - rect.left) / scaleX - this.mount.clientLeft}px`,
+                top: `${(top - rect.top) / scaleY - this.mount.clientTop}px` });
+            this.canvas.style.setProperty('width', `${width / scaleX}px`, 'important');
+            this.canvas.style.setProperty('height', `${height / scaleY}px`, 'important');
             this.dpr = window.devicePixelRatio || 1;
             this.canvas.width = Math.round(width * this.dpr);
             this.canvas.height = Math.round(height * this.dpr);
@@ -106,7 +114,9 @@
                 horizontal ? session.point.x - this.box.left : session.point.y - this.box.top));
             const across = (horizontal ? session.point.y - this.box.top : session.point.x - this.box.left)
                 - (axis.crossLength - axis.gutter);
-            let frequency = axis.toFreq(along);
+            let frequency = axis.pointToFreq
+                ? axis.pointToFreq(session.point.x - this.box.left, session.point.y - this.box.top)
+                : axis.toFreq(along);
             if (axis.gutter) {
                 const key = axes.hitKey(axis.keys, along, across, axis.gutter, axis.blackDepth);
                 frequency = key ? axes.noteFrequency(key.midi, axis.a4) : axes.nearestSemitone(frequency, axis.a4);
@@ -130,6 +140,15 @@
                 ctx[clear ? 'clearRect' : 'fillRect'](...args);
             };
             ctx.fillStyle = ctx.strokeStyle = window.ThemePalette?.get('graph-trace') || '';
+            if (axis.toPoint) {
+                const point = axis.toPoint(session.frequency);
+                ctx.globalAlpha = 1;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+                ctx.stroke();
+                return;
+            }
             const position = axis.toPos(session.frequency);
             if (!axis.gutter) {
                 ctx.globalAlpha = 1;

@@ -473,6 +473,7 @@ test('state listeners update seek and disabled controls when optional collaborat
       null,
       { disabled: null },
       { disabled: null },
+      { disabled: null },
       { disabled: null }
     ];
     [
@@ -481,7 +482,8 @@ test('state listeners update seek and disabled controls when optional collaborat
       player.ui.prevButton,
       player.ui.nextButton,
       player.ui.repeatButton,
-      player.ui.shuffleButton
+      player.ui.shuffleButton,
+      player.ui.speedButton
     ] = controls;
     player.ui.seekBar = seekBar;
 
@@ -490,6 +492,7 @@ test('state listeners update seek and disabled controls when optional collaborat
 
     player.stateManager.updateState({ controlsEnabled: false }, 'test');
     assert.deepEqual(controls.filter(Boolean).map(control => control.disabled), [
+      true,
       true,
       true,
       true,
@@ -504,6 +507,24 @@ test('state listeners update seek and disabled controls when optional collaborat
     }, 'test');
     assert.equal(seekBar.disabled, true);
   });
+});
+
+test('applyPlaybackSpeed updates state before synchronously applying it to playback', () => {
+  const calls = [];
+  const player = {
+    stateManager: {
+      updateState(update) {
+        calls.push(['state', update.playbackSpeed]);
+      }
+    },
+    contextManager: {
+      applyPlaybackSpeed() {
+        calls.push(['context']);
+      }
+    }
+  };
+  AudioPlayer.prototype.applyPlaybackSpeed.call(player, 1.5);
+  assert.deepEqual(calls, [['state', 1.5], ['context']]);
 });
 
 test('close cleans up collaborators and clears uiManager', async () => {

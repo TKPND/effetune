@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "type": "ChromaSpiralPlugin",
+  "id": "mono-variable-block",
+  "stimulus": "imp",
+  "sampleRate": 44100,
+  "channels": 1,
+  "frameCount": 773,
+  "blockSize": 97,
+  "channelMode": "mono",
+  "channel": "L",
+  "caseIndex": 1,
+  "seed": "0xeffe7a5f",
+  "params": {},
+  "events": [],
+  "tolerance": {
+    "abs": 0.000001,
+    "policy": "per-sample"
+  },
+  "jsEngineHash": "7633bde8a12ae9cefb80411649c67e8e3a9d8ee33655d1fff9715f37fd42f048",
+  "outputFloats": 773,
+  "byteLength": 3092,
+  "binary": "case-002.f32"
+}

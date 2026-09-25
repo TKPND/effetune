@@ -98,7 +98,7 @@ const char *names[] = {"sine",       "harmonics", "odd",   "missing",   "decay",
                        "pink10",     "silence",   "noise", "background"};
 std::vector<Frame> run(Harness &h, float rate, double midi, Signal signal,
                        const std::vector<std::uint32_t> &blocks = {97u, 113u, 89u},
-                       std::uint32_t channels = 2u, bool cancel = false) {
+                       std::uint32_t channels = 2u, bool cancel = false, double gain = 1.0) {
   const auto count = static_cast<std::uint32_t>(rate * .65);
   const auto frequency = 440.0 * std::exp2((midi - 69.0) / 12.0);
   std::uint32_t random = 12345u, processed = 0u, block = 0u;
@@ -166,6 +166,7 @@ std::vector<Frame> run(Harness &h, float rate, double midi, Signal signal,
       if (signal == Background)
         value += .02 * (std::sin(2 * pi * 130.81 * time) + std::sin(2 * pi * 164.81 * time) +
                         std::sin(2 * pi * 196 * time));
+      value *= gain;
       for (auto ch = 0u; ch < channels; ++ch)
         audio[ch * size + i] =
             static_cast<float>(ch > 1u ? .37 : ((cancel && ch == 1u) ? -value : value));
@@ -253,6 +254,18 @@ void evaluate(float rate, double midi, Signal signal, bool extended = false) {
 }
 } // namespace
 int main() {
+  Harness volume_a4(48000), volume_quiet(48000), volume_a1(48000, 21), volume_silence(48000);
+  const auto a4_level = run(volume_a4, 48000, 69, Sine).back().level;
+  const auto quiet_level =
+      run(volume_quiet, 48000, 69, Sine, {97u, 113u, 89u}, 2u, false, 0.1).back().level;
+  const auto a1_level = run(volume_a1, 48000, 33, Sine, {97u, 113u, 89u}).back().level;
+  const auto silence_level = run(volume_silence, 48000, 69, Silence).back().level;
+  std::printf("pitch volume A4 %.3f dB, quiet %.3f dB, A1 %.3f dB\n", a4_level, quiet_level,
+              a1_level);
+  CHECK(std::abs(a4_level - (20.0 * std::log10(.15) + 3.0 * std::log2(440.0 / 100.0))) < 1.5);
+  CHECK(std::abs((quiet_level - a4_level) + 20.0) < 0.5);
+  CHECK(std::abs((a4_level - a1_level) - 3.0 * std::log2(440.0 / 100.0)) < 1.5);
+  CHECK(silence_level == -240.0F);
   for (const auto rate : {48000.0F, 96000.0F, 192000.0F}) {
     for (const auto midi : {36.0, 60.0, 84.0, 96.0})
       for (int signal = Sine; signal <= Background; ++signal) {

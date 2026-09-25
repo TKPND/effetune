@@ -292,7 +292,7 @@ export class MediaSessionManager {
     const position = Math.max(0, Math.min(rawPosition, duration));
     const nextState = {
       duration,
-      playbackRate: 1,
+      playbackRate: state.playbackSpeed,
       position
     };
 

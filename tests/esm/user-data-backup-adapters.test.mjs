@@ -7,6 +7,17 @@ import { ExtensionIrLibraryClient, ExtensionIrLibraryHost } from '../../extensio
 import { IrLibraryStore } from '../../js/ir-library/ir-library-store.js';
 import { IrLibraryService } from '../../js/ir-library/service.js';
 import { withGlobals } from '../helpers/global-test-utils.mjs';
+import { createDefaultLayout } from '../../js/visualizer/visualizer-model.js';
+import { prepareItems } from '../../js/user-data-backup/portable.js';
+import { UserDataBackupService } from '../../js/user-data-backup/service.js';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { runInThisContext } from 'node:vm';
+
+const require = createRequire(import.meta.url);
+const zipModule = { exports: {} };
+runInThisContext(`(function(module, exports, require) {${readFileSync(new URL('../../js/vendor/jszip-3.10.1.min.js', import.meta.url), 'utf8')}\n})`)(zipModule, zipModule.exports, require);
+const loadZip = async () => zipModule.exports;
 
 function memoryBackend() {
     const files = new Map();
@@ -21,6 +32,38 @@ function memoryBackend() {
 }
 
 const emptyMeasurementStorage = { readBackupSnapshot: async () => [] };
+
+test('visualizer backup carries user presets and inline background images only', async () => {
+    const saved = new Map();
+    const store = {
+        readBackupSnapshot: async () => [...saved].map(([name, layout]) => ({ name, layout })),
+        appendUserPreset: async (name, layout) => {
+            if (saved.has(name)) throw new Error('Preset already exists');
+            saved.set(name, structuredClone(layout));
+        }
+    };
+    const layout = createDefaultLayout();
+    layout.background.image = 'data:image/png;base64,aGVsbG8=';
+    saved.set('Night', layout);
+    const adapter = createUserDataBackupAdapter({ presetManager: { readBackupSnapshot: async () => ({}) },
+        pluginPresetStore: { readBackupSnapshot: async () => ({}) },
+        visualizerPresetStore: store, measurementStorage: emptyMeasurementStorage,
+        irLibrary: { readBackupSnapshot: async () => [] } });
+    const snapshot = await adapter.readSnapshot();
+    assert.equal(snapshot.unavailable.length, 0);
+    assert.deepEqual(snapshot.items.map(item => item.kind), ['visualizer']);
+    assert.deepEqual(snapshot.items[0].data, layout);
+    assert.equal((await prepareItems(snapshot.items))[0].available, true);
+    const service = new UserDataBackupService({ adapter, appVersion: '2.11.0', loadZip });
+    const catalog = await service.listBackup();
+    const backup = await service.createBackup(catalog, [catalog.items[0].key]);
+    const opened = await service.openBackup(backup.blob);
+    assert.deepEqual(opened.items.map(item => item.data), [layout]);
+    await adapter.appendItem({ ...snapshot.items[0], name: 'Night Copy' });
+    assert.deepEqual(saved.get('Night Copy'), layout);
+    await assert.rejects(adapter.appendItem({ ...snapshot.items[0], data: { ...layout, items: [null] } }));
+    await assert.rejects(adapter.appendItem(snapshot.items[0]));
+});
 
 test('web and Electron adapters preserve raw presets, reject unsafe keys and isolate unreadable categories', async () => {
     const web = new Map([['effetune_presets', '{"Existing":{"plugins":[]}}']]);

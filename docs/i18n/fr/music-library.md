@@ -6,7 +6,7 @@ lang: fr
 
 # Utiliser la Bibliothèque musicale
 
-La Bibliothèque musicale indexe les dossiers de musique que vous choisissez et vous permet de parcourir votre collection locale par morceaux, albums, artistes, genres, sous-dossiers, dossiers, ajouts récents et listes de lecture. Comme pour la lecture normale des fichiers musicaux, le son passe par le pipeline d'effets EffeTune actuel.
+La Bibliothèque musicale indexe les dossiers de musique que vous choisissez et vous permet de parcourir votre collection locale par morceaux, fichiers, albums, artistes, genres, sous-dossiers, dossiers, ajouts récents et listes de lecture. Comme pour la lecture normale des fichiers musicaux, le son passe par le pipeline d'effets EffeTune actuel.
 
 La Bibliothèque musicale enregistre le catalogue interne de l'application, le cache des illustrations et les listes de lecture. Elle ne modifie, ne renomme, ne déplace et ne supprime jamais les fichiers musicaux eux-mêmes.
 
@@ -26,7 +26,7 @@ La Bibliothèque musicale indexe les extensions de fichiers multimédias courant
 
 Pour revenir à l'édition des effets, cliquez sur le bouton **Effect Pipeline** en disposition ordinateur, ou revenez à l'onglet **Effets** en disposition mobile. Dans l'application de bureau, vous pouvez aussi utiliser **Affichage > Effect Pipeline** ou **Ctrl+E** (**Command+E** sur macOS).
 
-Si vous voulez afficher la Bibliothèque musicale en premier au démarrage, ouvrez **Paramètres > Configuration...** et réglez **Vue au démarrage :** sur **Bibliothèque musicale**. Dans la liste située à côté de **Bibliothèque musicale**, choisissez la section qui s'affichera en premier : **Morceaux**, **Albums**, **Artistes**, **Genres**, **Sous-dossiers**, **Dossiers** ou **Listes de lecture**.
+Si vous voulez afficher la Bibliothèque musicale en premier au démarrage, ouvrez **Paramètres > Configuration...** et réglez **Vue au démarrage :** sur **Bibliothèque musicale**. Dans la liste située à côté de **Bibliothèque musicale**, choisissez la section qui s'affichera en premier : **Morceaux**, **Fichiers**, **Albums**, **Artistes**, **Genres**, **Sous-dossiers**, **Dossiers** ou **Listes de lecture**.
 
 ## Ajouter un dossier de musique
 
@@ -42,6 +42,7 @@ Si vous essayez d'ajouter un dossier qui se trouve déjà dans un dossier enregi
 Les onglets de navigation permettent de changer de catalogue.
 
 - **Morceaux** - affiche tous les morceaux indexés. La disposition ordinateur utilise un tableau triable, tandis que la disposition mobile utilise une liste compacte.
+- **Fichiers** - affiche les morceaux indexés selon l'emplacement de leur fichier pour les choisir directement. L'application de bureau affiche les chemins absolus ; les navigateurs Web affichent le nom du dossier racine de la bibliothèque et le chemin relatif. Les morceaux issus d'un même fichier audio CUE restent des entrées distinctes et peuvent être sélectionnés individuellement.
 - **Albums** - regroupe les morceaux par album à partir des métadonnées.
 - **Artistes** - regroupe les morceaux par artiste ou artiste de l'album dans les métadonnées.
 - **Genres** - regroupe les morceaux par genre dans les métadonnées.

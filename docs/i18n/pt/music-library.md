@@ -6,7 +6,7 @@ lang: pt
 
 # Como Usar a Biblioteca de música
 
-A Biblioteca de música indexa as pastas de música selecionadas para que você possa explorar sua coleção local por faixa, álbum, artista, gênero, subpasta, pasta, faixas adicionadas recentemente ou playlist. A reprodução passa pelo Effect Pipeline atual do EffeTune, assim como na reprodução normal de arquivos de música.
+A Biblioteca de música indexa as pastas de música selecionadas para que você possa explorar sua coleção local por faixa, arquivo, álbum, artista, gênero, subpasta, pasta, faixas adicionadas recentemente ou playlist. A reprodução passa pelo Effect Pipeline atual do EffeTune, assim como na reprodução normal de arquivos de música.
 
 A Biblioteca de música armazena o catálogo, o cache de capas e as playlists dentro do aplicativo. Ela não edita, renomeia, move nem exclui os arquivos de música.
 
@@ -26,7 +26,7 @@ A Biblioteca de música indexa extensões comuns de arquivos de mídia, como MP3
 
 Para voltar à edição de efeitos, clique no botão **Effect Pipeline** no layout para PC e, no layout móvel, volte para a aba **Efeitos**. No aplicativo desktop, também é possível usar **Visualizar > Effect Pipeline** ou **Ctrl+E** (**Command+E** no macOS).
 
-Se quiser que a Biblioteca de música seja a primeira tela exibida ao iniciar, abra **Configurações > Configuração...** e defina **Visualização ao iniciar:** como **Biblioteca de música**. Na lista ao lado de **Biblioteca de música**, escolha qual seção será exibida primeiro: **Faixas**, **Álbuns**, **Artistas**, **Gêneros**, **Subpastas**, **Pastas** ou **Playlists**.
+Se quiser que a Biblioteca de música seja a primeira tela exibida ao iniciar, abra **Configurações > Configuração...** e defina **Visualização ao iniciar:** como **Biblioteca de música**. Na lista ao lado de **Biblioteca de música**, escolha qual seção será exibida primeiro: **Faixas**, **Arquivos**, **Álbuns**, **Artistas**, **Gêneros**, **Subpastas**, **Pastas** ou **Playlists**.
 
 ## Adicionar pastas de música
 
@@ -42,6 +42,7 @@ Se você tentar adicionar uma pasta que já está dentro de uma pasta registrada
 Use as abas de navegação para alternar o catálogo.
 
 - **Faixas** - Exibe todas as faixas indexadas. No layout para PC, elas aparecem em uma tabela ordenável; no layout móvel, em uma lista compacta.
+- **Arquivos** - Exibe as faixas indexadas pelo local do arquivo para que você possa escolhê-las diretamente. O aplicativo desktop mostra caminhos absolutos; os navegadores mostram o nome da pasta raiz da biblioteca e o caminho relativo. Faixas originadas do mesmo arquivo de áudio CUE continuam sendo itens separados e podem ser selecionadas individualmente.
 - **Álbuns** - Agrupa por álbum a partir dos metadados.
 - **Artistas** - Agrupa por artista e artista do álbum nos metadados.
 - **Gêneros** - Agrupa por gênero nos metadados.

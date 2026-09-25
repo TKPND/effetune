@@ -141,7 +141,7 @@ test('Spectrum Analyzer places Keyboard after every other setting and keeps its 
     return createRow(`${label} (${unit})`);
   };
   plugin.createRadioGroup = (label, options, value, setter, key) => {
-    helperCalls.push({ kind: 'radio', label, value, key });
+    helperCalls.push({ kind: 'radio', label, options, value, key });
     return createRow(label);
   };
   plugin.createCheckboxControl = (label, checked, setter, key) => {
@@ -167,6 +167,7 @@ test('Spectrum Analyzer places Keyboard after every other setting and keeps its 
     'Points:',
     'Frequency Scale:',
     'Display:',
+    'Color:',
     'Keyboard:'
   ]);
   assert.equal(ui.children.at(-2), rows.at(-1));
@@ -174,7 +175,13 @@ test('Spectrum Analyzer places Keyboard after every other setting and keeps its 
     { kind: 'parameter', label: 'DB Range', key: 'dr' },
     { kind: 'radio', label: 'Frequency Scale', key: 'sc' },
     { kind: 'radio', label: 'Display', key: 'dm' },
+    { kind: 'radio', label: 'Color', key: 'cl' },
     { kind: 'checkbox', label: 'Keyboard', key: 'kb' }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(helperCalls.find(call => call.key === 'cl').options)), [
+    { value: 'Normal', label: 'Normal' },
+    { value: 'Heatmap', label: 'Heatmap' },
+    { value: 'Rainbow', label: 'Note Colors' }
   ]);
   assert.equal(helperCalls.at(-1).value, false);
 
@@ -216,6 +223,74 @@ test('Spectrum Analyzer persists and resets the selected display mode', () => {
   plugin.setDisplayMode('bar');
   plugin.reset();
   assert.equal(plugin.getParameters().dm, 'line');
+});
+
+test('Spectrum Analyzer Color builds level and pitch gradients', () => {
+  const runtime = loadSpectrumAnalyzer();
+  runtime.windowRef.NoteSpectrogramPlugin = { noteColor: midi => [midi, 80, 160] };
+  const rgba = new Uint8ClampedArray(256 * 4);
+  for (let intensity = 0; intensity < 256; intensity++) {
+    rgba.set([intensity, 0, 255 - intensity, intensity], intensity * 4);
+  }
+  runtime.windowRef.SpectrogramPlugin = { getHeatmapLuts: () => ({ rgba }) };
+  const plugin = new runtime.SpectrumAnalyzerPlugin();
+  const gradients = [];
+  const context = {
+    createLinearGradient(...coordinates) {
+      const gradient = { coordinates, stops: [], addColorStop(position, color) {
+        this.stops.push([position, color]);
+      } };
+      gradients.push(gradient);
+      return gradient;
+    }
+  };
+  assert.equal(plugin.getColorStyle(context, 200, 100), null);
+  plugin.setColor('Heatmap');
+  const heatmap = plugin.getColorStyle(context, 200, 100);
+  assert.deepEqual(heatmap.coordinates, [0, 100, 0, 0]);
+  assert.deepEqual(heatmap.stops[0], [0, 'rgba(0,0,255,0)']);
+  assert.deepEqual(heatmap.stops.at(-1), [1, 'rgba(255,0,0,1)']);
+  assert.equal(plugin.getColorStyle(context, 200, 100), heatmap);
+  plugin.setColor('Rainbow');
+  const notes = plugin.getColorStyle(context, 200, 100);
+  assert.deepEqual(notes.coordinates, [0, 0, 200, 0]);
+  assert.ok(notes.stops.length > 100);
+  assert.equal(notes.stops[0][0], 0);
+  assert.equal(notes.stops.at(-1)[0], 1);
+  plugin.setFrequencyScale('linear');
+  assert.notEqual(plugin.getColorStyle(context, 200, 100), notes);
+  assert.equal(plugin.getParameters().cl, 'Rainbow');
+  plugin.reset();
+  assert.equal(plugin.cl, 'Normal');
+});
+
+test('Spectrum Analyzer Note Colors paints each bar and peak from its center frequency', () => {
+  const runtime = loadSpectrumAnalyzer();
+  runtime.windowRef.NoteSpectrogramPlugin = { noteColor: midi => [midi, 80, 160] };
+  const plugin = new runtime.SpectrumAnalyzerPlugin();
+  plugin.setColor('Rainbow');
+  const spectrum = new Float32Array(48).fill(-Infinity);
+  const peaks = new Float32Array(48).fill(-Infinity);
+  for (const band of [10, 11]) { spectrum[band] = -30; peaks[band] = -20; }
+  const bands = { spectrum, peaks, firstFilled: 10, lastFilled: 11 };
+  const fills = [];
+  const context = {
+    save() {}, restore() {}, beginPath() {}, rect() {}, clip() {}, stroke() {},
+    moveTo() {}, lineTo() {},
+    createLinearGradient() { throw new Error('Bars should not use a gradient'); },
+    fillRect() { fills.push(this.fillStyle); }
+  };
+  for (const scale of ['linear', 'log', 'log-hq']) {
+    plugin.sc = scale;
+    fills.length = 0;
+    plugin.drawSpectrumBars(context, bands, 800, 400, 1);
+    const expected = [10, 11].map(band => {
+      const frequency = plugin.displayXToFrequency((band + 0.5) / 48);
+      const midi = 69 + 12 * Math.log2(frequency / 440);
+      return `rgb(${runtime.windowRef.NoteSpectrogramPlugin.noteColor(midi).map(Math.round).join(',')})`;
+    });
+    assert.deepEqual(fills, [...expected, ...expected], scale);
+  }
 });
 
 test('Spectrum Analyzer synchronously copies v1 telemetry without running a main-thread FFT', () => {
@@ -466,6 +541,35 @@ test('Spectrum Analyzer draws bounded bars at the aggregated levels', () => {
     assert.ok(bar.x >= 0 && bar.x + bar.width <= 400);
     if (index > 0) assert.ok(bars[index - 1].x + bars[index - 1].width <= bar.x);
   }
+});
+
+test('Spectrum Bar quantization fills whole blocks and places the peak in one block', () => {
+  const { SpectrumAnalyzerPlugin } = loadSpectrumAnalyzer();
+  const plugin = new SpectrumAnalyzerPlugin();
+  const bands = { spectrum: Float32Array.of(-50), peaks: Float32Array.of(-31),
+    firstFilled: 0, lastFilled: 0 };
+  const draw = quantizeBars => {
+    plugin.displayOptions = { quantizeBars };
+    const { ctx, operations } = createSpectrumDrawRecorder();
+    plugin.drawSpectrumBars(ctx, bands, 120, 240, 1);
+    return operations.filter(operation => operation.type === 'fillRect');
+  };
+  const continuous = draw(false);
+  const quantized = draw(true);
+  const geometry = rectangles => rectangles.map(({ y, height }) =>
+    [Math.round(y * 100) / 100, Math.round(height * 100) / 100]);
+  assert.deepEqual(geometry(continuous),
+    [[125, 115], [77.5, 1]]);
+  assert.deepEqual(geometry(quantized),
+    [[126, 114], [72.5, 5]]);
+  const top = { spectrum: Float32Array.of(-1), peaks: Float32Array.of(0),
+    firstFilled: 0, lastFilled: 0 };
+  const { ctx, operations } = createSpectrumDrawRecorder();
+  plugin.drawSpectrumBars(ctx, top, 120, 400, 1);
+  assert.deepEqual(geometry(operations.filter(operation => operation.type === 'fillRect')).at(-1),
+    [4.5, 5]);
+  assert.deepEqual(Array.from(bands.spectrum), [-50]);
+  assert.deepEqual(Array.from(bands.peaks), [-31]);
 });
 
 test('Spectrum Analyzer keeps Line free of bars and paints Bar labels last', () => {

@@ -1112,7 +1112,7 @@ export class AudioContextManager {
   }
 
   /**
-   * Detach nodes that belong to the previous AudioContext.
+   * Stop and detach the current backend before rebinding playback.
    */
   detachCurrentGraphNodesForRebind() {
     this.clearRegionBoundaryTimer();
@@ -1221,6 +1221,10 @@ export class AudioContextManager {
     if (!newAudioContext) {
       return;
     }
+    return this.rebindCurrentPlayback({ stopCurrentFirst: false, newAudioContext });
+  }
+
+  async rebindCurrentPlayback({ stopCurrentFirst, newAudioContext = null }) {
     this.supersedeRollingSeekCandidate();
 
     const state = this.getCurrentState();
@@ -1247,6 +1251,11 @@ export class AudioContextManager {
       }
     } : null;
     this.activeGraphRebuildRequest = graphRebuildRequest;
+    if (stopCurrentFirst) {
+      this.stopRequestToken++;
+      this.detachCurrentGraphNodesForRebind();
+      this.maintainSilentSource();
+    }
     this.cancelPendingMediaCandidateReadiness();
     this.clearNextTrackBuffer();
     this.clearRegionBoundaryTimer();
@@ -1294,9 +1303,11 @@ export class AudioContextManager {
       }, 'Audio graph rebind failed');
     };
 
-    this.audioPlayer.audioContext = newAudioContext;
-    this.originalSourceNode = this.audioManager.ioManager?.inputSourceNode ||
-      this.audioManager.ioManager?.sourceNode || this.audioManager.sourceNode || null;
+    if (newAudioContext) {
+      this.audioPlayer.audioContext = newAudioContext;
+      this.originalSourceNode = this.audioManager.ioManager?.inputSourceNode ||
+        this.audioManager.ioManager?.sourceNode || this.audioManager.sourceNode || null;
+    }
 
     if (!currentTrack) {
       this.detachCurrentGraphNodesForRebind();
@@ -1320,6 +1331,7 @@ export class AudioContextManager {
     let rebuildTrack = currentTrack;
     let rebuildDescriptor = null;
     let rebuildDecisionRecord = null;
+    let backendCommitted = false;
     try {
       const revalidation = currentTrack.sourceKind === 'electron-file'
         ? await this.audioPlayer.playbackManager?.prepareCatalogTrackForGraphRebuild?.(currentTrack)
@@ -1345,7 +1357,8 @@ export class AudioContextManager {
       if (this.hasPendingRollingCleanup()) await this.waitForRollingCleanupBarrier();
       if (isStale()) return;
       const previousDecision = this.currentPlaybackDecision;
-      const reusableFallbackBuffer = previousDecision?.partialDecodeFallbackAdmission &&
+      const reusableFallbackBuffer = this.isGaplessPlaybackEnabled() &&
+        previousDecision?.partialDecodeFallbackAdmission &&
         samePlaybackEntry(previousDecision.playableTrack, currentTrack)
         ? this.currentBuffer
         : null;
@@ -1423,6 +1436,7 @@ export class AudioContextManager {
               }, 'Audio graph rebuild settled latest rolling transport');
             }
             if (!transportIntent.isStopped) void this.prepareNextTrackBufferWithRepeatMode();
+            backendCommitted = true;
             return;
           }
           this.cleanupPreparedTransitionCandidate(candidate);
@@ -1455,7 +1469,10 @@ export class AudioContextManager {
           if (isStale()) return;
           throw new Error('Media candidate could not be committed after audio graph rebuild');
         }
-        if (!isStale()) this.currentPlaybackDecision = decisionRecord;
+        if (!isStale()) {
+          this.currentPlaybackDecision = decisionRecord;
+          backendCommitted = true;
+        }
         return;
       }
 
@@ -1527,6 +1544,7 @@ export class AudioContextManager {
       if (!latestIntent.isStopped) {
         this.prepareNextTrackBufferWithRepeatMode();
       }
+      backendCommitted = true;
     } catch (error) {
       if (!isGraphRebuildCurrent()) return;
       const playableTrack = rebuildTrack;
@@ -1559,16 +1577,21 @@ export class AudioContextManager {
           if (!isGraphRebuildCurrent()) return;
           throw new Error('Fallback media candidate could not be committed after audio graph rebuild');
         }
-        if (isGraphRebuildCurrent()) this.currentPlaybackDecision = fallbackRecord;
+        if (isGraphRebuildCurrent()) {
+          this.currentPlaybackDecision = fallbackRecord;
+          backendCommitted = true;
+        }
       } catch (fallbackError) {
         if (!isGraphRebuildCurrent()) return;
         console.error('[AudioContextManager] Audio element rebind after graph rebuild failed:', fallbackError);
         settleGraphRebindFailure();
       }
     } finally {
+      const shouldConverge = backendCommitted && isGraphRebuildCurrent();
       if (this.activeGraphRebuildRequest === graphRebuildRequest) {
         this.activeGraphRebuildRequest = null;
       }
+      if (shouldConverge) this.convergePlaybackSpeedBackend();
     }
   }
 
@@ -1673,6 +1696,7 @@ export class AudioContextManager {
       this.mediaSourceGeneration++;
       this.currentObjectURL = candidate.objectURL;
       this.setupEventHandlers();
+      this.applyPlaybackSpeedToElement(candidate.element);
       this.setValidatedActiveRegion(playableTrack, sourceGeneration);
       this.setupMediaSessionHandlers();
       this.updateState(statePatch, 'Audio graph rebuilt and audio element rebound');
@@ -1720,7 +1744,31 @@ export class AudioContextManager {
   }
 
   isGaplessPlaybackEnabled() {
-    return normalizeGaplessPlayback({ gaplessPlayback: this.audioPlayer?.gaplessPlayback });
+    return normalizeGaplessPlayback({ gaplessPlayback: this.audioPlayer?.gaplessPlayback }) &&
+      (this.getCurrentState()?.playbackSpeed ?? 1) === 1;
+  }
+
+  applyPlaybackSpeedToElement(element) {
+    if (!element) return;
+    const speed = this.getCurrentState()?.playbackSpeed ?? 1;
+    element.defaultPlaybackRate = speed;
+    element.playbackRate = speed;
+    element.preservesPitch = true;
+  }
+
+  applyPlaybackSpeed() {
+    this.applyPlaybackSpeedToElement(this.audioPlayer.audioElement);
+    void this.clearNextTrackBuffer();
+    this.convergePlaybackSpeedBackend();
+  }
+
+  convergePlaybackSpeedBackend() {
+    const state = this.getCurrentState();
+    if ((state?.playbackSpeed ?? 1) === 1 ||
+        !['bufferSource', 'rollingPcm'].includes(state?.playbackMode) ||
+        !state.currentTrack || state.isTransitioning ||
+        this.activeGraphRebuildRequest || this.rollingSeekInFlight) return;
+    void this.rebindCurrentPlayback({ stopCurrentFirst: true });
   }
 
   async applyGaplessPlaybackPreference(enabled) {
@@ -2287,6 +2335,7 @@ export class AudioContextManager {
           this.mediaSource = this.audioPlayer.audioContext.createMediaElementSource(this.audioPlayer.audioElement);
           
           if (wasPlaying) {
+            this.applyPlaybackSpeedToElement(this.audioPlayer.audioElement);
             this.audioPlayer.audioElement.play().catch(() => {});
           }
         } else {
@@ -3084,12 +3133,14 @@ export class AudioContextManager {
         isTransitioning: false,
         transitionType: null
       }, 'Playback paused during transition');
+      this.convergePlaybackSpeedBackend();
       return;
     }
 
     this.stopRequestToken++;
     
     await this.dispatchPlaybackBackend('pause');
+    this.convergePlaybackSpeedBackend();
   }
   
   /**
@@ -3179,6 +3230,7 @@ export class AudioContextManager {
     await this.dispatchPlaybackBackend('stop');
     await this.disposeAllRollingTransports();
     if (this.hasPendingRollingCleanup()) await this.waitForRollingCleanupBarrier();
+    this.convergePlaybackSpeedBackend();
   }
   
   /**
@@ -3359,56 +3411,54 @@ export class AudioContextManager {
     // survive the re-anchoring. A replacing seek owns the marker once it has
     // taken the token, so only the seek holding the current token releases it.
     this.rollingSeekInFlight = transport;
-    const releaseInFlight = () => {
-      if (requestToken === this.rollingSeekRequestToken) this.rollingSeekInFlight = null;
-    };
-    const nextCleanup = this.clearNextTrackBuffer();
-    await nextCleanup;
-    if (this.hasPendingRollingCleanup()) await this.waitForRollingCleanupBarrier();
-    const latestState = this.getCurrentState();
-    if (requestToken !== this.rollingSeekRequestToken ||
-        this.rollingTransport !== transport || latestState?.playbackMode !== 'rollingPcm' ||
-        transport.failed || transport.disposed) {
-      releaseInFlight();
-      return;
-    }
-    const frame = Math.round(Math.max(0, Math.min(
-      time,
-      transport.metadata.durationSec
-    )) * transport.metadata.sampleRate);
-    // Resume is decided from the state that is current once the candidate is
-    // adopted, not from a snapshot taken before it: a Play that committed while
-    // the candidate was preparing must survive the adoption.
-    let seekResult = false;
     try {
-      seekResult = await transport.seek(frame, {
+      const nextCleanup = this.clearNextTrackBuffer();
+      await nextCleanup;
+      if (this.hasPendingRollingCleanup()) await this.waitForRollingCleanupBarrier();
+      const latestState = this.getCurrentState();
+      if (requestToken !== this.rollingSeekRequestToken ||
+          this.rollingTransport !== transport || latestState?.playbackMode !== 'rollingPcm' ||
+          transport.failed || transport.disposed) return;
+      const frame = Math.round(Math.max(0, Math.min(
+        time,
+        transport.metadata.durationSec
+      )) * transport.metadata.sampleRate);
+      // Resume is decided from the state that is current once the candidate is
+      // adopted, not from a snapshot taken before it: a Play that committed while
+      // the candidate was preparing must survive the adoption.
+      const seekResult = await transport.seek(frame, {
         resume: false,
         shouldResume: () => this.getCurrentState()?.isPlaying === true
       });
-    } finally {
-      releaseInFlight();
-    }
-    if (!seekResult) {
-      // The transport keeps playing from its previous anchor, so a next held
-      // while the seek was in flight still needs its boundary from that anchor.
-      if (requestToken === this.rollingSeekRequestToken && this.rollingTransport === transport &&
-          this.getCurrentState()?.isPlaying === true) {
-        this.rearmPreparedAutomaticMove();
+      if (!seekResult) {
+        // The transport keeps playing from its previous anchor, so a next held
+        // while the seek was in flight still needs its boundary from that anchor.
+        if (requestToken === this.rollingSeekRequestToken && this.rollingTransport === transport &&
+            this.getCurrentState()?.isPlaying === true) {
+          this.rollingSeekInFlight = null;
+          this.rearmPreparedAutomaticMove();
+        }
+        return;
       }
-      return;
+      if (requestToken !== this.rollingSeekRequestToken || this.rollingTransport !== transport) return;
+      const adoptedFrame = Number.isSafeInteger(seekResult.adoptedFrame)
+        ? seekResult.adoptedFrame
+        : frame;
+      const resume = transport.playing;
+      this.updateState({
+        currentTrackPosition: adoptedFrame / transport.metadata.sampleRate,
+        isPlaying: resume,
+        isPaused: !resume,
+        isStopped: false
+      }, 'Rolling PCM seek completed');
+      this.rollingSeekInFlight = null;
+      if (resume) this.rearmPreparedAutomaticMove();
+    } finally {
+      if (requestToken === this.rollingSeekRequestToken) {
+        this.rollingSeekInFlight = null;
+        this.convergePlaybackSpeedBackend();
+      }
     }
-    if (requestToken !== this.rollingSeekRequestToken || this.rollingTransport !== transport) return;
-    const adoptedFrame = Number.isSafeInteger(seekResult.adoptedFrame)
-      ? seekResult.adoptedFrame
-      : frame;
-    const resume = transport.playing;
-    this.updateState({
-      currentTrackPosition: adoptedFrame / transport.metadata.sampleRate,
-      isPlaying: resume,
-      isPaused: !resume,
-      isStopped: false
-    }, 'Rolling PCM seek completed');
-    if (resume) this.rearmPreparedAutomaticMove();
   }
   
   /**
@@ -3662,6 +3712,8 @@ export class AudioContextManager {
       }, 'Track loading failed without replacing current playback');
       window.uiManager?.setError?.('error.playbackCommandFailed', true);
       return false;
+    } finally {
+      if (this.isActiveLoadRequest(loadRequest)) this.convergePlaybackSpeedBackend();
     }
   }
   
@@ -4935,6 +4987,8 @@ export class AudioContextManager {
         }, 'Transition failed');
       }
       throw error;
+    } finally {
+      if (this.isActiveTransitionRequest(transitionRequest)) this.convergePlaybackSpeedBackend();
     }
   }
 
@@ -5378,6 +5432,7 @@ export class AudioContextManager {
       'Media playback did not start before the deadline'
     )), MEDIA_START_TIMEOUT_MS);
     try {
+      this.applyPlaybackSpeedToElement(element);
       Promise.resolve(element.play()).then(() => {
         if (closed || settled || failure) {
           if (failure && (forcePauseOnLateResolution || isCurrent?.() !== false)) {
@@ -5555,6 +5610,7 @@ export class AudioContextManager {
       this.mediaSourceGeneration++;
       this.currentObjectURL = candidate.objectURL;
       this.setupEventHandlers();
+      this.applyPlaybackSpeedToElement(candidate.element);
       this.setValidatedActiveRegion(track, candidate.sourceGeneration);
       this.setupMediaSessionHandlers();
     }

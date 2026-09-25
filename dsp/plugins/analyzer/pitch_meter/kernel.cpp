@@ -72,6 +72,7 @@ public:
     ring_.resize(max_window_ + hop_ + 16u);
     prefix_.resize(max_window_ + 1u);
     nsdf_.resize(max_window_ + 1u);
+    volume_power_.resize(capacity_ / 2u + 1u);
     schedule_ = std::make_unique<Schedule>();
     ready_ = true;
     sync_ = true;
@@ -221,10 +222,13 @@ private:
           if (bin == 0u) {
             correlation[0] = spectrum[0] * spectrum[0];
             correlation[1] = spectrum[1] * spectrum[1];
+            volume_power_[0] = correlation[0];
+            volume_power_[size_ / 2u] = correlation[1];
           } else {
             correlation[index] =
                 spectrum[index] * spectrum[index] + spectrum[index + 1u] * spectrum[index + 1u];
             correlation[index + 1u] = 0.0F;
+            volume_power_[bin] = correlation[index];
           }
         }
       break;
@@ -306,13 +310,36 @@ private:
     }
     return 0.0;
   }
+  double pitchLevel(double frequency) const noexcept {
+    if (frequency <= 0.0 || silent_)
+      return -240.0;
+    constexpr auto cents_ratio = 1.029302236643492;
+    const auto bin_hz = rate_ / size_;
+    double power = 0.0;
+    for (auto harmonic = 1u; harmonic <= 16u; ++harmonic) {
+      const auto partial = harmonic * frequency;
+      if (!(partial < rate_ * 0.5))
+        break;
+      const auto center_bin = partial / bin_hz;
+      const auto lower = std::min(partial / cents_ratio / bin_hz, center_bin - 2.0);
+      const auto upper = std::max(partial * cents_ratio / bin_hz, center_bin + 2.0);
+      const auto begin = static_cast<std::uint32_t>(std::floor(std::max(lower, 0.0)));
+      const auto end = std::min(static_cast<std::uint32_t>(std::ceil(upper)), size_ / 2u);
+      for (auto bin = begin; bin <= end; ++bin)
+        power += volume_power_[bin];
+    }
+    const auto amplitude = std::sqrt(power * 4.0 / (size_ * static_cast<double>(window_)));
+    if (amplitude <= 1e-12)
+      return -240.0;
+    const auto correction = 3.0 * std::log2(std::max(frequency, 100.0) / 100.0);
+    return std::max(-240.0, 20.0 * std::log10(amplitude) + correction);
+  }
   void publish() noexcept {
     double confidence = 0.0;
     const double frequency = silent_ ? 0.0 : select(confidence);
     previous_frequency_ = frequency;
     const double midi = frequency > 0 ? 69.0 + 12.0 * std::log2(frequency / reference_) : 0.0;
-    const double level =
-        energy_ > 0.0 ? std::max(-120.0, 10.0 * std::log10(energy_ / window_)) : -120.0;
+    const double level = pitchLevel(frequency);
     if (pending_count_ == kPending) {
       pending_read_ = (pending_read_ + 1u) % kPending;
       --pending_count_;
@@ -336,7 +363,7 @@ private:
   std::vector<std::unique_ptr<Transform>> transforms_;
   Transform *transform_ = nullptr;
   std::unique_ptr<Schedule> schedule_;
-  std::vector<float> ring_;
+  std::vector<float> ring_, volume_power_;
   std::vector<double> prefix_, nsdf_;
   std::array<std::array<std::uint8_t, kPayloadBytes>, kPending> pending_{};
   double rate_ = 48000, reference_ = 440, minimum_ = 36, maximum_ = 96, min_period_ = 0,

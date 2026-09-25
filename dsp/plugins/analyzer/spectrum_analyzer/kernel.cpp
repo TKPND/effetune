@@ -1,8 +1,8 @@
 #include "effetune/kernel.h"
 #include "SpectrumAnalyzerPluginParams.h"
 #include "binary_io.h"
-#include "effetune/dsp/multires_spectrum.h"
 #include "effetune/dsp/pffft_incremental.h"
+#include "effetune/dsp/spectrum_hq_sink.h"
 #include "effetune/dsp/stage_scheduler.h"
 
 #include "pffft.h"
@@ -119,7 +119,6 @@ template <std::size_t Count>
 
 class SpectrumAnalyzerKernel final : public PluginKernel {
   EFFETUNE_PARAMS(generated::SpectrumAnalyzerPluginParams)
-  friend class ::effetune::dsp::MultiresSpectrum;
 
 public:
   ~SpectrumAnalyzerKernel() override { releaseResources(); }
@@ -132,6 +131,7 @@ public:
       schedule.reset(new (std::nothrow) StageSchedule());
     }
     hq_.reset(new (std::nothrow)::effetune::dsp::MultiresSpectrum());
+    hq_sink_.reset(new (std::nothrow)::effetune::dsp::SpectrumHqSink(sample_rate_));
     std::uint32_t maximum_ring_size = 1u;
     while (maximum_ring_size <
            kMaximumFftSize + static_cast<std::uint32_t>(std::ceil(sample_rate_ / 30.0))) {
@@ -150,10 +150,10 @@ public:
     published_payload_.resize(kMaximumPayloadBytes);
     staging_payload_.resize(kMaximumPayloadBytes);
 
-    ready_ = hq_ != nullptr && hq_->prepare(sample_rate_, false) && ring_ != nullptr &&
-             fft_input_ != nullptr && fft_output_ != nullptr && fft_work_ != nullptr &&
-             windows_ != nullptr && current_ != nullptr && peaks_ != nullptr &&
-             published_payload_.size() == kMaximumPayloadBytes &&
+    ready_ = hq_ != nullptr && hq_sink_ != nullptr && hq_->prepare(sample_rate_, false) &&
+             ring_ != nullptr && fft_input_ != nullptr && fft_output_ != nullptr &&
+             fft_work_ != nullptr && windows_ != nullptr && current_ != nullptr &&
+             peaks_ != nullptr && published_payload_.size() == kMaximumPayloadBytes &&
              staging_payload_.size() == kMaximumPayloadBytes;
     for (std::uint32_t index = 0u; index < kSetupCount; ++index) {
       const std::uint32_t fft_size = 1u << (kMinimumPoints + index);
@@ -198,7 +198,7 @@ public:
       for (std::uint32_t frame = 0u; frame < frame_count; ++frame) {
         const float left = audio[frame];
         const float right = channel_count > 1u ? audio[frame_count + frame] : left;
-        hq_->push((left + right) * 0.5F, *this);
+        hq_->push((left + right) * 0.5F, *hq_sink_);
       }
       return;
     }
@@ -239,11 +239,15 @@ public:
   }
 
   void writeTelemetry(TelemetryWriter &writer) noexcept override {
+    if (ready_ && active_hq_) {
+      hq_sink_->writeTelemetry(writer);
+      return;
+    }
     if (!ready_ || !has_frame_ || last_written_generation_ == frame_generation_) {
       return;
     }
 
-    if (writer.write(kTapSpectrum, active_hq_ ? 2u : kTelemetryVersion, published_payload_.data(),
+    if (writer.write(kTapSpectrum, kTelemetryVersion, published_payload_.data(),
                      published_payload_bytes_)) {
       last_written_generation_ = frame_generation_;
     }
@@ -256,6 +260,7 @@ private:
 
   void releaseResources() noexcept {
     hq_.reset();
+    hq_sink_.reset();
     for (auto &transform : incremental_transforms_) {
       transform.reset();
     }
@@ -345,8 +350,9 @@ private:
     last_written_generation_ = 0u;
     published_payload_bytes_ = 0u;
     parameter_state_initialized_ = true;
-    if (active_hq_ && hq_ != nullptr) {
+    if (active_hq_ && hq_ != nullptr && hq_sink_ != nullptr) {
       hq_->reset(points);
+      hq_sink_->reset();
     }
   }
 
@@ -560,45 +566,6 @@ private:
     job_active_ = true;
   }
 
-  void hqBegin(const ::effetune::dsp::MultiresSpectrumFrame &frame) noexcept {
-    hq_frame_ = frame;
-    std::uint8_t *payload = staging_payload_.data();
-    writeF32(payload, sample_rate_);
-    writeU16(payload + 4u, static_cast<std::uint16_t>(frame.points));
-    writeU16(payload + 6u, 0u);
-    writeU32(payload + 8u, frame.hopSamples);
-    writeU32(payload + 12u, frame.generation);
-    writeU32(payload + 16u, static_cast<std::uint32_t>(frame.captureEndSample));
-    writeU32(payload + 20u, static_cast<std::uint32_t>(frame.captureEndSample >> 32u));
-    writeU32(payload + 24u, frame.frameIndex);
-    writeU32(payload + 28u, frame.cellCount);
-    writeF32(payload + 32u, 20.0F);
-    writeF32(payload + 36u, 40000.0F);
-    writeU32(payload + 40u, frame.firstValidIndex);
-    writeU32(payload + 44u, frame.validCellCount);
-  }
-
-  void hqCell(std::uint32_t index, float level) noexcept {
-    const float previous = hq_frame_.frameIndex == 0u ? -145.0F : peaks_[index];
-    const float decayed = previous - static_cast<float>(20.0 * hq_frame_.hopSamples / sample_rate_);
-    float peak = level > decayed ? level : decayed;
-    peak = peak < -145.0F ? -145.0F : (peak > 0.0F ? 0.0F : peak);
-    if (index < hq_frame_.firstValidIndex ||
-        index >= hq_frame_.firstValidIndex + hq_frame_.validCellCount) {
-      peak = -240.0F;
-    }
-    peaks_[index] = peak;
-    writeF32(staging_payload_.data() + 48u + index * 4u, level);
-    writeF32(staging_payload_.data() + 48u + (hq_frame_.cellCount + index) * 4u, peak);
-  }
-
-  void hqCommit() noexcept {
-    published_payload_.swap(staging_payload_);
-    published_payload_bytes_ = static_cast<std::uint16_t>(48u + hq_frame_.cellCount * 8u);
-    has_frame_ = true;
-    ++frame_generation_;
-  }
-
   std::array<PFFFT_Setup *, kSetupCount> real_setups_{};
   std::array<std::unique_ptr<::effetune::dsp::PffftOrderedRealForward>, kSetupCount>
       incremental_transforms_{};
@@ -645,7 +612,7 @@ private:
   bool parameter_state_initialized_ = false;
   bool active_hq_ = false;
   std::unique_ptr<::effetune::dsp::MultiresSpectrum> hq_;
-  ::effetune::dsp::MultiresSpectrumFrame hq_frame_;
+  std::unique_ptr<::effetune::dsp::SpectrumHqSink> hq_sink_;
   using StageSchedule = ::effetune::dsp::StageSchedule<kStageCapacity, kMaximumSlots>;
   std::array<std::unique_ptr<StageSchedule>, kSetupCount> stage_schedules_;
   StageSchedule *stage_schedule_ = nullptr;

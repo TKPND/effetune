@@ -55,9 +55,7 @@ const MULTI_F0_NOTE_COLORS = [
     [167, 96, 119]     // B
 ];
 
-function multiF0InterpolatedNoteColor(pitch) {
-    const midi = MULTI_F0_FIRST_MIDI +
-        (pitch - MULTI_F0_FINE_CENTER) / MULTI_F0_FINE_DIVISIONS;
+function multiF0NoteColor(midi) {
     const lowerMidi = Math.floor(midi);
     const fraction = midi - lowerMidi;
     const lower = MULTI_F0_NOTE_COLORS[((lowerMidi % 12) + 12) % 12];
@@ -67,6 +65,11 @@ function multiF0InterpolatedNoteColor(pitch) {
         lower[1] + (upper[1] - lower[1]) * fraction,
         lower[2] + (upper[2] - lower[2]) * fraction
     ];
+}
+
+function multiF0InterpolatedNoteColor(pitch) {
+    return multiF0NoteColor(MULTI_F0_FIRST_MIDI +
+        (pitch - MULTI_F0_FINE_CENTER) / MULTI_F0_FINE_DIVISIONS);
 }
 
 function isNewerMultiF0Counter(candidate, current) {
@@ -80,10 +83,43 @@ function multiF0NoteName(midi) {
 
 class NoteSpectrogramPlugin extends PluginBase {
     static noteColors = MULTI_F0_NOTE_COLORS;
+    static noteColor = multiF0NoteColor;
+    static levelFloor = MULTI_F0_LEVEL_FLOOR;
+
+    static normalizedLevel(level, reference, range = MULTI_F0_LEVEL_RANGE_DB,
+        floor = MULTI_F0_LEVEL_CEILING_DB - MULTI_F0_LEVEL_RANGE_DB) {
+        const trackedLower = reference - range;
+        const lower = trackedLower > floor ? trackedLower : floor;
+        const normalized = (level - lower) / range;
+        return normalized < 0 ? 0 : (normalized > 1 ? 1 : normalized);
+    }
+
+    static updateLevelReference(state, framePeak, elapsed) {
+        if (framePeak >= state.levelReference) {
+            state.levelReference = framePeak;
+            state.levelReferenceHold = MULTI_F0_RANGE_HOLD_SECONDS;
+        } else {
+            const decayTime = elapsed > state.levelReferenceHold
+                ? elapsed - state.levelReferenceHold
+                : 0;
+            state.levelReferenceHold = elapsed < state.levelReferenceHold
+                ? state.levelReferenceHold - elapsed
+                : 0;
+            const released = state.levelReference -
+                MULTI_F0_METER_RELEASE_DB_PER_SECOND * decayTime;
+            state.levelReference = framePeak > released ? framePeak : released;
+        }
+    }
+
     static executionCapabilities = Object.freeze({ requiresWasm: true });
 
     constructor() {
         super('Note Spectrogram', 'Multi-pitch piano roll');
+        this.initializeDisplayState();
+        this.registerProcessor(MULTI_F0_PASS_THROUGH_PROCESSOR);
+    }
+
+    initializeDisplayState() {
         this.cl = 'Normal';
         this.pr = 'Semitone';
         this.ly = 'Horizontal';
@@ -134,8 +170,6 @@ class NoteSpectrogramPlugin extends PluginBase {
         this.graphCssWidth = 1024;
         this.isVisible = false;
         this.animationFrameId = null;
-
-        this.registerProcessor(MULTI_F0_PASS_THROUGH_PROCESSOR);
     }
 
     reset() {
@@ -176,6 +210,7 @@ class NoteSpectrogramPlugin extends PluginBase {
             this.cl = color;
             this.paintHistoryImage();
             this.volumeHistoryDirty = true;
+            this.drawGraph();
         }
         if (MULTI_F0_RESOLUTIONS.some(option => option.value === params.pr) &&
             params.pr !== this.pr) {
@@ -408,7 +443,7 @@ class NoteSpectrogramPlugin extends PluginBase {
 
     _displayPalette() {
         const colors = ['graph-bg-deep', 'graph-base-soft', 'graph-trace'].map(name =>
-            (window.ThemePalette?.get(name) ?? '').match(/[\d.]+/g)?.slice(0, 3).map(Number));
+            ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get(name) ?? '').match(/[\d.]+/g)?.slice(0, 3).map(Number));
         if (colors.some(color => !color || color.length !== 3)) return null;
         const [background, soft, trace] = colors;
         const light = background.every(channel => channel > 127);
@@ -428,6 +463,7 @@ class NoteSpectrogramPlugin extends PluginBase {
         const displayPitchCount = this.pr === 'High'
             ? MULTI_F0_PITCH_COUNT
             : MULTI_F0_NOTE_COUNT;
+        const heatmap = this.displayOptions?.heatmapColorLut;
         for (let pitch = 0; pitch < displayPitchCount; pitch++) {
             const row = displayPitchCount - 1 - pitch;
             const pixelOffset = (row * MULTI_F0_HISTORY_WIDTH + column) * 4;
@@ -438,18 +474,25 @@ class NoteSpectrogramPlugin extends PluginBase {
             const background = MULTI_F0_BLACK_KEY_CLASSES.has(pitchClass)
                 ? palette.blackBand
                 : palette.whiteBand;
-            const value = this.pr === 'High'
-                ? this.history[historyOffset + pitch]
-                : this._bagConfidence(historyOffset, MULTI_F0_FIRST_MIDI + pitch);
-            const color = this.cl === 'Rainbow'
-                ? (this.pr === 'High'
-                    ? multiF0InterpolatedNoteColor(pitch)
-                    : MULTI_F0_NOTE_COLORS[pitchClass])
-                : palette.trace;
-            pixels[pixelOffset] = Math.round(background[0] + (color[0] - background[0]) * value);
-            pixels[pixelOffset + 1] = Math.round(background[1] + (color[1] - background[1]) * value);
-            pixels[pixelOffset + 2] = Math.round(background[2] + (color[2] - background[2]) * value);
-            pixels[pixelOffset + 3] = 255;
+            const best = this.pr === 'High' ? pitch
+                : this._bestBagPitch(historyOffset, MULTI_F0_FIRST_MIDI + pitch);
+            const value = this.history[historyOffset + best];
+            if (heatmap) {
+                const offset = Math.round(value * 255) * 4;
+                pixels[pixelOffset] = heatmap[offset];
+                pixels[pixelOffset + 1] = heatmap[offset + 1];
+                pixels[pixelOffset + 2] = heatmap[offset + 2];
+                pixels[pixelOffset + 3] = heatmap[offset + 3];
+                continue;
+            }
+            const midi = MULTI_F0_FIRST_MIDI + (this.pr === 'High' ? (pitch - MULTI_F0_FINE_CENTER) / MULTI_F0_FINE_DIVISIONS : pitch);
+            const color = this.displayOptions?.noteColor?.(midi) ?? (this.cl === 'Rainbow'
+                ? (this.pr === 'High' ? multiF0InterpolatedNoteColor(pitch) : MULTI_F0_NOTE_COLORS[pitchClass])
+                : palette.trace);
+            pixels[pixelOffset] = this.displayOptions?.transparent ? color[0] : Math.round(background[0] + (color[0] - background[0]) * value);
+            pixels[pixelOffset + 1] = this.displayOptions?.transparent ? color[1] : Math.round(background[1] + (color[1] - background[1]) * value);
+            pixels[pixelOffset + 2] = this.displayOptions?.transparent ? color[2] : Math.round(background[2] + (color[2] - background[2]) * value);
+            pixels[pixelOffset + 3] = this.displayOptions?.transparent ? Math.round(value * 255) : 255;
         }
     }
 
@@ -492,12 +535,7 @@ class NoteSpectrogramPlugin extends PluginBase {
     }
 
     _normalizedLevel(level) {
-        const upper = this.levelReference > MULTI_F0_LEVEL_CEILING_DB
-            ? this.levelReference
-            : MULTI_F0_LEVEL_CEILING_DB;
-        const normalized = (level - (upper - MULTI_F0_LEVEL_RANGE_DB)) /
-            MULTI_F0_LEVEL_RANGE_DB;
-        return normalized < 0 ? 0 : (normalized > 1 ? 1 : normalized);
+        return NoteSpectrogramPlugin.normalizedLevel(level, this.levelReference);
     }
 
     _updateVolumeState(snapshot, elapsed) {
@@ -507,20 +545,7 @@ class NoteSpectrogramPlugin extends PluginBase {
                 framePeak = snapshot.volumeLevels[pitch];
             }
         }
-        if (framePeak >= this.levelReference) {
-            this.levelReference = framePeak;
-            this.levelReferenceHold = MULTI_F0_RANGE_HOLD_SECONDS;
-        } else {
-            const decayTime = elapsed > this.levelReferenceHold
-                ? elapsed - this.levelReferenceHold
-                : 0;
-            this.levelReferenceHold = elapsed < this.levelReferenceHold
-                ? this.levelReferenceHold - elapsed
-                : 0;
-            const released = this.levelReference -
-                MULTI_F0_METER_RELEASE_DB_PER_SECOND * decayTime;
-            this.levelReference = framePeak > released ? framePeak : released;
-        }
+        NoteSpectrogramPlugin.updateLevelReference(this, framePeak, elapsed);
         for (let note = 0; note < MULTI_F0_NOTE_COUNT; note++) {
             const first = note * MULTI_F0_FINE_DIVISIONS;
             let best = first;
@@ -780,9 +805,7 @@ class NoteSpectrogramPlugin extends PluginBase {
         this.canvasCtx = this.canvas.getContext('2d', { alpha: false });
         this.canvas.setAttribute('aria-label', 'Multi-pitch piano roll');
 
-        this.tempCanvas = document.createElement('canvas');
-        this.tempCanvas.width = MULTI_F0_HISTORY_WIDTH;
-        this.configureHistoryImage();
+        this.initializeDisplayCanvas(this.canvas);
 
         container.appendChild(graph.container);
         if (typeof IntersectionObserver === 'function') {
@@ -792,6 +815,14 @@ class NoteSpectrogramPlugin extends PluginBase {
             this.drawGraph();
         }
         return container;
+    }
+
+    initializeDisplayCanvas(canvas) {
+        this.canvas = canvas;
+        this.canvasCtx = canvas.getContext('2d', { alpha: this.displayOptions?.transparent === true });
+        this.tempCanvas = document.createElement('canvas');
+        this.tempCanvas.width = MULTI_F0_HISTORY_WIDTH;
+        this.configureHistoryImage();
     }
 
     handleIntersect(entries) {
@@ -871,13 +902,15 @@ class NoteSpectrogramPlugin extends PluginBase {
         const background = MULTI_F0_BLACK_KEY_CLASSES.has(pitchClass)
             ? palette.blackBand
             : palette.whiteBand;
-        const color = this.cl === 'Rainbow'
-            ? multiF0InterpolatedNoteColor(best)
-            : palette.trace;
-        const red = Math.round(background[0] + (color[0] - background[0]) * confidence);
-        const green = Math.round(background[1] + (color[1] - background[1]) * confidence);
-        const blue = Math.round(background[2] + (color[2] - background[2]) * confidence);
+        const pitch = MULTI_F0_FIRST_MIDI + (best - MULTI_F0_FINE_CENTER) / MULTI_F0_FINE_DIVISIONS;
+        const signalColor = this.displayOptions?.signalColor?.(pitch, confidence);
         const normalized = this.levelHistory[historyOffset + best];
+        const color = signalColor?.rgb ?? this.displayOptions?.noteColor?.(pitch) ?? (this.cl === 'Rainbow'
+            ? multiF0InterpolatedNoteColor(best)
+            : palette.trace);
+        const red = this.displayOptions?.transparent ? color[0] : Math.round(background[0] + (color[0] - background[0]) * confidence);
+        const green = this.displayOptions?.transparent ? color[1] : Math.round(background[1] + (color[1] - background[1]) * confidence);
+        const blue = this.displayOptions?.transparent ? color[2] : Math.round(background[2] + (color[2] - background[2]) * confidence);
         const nominalMinimum = rowHeight / MULTI_F0_FINE_DIVISIONS;
         const minimum = nominalMinimum > 1 ? nominalMinimum : 1;
         const nominalMaximum = rowHeight - 1;
@@ -893,7 +926,7 @@ class NoteSpectrogramPlugin extends PluginBase {
         const top = center - thickness / 2;
         const bottom = center + thickness / 2;
         const gradient = context.createLinearGradient(0, top - fade, 0, bottom + fade);
-        const opaque = `rgba(${red}, ${green}, ${blue}, 1)`; // theme-allow: RGB channels blend the active theme background and trace colors.
+        const opaque = `rgba(${red}, ${green}, ${blue}, ${signalColor ? signalColor.alpha : this.displayOptions?.transparent ? confidence : 1})`; // theme-allow: RGB channels blend the active theme background and trace colors.
         const transparent = `rgba(${red}, ${green}, ${blue}, 0)`; // theme-allow: RGB channels blend the active theme background and trace colors.
         const fadeRatio = fade / (thickness + 2 * fade);
         gradient.addColorStop(0, transparent);
@@ -905,6 +938,8 @@ class NoteSpectrogramPlugin extends PluginBase {
     }
 
     _paintVolumeGrid(context, x, width, rowHeight) {
+        if (this.displayOptions?.separateAnnotations && context !== this.canvasCtx) return;
+        if (this.displayOptions?.showAxes === false) return;
         const lineWidth = this.graphDpr || 1;
         for (let midi = 24; midi <= MULTI_F0_LAST_MIDI; midi++) {
             const isC = midi % 12 === 0;
@@ -912,8 +947,8 @@ class NoteSpectrogramPlugin extends PluginBase {
             if (midi < this.mn || midi > this.mx) continue;
             const boundaryY = (this.mx - midi + 1) * rowHeight;
             context.fillStyle = isC
-                ? (window.ThemePalette?.get('graph-grid-strong') ?? '')
-                : (window.ThemePalette?.get('graph-grid-subtle') ?? '');
+                ? ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-grid-strong') ?? '')
+                : ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-grid-subtle') ?? '');
             context.fillRect(x, boundaryY - lineWidth / 2, width, lineWidth);
         }
     }
@@ -932,7 +967,8 @@ class NoteSpectrogramPlugin extends PluginBase {
         if (!context) return;
         const visiblePitchCount = this.mx - this.mn + 1;
         const rowHeight = height / visiblePitchCount;
-        for (let midi = this.mn; midi <= this.mx; midi++) {
+        if (this.displayOptions?.transparent) context.clearRect(0, 0, MULTI_F0_HISTORY_WIDTH, height);
+        else for (let midi = this.mn; midi <= this.mx; midi++) {
             const row = this.mx - midi;
             const background = MULTI_F0_BLACK_KEY_CLASSES.has(midi % 12)
                 ? palette.blackBand
@@ -968,7 +1004,8 @@ class NoteSpectrogramPlugin extends PluginBase {
         for (let offset = 0; offset < count; offset++) {
             const column = (startColumn + offset) % MULTI_F0_HISTORY_WIDTH;
             const historyOffset = column * MULTI_F0_PITCH_COUNT;
-            for (let midi = this.mn; midi <= this.mx; midi++) {
+            if (this.displayOptions?.transparent) context.clearRect(column, 0, 1, height);
+            else for (let midi = this.mn; midi <= this.mx; midi++) {
                 const pitchClass = midi % 12;
                 const background = MULTI_F0_BLACK_KEY_CLASSES.has(pitchClass)
                     ? palette.blackBand
@@ -991,15 +1028,17 @@ class NoteSpectrogramPlugin extends PluginBase {
         for (let midi = this.mn; midi <= this.mx; midi++) {
             const note = midi - MULTI_F0_FIRST_MIDI;
             const centerY = (this.mx - midi + 0.5) * rowHeight;
-            const color = this.cl === 'Rainbow'
+            const normalized = this._normalizedLevel(this.meterCurrent[note]);
+            const signalColor = this.displayOptions?.signalColor?.(midi, normalized);
+            const color = signalColor?.rgb ?? this.displayOptions?.noteColor?.(midi) ?? (this.cl === 'Rainbow'
                 ? MULTI_F0_NOTE_COLORS[midi % 12]
-                : palette.trace;
-            const currentRadius = rowHeight * this._normalizedLevel(this.meterCurrent[note]);
+                : palette.trace);
+            const currentRadius = rowHeight * normalized;
             if (currentRadius > 0) {
                 const gradient = context.createRadialGradient(
                     rollWidth, centerY, 0, rollWidth, centerY, currentRadius
                 );
-                const visible = `rgba(${color[0]}, ${color[1]}, ${color[2]}, 0.5)`; // theme-allow: RGB channels use the active theme trace or fixed note colormap.
+                const visible = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${signalColor ? signalColor.alpha * .5 : .5})`; // theme-allow: RGB channels use the active theme trace or fixed note colormap.
                 const transparent = `rgba(${color[0]}, ${color[1]}, ${color[2]}, 0)`; // theme-allow: RGB channels use the active theme trace or fixed note colormap.
                 gradient.addColorStop(0, visible);
                 gradient.addColorStop(0.75, visible);
@@ -1029,6 +1068,7 @@ class NoteSpectrogramPlugin extends PluginBase {
     }
 
     drawGraph(now = performance.now()) {
+        if (this.displayOptions?.deferDraw) return;
         if (!this.canvasCtx || !this.imageData || !this.tempCtx || !this.tempCanvas ||
             !this.canvas) {
             return;
@@ -1040,16 +1080,23 @@ class NoteSpectrogramPlugin extends PluginBase {
         const width = horizontal ? this.canvas.height : this.canvas.width;
         const height = horizontal ? this.canvas.width : this.canvas.height;
         const dpr = this.graphDpr || 1;
-        const gutter = MULTI_F0_HORIZONTAL_KEY_GUTTER_CSS_PX * dpr;
-        const blackKeyDepth = MULTI_F0_KEY_GUTTER_CSS_PX * dpr;
+        const showKeyboard = this.displayOptions?.showKeyboard !== false;
+        const keyboardScale = this.displayOptions?.preserveKeyboardAspect
+            ? height / (horizontal ? 1024 : 480) : dpr;
+        const gutter = showKeyboard ? MULTI_F0_HORIZONTAL_KEY_GUTTER_CSS_PX * keyboardScale : 0;
+        const blackKeyDepth = MULTI_F0_KEY_GUTTER_CSS_PX * keyboardScale;
         const rollWidth = width - gutter;
+        const drawKeyboard = draw => this.displayOptions?.drawKeyboard
+            ? this.displayOptions.drawKeyboard(context, draw, { horizontal, width, height, rollWidth })
+            : draw();
         const visiblePitchCount = this.mx - this.mn + 1;
         const displayDivisions = this.pr === 'High' ? MULTI_F0_FINE_DIVISIONS : 1;
         const visibleDisplayPitchCount = visiblePitchCount * displayDivisions;
         const sourceY = (MULTI_F0_LAST_MIDI - this.mx) * displayDivisions;
 
-        context.fillStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
-        context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        context.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '');
+        if (this.displayOptions?.transparent) context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        else context.fillRect(0, 0, this.canvas.width, this.canvas.height);
         if (rollWidth <= 0 || height <= 0) return;
 
         const scrollPhase = this._scrollPhase(now);
@@ -1076,6 +1123,7 @@ class NoteSpectrogramPlugin extends PluginBase {
             context.translate(this.canvas.width, 0);
             context.rotate(Math.PI / 2);
         }
+        if (this.displayOptions?.transparent) scaledContext.clearRect(0, 0, this.scaledHistoryCanvas.width, height);
         scaledContext.imageSmoothingEnabled = false;
         if (this.vl) {
             this._paintVolumeHistory(height, palette);
@@ -1093,159 +1141,196 @@ class NoteSpectrogramPlugin extends PluginBase {
                 height
             );
         }
-        context.imageSmoothingEnabled = true;
-        if (firstCount > 0) {
-            context.drawImage(this.scaledHistoryCanvas, split, 0, firstCount, height,
-                historyDestinationX, 0, firstCount * columnWidth, height);
-        }
-        if (secondCount > 0) {
-            context.drawImage(this.scaledHistoryCanvas, 0, 0, secondCount, height,
-                historyDestinationX + firstCount * columnWidth, 0,
-                secondCount * columnWidth, height);
-        }
-        context.imageSmoothingEnabled = false;
-        if (this.vl) {
-            context.drawImage(
-                this.volumeHistoryCanvas,
-                latestColumn,
-                0,
-                1,
-                height,
-                rollWidth - (1 + scrollPhase) * columnWidth,
-                0,
-                (1 + scrollPhase) * columnWidth,
-                height
-            );
-        } else {
-            context.drawImage(
-                this.tempCanvas,
-                latestColumn,
-                sourceY,
-                1,
-                visibleDisplayPitchCount,
-                rollWidth - (1 + scrollPhase) * columnWidth,
-                0,
-                (1 + scrollPhase) * columnWidth,
-                height
-            );
-        }
+        const drawHistory = context => {
+            context.imageSmoothingEnabled = true;
+            if (firstCount > 0) {
+                context.drawImage(this.scaledHistoryCanvas, split, 0, firstCount, height,
+                    historyDestinationX, 0, firstCount * columnWidth, height);
+            }
+            if (secondCount > 0) {
+                context.drawImage(this.scaledHistoryCanvas, 0, 0, secondCount, height,
+                    historyDestinationX + firstCount * columnWidth, 0,
+                    secondCount * columnWidth, height);
+            }
+            context.imageSmoothingEnabled = false;
+            if (this.vl) {
+                context.drawImage(
+                    this.volumeHistoryCanvas,
+                    latestColumn,
+                    0,
+                    1,
+                    height,
+                    rollWidth - (1 + scrollPhase) * columnWidth,
+                    0,
+                    (1 + scrollPhase) * columnWidth,
+                    height
+                );
+            } else {
+                context.drawImage(
+                    this.tempCanvas,
+                    latestColumn,
+                    sourceY,
+                    1,
+                    visibleDisplayPitchCount,
+                    rollWidth - (1 + scrollPhase) * columnWidth,
+                    0,
+                    (1 + scrollPhase) * columnWidth,
+                    height
+                );
+            }
+        };
+        if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(context, drawHistory, { width: rollWidth, height });
+        else drawHistory(context);
 
         const rowHeight = height / visiblePitchCount;
-        const latestOffset = ((this.writeColumn + MULTI_F0_HISTORY_WIDTH - 1) %
-            MULTI_F0_HISTORY_WIDTH) * MULTI_F0_PITCH_COUNT;
+        if (this.vl && this.displayOptions?.separateAnnotations) this._paintVolumeGrid(context, 0, rollWidth, rowHeight);
         context.lineWidth = dpr;
-        const whiteKeyHeight = 12 * rowHeight / 7;
-        for (const midi of MULTI_F0_WHITE_KEY_MIDIS) {
-            const pitchClass = midi % 12;
-            const whiteIndex = MULTI_F0_WHITE_KEY_CLASSES.indexOf(pitchClass);
-            const octaveC = midi - pitchClass;
-            const cBoundary = (octaveC - this.mn) * rowHeight;
-            const center = cBoundary + (whiteIndex + 0.5) * whiteKeyHeight;
-            const start = center - whiteKeyHeight / 2;
-            const end = center + whiteKeyHeight / 2;
-            const clippedStart = start < 0 ? 0 : start;
-            const clippedEnd = end > height ? height : end;
-            if (clippedStart >= clippedEnd) continue;
-            const confidence = this._bagConfidence(latestOffset, midi);
-            const color = this.cl === 'Rainbow'
-                ? MULTI_F0_NOTE_COLORS[pitchClass]
-                : palette.trace;
-            const red = Math.round(palette.whiteKey + (color[0] - palette.whiteKey) * confidence);
-            const green = Math.round(palette.whiteKey + (color[1] - palette.whiteKey) * confidence);
-            const blue = Math.round(palette.whiteKey + (color[2] - palette.whiteKey) * confidence);
-            context.fillStyle = `rgb(${red}, ${green}, ${blue})`; // theme-allow: Fixed signal-level or self-painted colormap color.
-            context.fillRect(
-                rollWidth,
-                height - clippedEnd,
-                gutter,
-                clippedEnd - clippedStart
-            );
+        if (showKeyboard) {
+            drawKeyboard(() => {
+                const latestOffset = ((this.writeColumn + MULTI_F0_HISTORY_WIDTH - 1) %
+                    MULTI_F0_HISTORY_WIDTH) * MULTI_F0_PITCH_COUNT;
+                const whiteKeyHeight = 12 * rowHeight / 7;
+                for (const midi of MULTI_F0_WHITE_KEY_MIDIS) {
+                    const pitchClass = midi % 12;
+                    const whiteIndex = MULTI_F0_WHITE_KEY_CLASSES.indexOf(pitchClass);
+                    const octaveC = midi - pitchClass;
+                    const cBoundary = (octaveC - this.mn) * rowHeight;
+                    const center = cBoundary + (whiteIndex + 0.5) * whiteKeyHeight;
+                    const start = center - whiteKeyHeight / 2;
+                    const end = center + whiteKeyHeight / 2;
+                    const clippedStart = start < 0 ? 0 : start;
+                    const clippedEnd = end > height ? height : end;
+                    if (clippedStart >= clippedEnd) continue;
+                    const confidence = this._bagConfidence(latestOffset, midi);
+                    const best = this._bestBagPitch(latestOffset, midi);
+                    const color = this.displayOptions?.noteColor?.(midi) ?? (this.cl === 'Rainbow'
+                        ? MULTI_F0_NOTE_COLORS[pitchClass]
+                        : palette.trace);
+                    const red = Math.round(palette.whiteKey + (color[0] - palette.whiteKey) * confidence);
+                    const green = Math.round(palette.whiteKey + (color[1] - palette.whiteKey) * confidence);
+                    const blue = Math.round(palette.whiteKey + (color[2] - palette.whiteKey) * confidence);
+                    context.fillStyle = `rgb(${red}, ${green}, ${blue})`; // theme-allow: Fixed signal-level or self-painted colormap color.
+                    context.fillRect(
+                        rollWidth,
+                        height - clippedEnd,
+                        gutter,
+                        clippedEnd - clippedStart
+                    );
+                }
+                context.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-label') ?? '');
+                for (const midi of MULTI_F0_WHITE_KEY_MIDIS) {
+                    const pitchClass = midi % 12;
+                    const whiteIndex = MULTI_F0_WHITE_KEY_CLASSES.indexOf(pitchClass);
+                    const octaveC = midi - pitchClass;
+                    const cBoundary = (octaveC - this.mn) * rowHeight;
+                    const boundary = cBoundary + whiteIndex * whiteKeyHeight;
+                    if (boundary <= 0 || boundary >= height) continue;
+                    const y = height - boundary;
+                    context.beginPath();
+                    context.moveTo(rollWidth, y);
+                    context.lineTo(width, y);
+                    context.stroke();
+                }
+                for (let midi = this.mn; midi <= this.mx; midi++) {
+                    const pitchClass = midi % 12;
+                    if (!MULTI_F0_BLACK_KEY_CLASSES.has(pitchClass)) continue;
+                    const row = this.mx - midi;
+                    const confidence = this._bagConfidence(latestOffset, midi);
+                    const best = this._bestBagPitch(latestOffset, midi);
+                    const color = this.displayOptions?.noteColor?.(midi) ?? (this.cl === 'Rainbow'
+                        ? MULTI_F0_NOTE_COLORS[pitchClass]
+                        : palette.trace);
+                    const red = Math.round(34 + (color[0] - 34) * confidence);
+                    const green = Math.round(34 + (color[1] - 34) * confidence);
+                    const blue = Math.round(34 + (color[2] - 34) * confidence);
+                    context.fillStyle = `rgb(${red}, ${green}, ${blue})`; // theme-allow: Fixed signal-level or self-painted colormap color.
+                    context.fillRect(rollWidth, row * rowHeight, blackKeyDepth, rowHeight);
+                }
+                const drawMeters = target => this._drawVolumeMeters(target, rollWidth, rowHeight, palette);
+                if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(context, drawMeters);
+                else drawMeters(context);
+                context.beginPath();
+                context.moveTo(rollWidth, 0);
+                context.lineTo(rollWidth, height);
+                context.stroke();
+            });
         }
-        context.strokeStyle = (window.ThemePalette?.get('graph-label') ?? '');
-        for (const midi of MULTI_F0_WHITE_KEY_MIDIS) {
-            const pitchClass = midi % 12;
-            const whiteIndex = MULTI_F0_WHITE_KEY_CLASSES.indexOf(pitchClass);
-            const octaveC = midi - pitchClass;
-            const cBoundary = (octaveC - this.mn) * rowHeight;
-            const boundary = cBoundary + whiteIndex * whiteKeyHeight;
-            if (boundary <= 0 || boundary >= height) continue;
-            const y = height - boundary;
-            context.beginPath();
-            context.moveTo(rollWidth, y);
-            context.lineTo(width, y);
-            context.stroke();
-        }
-        for (let midi = this.mn; midi <= this.mx; midi++) {
-            const pitchClass = midi % 12;
-            if (!MULTI_F0_BLACK_KEY_CLASSES.has(pitchClass)) continue;
-            const row = this.mx - midi;
-            const confidence = this._bagConfidence(latestOffset, midi);
-            const color = this.cl === 'Rainbow'
-                ? MULTI_F0_NOTE_COLORS[pitchClass]
-                : palette.trace;
-            const red = Math.round(34 + (color[0] - 34) * confidence);
-            const green = Math.round(34 + (color[1] - 34) * confidence);
-            const blue = Math.round(34 + (color[2] - 34) * confidence);
-            context.fillStyle = `rgb(${red}, ${green}, ${blue})`; // theme-allow: Fixed signal-level or self-painted colormap color.
-            context.fillRect(rollWidth, row * rowHeight, blackKeyDepth, rowHeight);
-        }
-        this._drawVolumeMeters(context, rollWidth, rowHeight, palette);
-        context.beginPath();
-        context.moveTo(rollWidth, 0);
-        context.lineTo(rollWidth, height);
-        context.stroke();
 
-        context.fillStyle = '#111'; // theme-allow: Fixed signal-level or self-painted colormap color.
-        context.font = `${7 * dpr}px Arial`;
-        context.textAlign = 'center';
+        context.fillStyle = showKeyboard ? '#111' : ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-label') ?? ''); // theme-allow: Fixed text color only on self-painted piano keys.
+        const keyboardLabelLimit = showKeyboard ? this.displayOptions?.keyboardLabelFontSize : null;
+        let labelFontSize = keyboardLabelLimit || 7 * dpr;
+        if (keyboardLabelLimit) {
+            context.font = `${labelFontSize}px Arial`;
+            let labelWidth = 0, labelHeight = 0;
+            for (let midi = Math.ceil(this.mn / 12) * 12; midi <= this.mx; midi += 12) {
+                if (horizontal && midi > 96) continue;
+                const metrics = context.measureText(`C${midi / 12 - 1}`);
+                labelWidth = Math.max(labelWidth, metrics.width);
+                labelHeight = Math.max(labelHeight, metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent);
+            }
+            const keySpan = 12 * rowHeight / 7 - 2 * dpr;
+            const keyDepth = gutter - blackKeyDepth - 2 * dpr;
+            const availableWidth = horizontal ? keySpan : keyDepth;
+            const availableHeight = horizontal ? keyDepth : keySpan;
+            labelFontSize = availableWidth > 0 && availableHeight > 0
+                ? labelFontSize * Math.min(1, availableWidth / (labelWidth || 1), availableHeight / (labelHeight || 1))
+                : 0;
+        }
+        context.font = `${labelFontSize}px Arial`;
+        context.textAlign = showKeyboard || horizontal ? 'center' : 'right';
         context.textBaseline = 'middle';
+        const showPitchLabels = labelFontSize > 0 && (showKeyboard || this.displayOptions?.showAxisNumbers !== false);
         for (let midi = 24; midi <= MULTI_F0_LAST_MIDI; midi++) {
             const isC = midi % 12 === 0;
             if (!isC && midi % 12 !== 5) continue;
             if (midi < this.mn || midi > this.mx) continue;
             const row = this.mx - midi;
             const boundaryY = (row + 1) * rowHeight;
-            if (!this.vl) {
-                context.strokeStyle = isC ? (window.ThemePalette?.get('graph-grid-strong') ?? '') : (window.ThemePalette?.get('graph-grid-subtle') ?? '');
+            if (!this.vl && this.displayOptions?.showAxes !== false) {
+                context.strokeStyle = isC ? ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-grid-strong') ?? '') : ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-grid-subtle') ?? '');
                 context.beginPath();
                 context.moveTo(0, boundaryY);
-                context.lineTo(horizontal ? rollWidth : width, boundaryY);
+                context.lineTo(horizontal || this.displayOptions?.drawKeyboard ? rollWidth : width, boundaryY);
                 context.stroke();
             }
             const octave = midi / 12 - 1;
-            if (isC && (!horizontal || octave <= 7)) {
-                const label = `C${octave}`;
-                const x = rollWidth + blackKeyDepth + (gutter - blackKeyDepth) / 2;
-                const y = height - ((midi - this.mn) * rowHeight +
-                    0.5 * 12 * rowHeight / 7);
-                if (horizontal) {
-                    const metrics = context.measureText(label);
-                    const labelCenterX = this.canvas.width - y;
-                    const leftExtent = Number.isFinite(metrics.actualBoundingBoxLeft)
-                        ? metrics.actualBoundingBoxLeft
-                        : metrics.width / 2;
-                    const rightExtent = Number.isFinite(metrics.actualBoundingBoxRight)
-                        ? metrics.actualBoundingBoxRight
-                        : metrics.width / 2;
-                    if (labelCenterX - leftExtent < 0 ||
-                        labelCenterX + rightExtent > this.canvas.width) {
-                        continue;
+            if (showPitchLabels && isC && (!horizontal || octave <= 7)) {
+                const drawLabel = () => {
+                    const label = `C${octave}`;
+                    const x = showKeyboard ? rollWidth + blackKeyDepth + (gutter - blackKeyDepth) / 2 : width - 2 * dpr;
+                    const y = height - ((midi - this.mn) * rowHeight +
+                        0.5 * 12 * rowHeight / 7);
+                    if (horizontal) {
+                        const metrics = context.measureText(label);
+                        const labelCenterX = this.canvas.width - y;
+                        const leftExtent = Number.isFinite(metrics.actualBoundingBoxLeft)
+                            ? metrics.actualBoundingBoxLeft
+                            : metrics.width / 2;
+                        const rightExtent = Number.isFinite(metrics.actualBoundingBoxRight)
+                            ? metrics.actualBoundingBoxRight
+                            : metrics.width / 2;
+                        if (labelCenterX - leftExtent < 0 ||
+                            labelCenterX + rightExtent > this.canvas.width) {
+                            return;
+                        }
+                        context.save();
+                        context.translate(width - 2 * dpr, y);
+                        context.rotate(-Math.PI / 2);
+                        context.textBaseline = 'bottom';
+                        (this.displayOptions?.textContext ?? context).fillText(label, 0, 0);
+                        context.restore();
+                    } else {
+                        const metrics = context.measureText(label);
+                        const ascent = metrics.actualBoundingBoxAscent;
+                        const descent = metrics.actualBoundingBoxDescent;
+                        const visualCenterOffset = Number.isFinite(ascent) && Number.isFinite(descent)
+                            ? (ascent - descent) / 2
+                            : 0;
+                        (this.displayOptions?.textContext ?? context).fillText(label, x, y + visualCenterOffset);
                     }
-                    context.save();
-                    context.translate(width - 2 * dpr, y);
-                    context.rotate(-Math.PI / 2);
-                    context.textBaseline = 'bottom';
-                    context.fillText(label, 0, 0);
-                    context.restore();
-                } else {
-                    const metrics = context.measureText(label);
-                    const ascent = metrics.actualBoundingBoxAscent;
-                    const descent = metrics.actualBoundingBoxDescent;
-                    const visualCenterOffset = Number.isFinite(ascent) && Number.isFinite(descent)
-                        ? (ascent - descent) / 2
-                        : 0;
-                    context.fillText(label, x, y + visualCenterOffset);
-                }
+                };
+                if (showKeyboard) drawKeyboard(drawLabel);
+                else drawLabel();
             }
         }
         if (horizontal) context.restore();

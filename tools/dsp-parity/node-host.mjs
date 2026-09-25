@@ -112,7 +112,7 @@ function createSandbox({ quiet = true } = {}) {
 async function readReferenceSources(definition, repoRoot) {
   const basePath = path.join(repoRoot, 'plugins', 'plugin-base.js');
   const pluginPath = path.join(repoRoot, 'plugins', `${definition.path}.js`);
-  const helperPath = definition.type === 'SpectrumAnalyzerPlugin' || definition.type === 'SpectrogramPlugin'
+  const helperPath = ['ChromaSpiralPlugin', 'SpectrumAnalyzerPlugin', 'SpectrogramPlugin'].includes(definition.type)
     ? path.join(repoRoot, 'plugins', 'multires-spectrum.js') : null;
   try {
     const [baseSource, pluginSource, helperSource] = await Promise.all([
@@ -243,7 +243,7 @@ export async function createReferenceSession(typeOrName, {
       assertAudioShape(input, frames, channels);
       if (loaded.sandbox.MultiresSpectrum) {
         loaded.sandbox.MultiresSpectrum.prepare(state, sampleRate,
-          loaded.definition.type === 'SpectrumAnalyzerPlugin' ? 4 : 5);
+            loaded.definition.type === 'SpectrogramPlugin' ? 5 : 4);
       }
       const output = new Float32Array(input.length);
       const parameterEvents = normalizeEvents(events);

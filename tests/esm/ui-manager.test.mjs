@@ -985,7 +985,18 @@ test('suppresses analyzer DSP whenever the Effect Pipeline is not displayed', as
   }, async ({ manager }) => {
     assert.equal(manager.effectPipelineHidden, true);
   });
-  assert.deepEqual(startupSuppression, [['effect-pipeline-hidden', true]]);
+  await withUIHarness({
+    bodyClassName: 'view-visualizer',
+    powerPolicyController: {
+      setDspUiSuppressed: (reason, suppressed) => startupSuppression.push([reason, suppressed])
+    }
+  }, async ({ manager }) => {
+    assert.equal(manager.effectPipelineHidden, true);
+  });
+  assert.deepEqual(startupSuppression, [
+    ['effect-pipeline-hidden', true],
+    ['effect-pipeline-hidden', true]
+  ]);
 
   await withUIHarness({}, async ({ audioManager, document, manager }) => {
     const suppression = [];
@@ -1000,8 +1011,11 @@ test('suppresses analyzer DSP whenever the Effect Pipeline is not displayed', as
       observer.listener([{ type: 'attributes', attributeName: 'class' }]);
     };
 
+    setBodyClasses('view-visualizer');
     setBodyClasses('view-library');
     setBodyClasses('view-library', 'layout-mini-player');
+    setBodyClasses();
+    setBodyClasses('view-visualizer');
     setBodyClasses();
     setBodyClasses('view-player');
     setBodyClasses('layout-mobile', 'view-player');
@@ -1013,6 +1027,8 @@ test('suppresses analyzer DSP whenever the Effect Pipeline is not displayed', as
     manager.updateEffectPipelineVisibility();
 
     assert.deepEqual(suppression, [
+      ['effect-pipeline-hidden', true],
+      ['effect-pipeline-hidden', false],
       ['effect-pipeline-hidden', true],
       ['effect-pipeline-hidden', false],
       ['effect-pipeline-hidden', true],
@@ -1053,6 +1069,34 @@ test('handles invalid URL state and URL updates', async () => {
   for (const state of ['not-array', [null], [{ nm: '' }], [{ nm: 'Gain', en: 'yes' }]]) {
     await withUIHarness({ search: `?p=${encodePipelineState(state)}` }, async ({ manager }) => {
       assert.equal(manager.parsePipelineState(), null);
+    });
+  }
+});
+
+test('URL reflection preserves local reload provenance and existing history without claiming external shares', async () => {
+  for (const [search, historyState, expectedLocal] of [
+    ['', { effetuneVisualizer: 1 }, true],
+    ['?p=old', { effetuneVisualizer: 2, effetuneReflectedPipeline: 'old' }, true],
+    ['?p=shared', { effetuneVisualizer: 1 }, false],
+    ['?p=shared', { effetuneVisualizer: 1, effetuneReflectedPipeline: 'old' }, false]
+  ]) {
+    await withUIHarness({}, async ({ manager, timers, window }) => {
+      window.location.href = `https://example.test/effetune.html${search}`;
+      window.history.state = historyState;
+      window.history.replaceState = (state, title, url) => {
+        window.history.state = state;
+        window.location.href = String(url);
+      };
+      manager.urlReflectionEnabled = true;
+      for (const amount of [1, 2]) {
+        manager.getPipelineState = () => encodePipelineState([{ nm: 'Gain', amount }]);
+        manager.updateURL();
+        timers.splice(0).forEach(timer => timer.fn());
+        const reflected = new URL(window.location.href).searchParams.get('p');
+        assert.equal(window.history.state.effetuneVisualizer, historyState.effetuneVisualizer);
+        assert.equal(window.history.state.effetuneReflectedPipeline,
+          expectedLocal ? reflected : undefined, `${search}: update ${amount}`);
+      }
     });
   }
 });
@@ -1401,6 +1445,28 @@ test('shares URLs, opens music, manages presets, and creates audio players', asy
     activeCalls = null;
     AudioPlayer.prototype.loadFiles = originalLoadFiles;
     AudioPlayer.prototype.close = originalClose;
+  }
+});
+
+test('opening a web music file keeps Visualizer open and still selects Player from other views', async () => {
+  for (const [initialView, expectedView] of [
+    ['view-visualizer', 'view-visualizer'],
+    ['view-effects', 'view-player'],
+    ['view-library', 'view-player']
+  ]) {
+    await withUIHarness({ bodyClassName: initialView }, async ({ calls, document, manager }) => {
+      const file = { name: 'song.wav' };
+      manager.playbackSelectionResolver = async files => ({ tracks: files });
+      manager.beginPlaybackSelectionGestureResume = () => Promise.resolve(true);
+      manager.createAudioPlayer = async () => ({
+        async loadFiles(files) { calls.push(['loadFiles', files]); }
+      });
+
+      assert.equal(await manager.handleWebPlaybackFiles([file]), true);
+      assert.deepEqual(calls.find(call => call[0] === 'loadFiles'), ['loadFiles', [file]]);
+      assert.equal(document.body.classList.contains(expectedView), true);
+      assert.equal(document.body.classList.contains('view-visualizer'), initialView === 'view-visualizer');
+    });
   }
 });
 

@@ -1,3 +1,5 @@
+import { isValidPlaybackSpeed } from './playback-speed.js';
+
 /**
  * StateManager - Centralized state management for audio player
  * Handles all state transitions and ensures consistency across components
@@ -30,6 +32,7 @@ export class StateManager {
       playbackMode: 'audioElement', // 'audioElement' or 'bufferSource'
       repeatMode: 'OFF', // 'OFF', 'ALL', 'ONE'
       shuffleMode: false,
+      playbackSpeed: 1,
       seamlessMode: audioPlayer?.gaplessPlayback !== false,
       
       // Transition state
@@ -135,6 +138,11 @@ export class StateManager {
     if (!['OFF', 'ALL', 'ONE'].includes(this.state.repeatMode)) {
       console.warn('[StateManager] Invalid repeat mode:', this.state.repeatMode);
       this.state.repeatMode = 'OFF';
+    }
+
+    if (!isValidPlaybackSpeed(this.state.playbackSpeed)) {
+      console.warn('[StateManager] Invalid playback speed:', this.state.playbackSpeed);
+      this.state.playbackSpeed = 1;
     }
     
     // Validate playback mode
@@ -292,6 +300,7 @@ export class StateManager {
     if (typeof sequenceId !== 'string' || sequenceId.length === 0) {
       throw new TypeError('Catalog sequenceId must be a non-empty string');
     }
+
     if (!Number.isSafeInteger(itemCount) || itemCount < 1) {
       throw new RangeError('Catalog sequence itemCount must be a positive integer');
     }

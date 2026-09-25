@@ -19,6 +19,7 @@ import {
 
 test('music library path helpers normalize supported files and display names', () => {
   assert.equal(normalizeMusicLibraryStartupView('albums'), 'albums');
+  assert.equal(normalizeMusicLibraryStartupView('files'), 'files');
   assert.equal(normalizeMusicLibraryStartupView('invalid'), 'tracks');
   assert.equal(getFileExtension('C:\\Music\\Song.FLAC?download=1'), 'flac');
   assert.equal(getFileExtension('README'), '');

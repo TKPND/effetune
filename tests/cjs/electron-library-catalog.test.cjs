@@ -17,7 +17,7 @@ const {
 } = require('../../electron/library-catalog-host.cjs');
 
 function createTempCatalog(t, { registerCleanup = true } = {}) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'effetune-catalog-'));
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'effetune-catalog-')));
   if (registerCleanup) {
     t.after(() => fs.promises.rm(directory, {
       recursive: true,
@@ -505,7 +505,7 @@ test('recent scope is a stable newest-500 set across count, cursors, ordinals, a
   await host.releaseContext(refreshed.contextToken);
 });
 
-test('bounded writes advance catalog/scope versions and page rows never expose filesystem paths', async t => {
+test('bounded writes advance catalog/scope versions and page rows expose music file paths', async t => {
   const { host, directory } = await openCatalog(t);
   const sourcePath = path.join(directory, 'Album', 'Track.flac');
   fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
@@ -538,7 +538,7 @@ test('bounded writes advance catalog/scope versions and page rows never expose f
   for (const field of ['folderId', 'albumKey', 'artistKey', 'genreKey', 'subfolderKey']) {
     assert.equal(Object.hasOwn(page.rows[0], field), true);
   }
-  assert.equal(Object.hasOwn(page.rows[0], 'path'), false);
+  assert.equal(page.rows[0].path, sourcePath);
   assert.equal(Object.hasOwn(page.rows[0], 'relativePath'), false);
   assert.equal(Object.hasOwn(page.rows[0], 'rootPath'), false);
   await host.upsertTracks([createTrack(1, {
@@ -588,6 +588,90 @@ test('bounded writes advance catalog/scope versions and page rows never expose f
     lifecycleVersion: 3
   }]);
   assert.deepEqual(await host.resolvePlaylistExportSource('track_source'), expectedExportSource);
+});
+
+test('Electron file paths sort and page by their full absolute path', async t => {
+  const { host, directory } = await openCatalog(t);
+  await seedFolder(host, directory);
+  await host.upsertTracks([
+    createTrack(1, { relativePath: 'Z/Last.flac', title: 'First' }),
+    createTrack(2, { relativePath: 'A/First.flac', title: 'Last' }),
+    createTrack(3, { relativePath: 'M/Middle.flac', title: 'Middle' }),
+    createTrack(4, { relativePath: 'A0.flac', title: 'Prefix' }),
+    createTrack(5, { relativePath: 'A/B.flac', title: 'Nested' })
+  ]);
+  const expected = ['Z/Last.flac', 'A/First.flac', 'M/Middle.flac', 'A0.flac', 'A/B.flac']
+    .map(relative => path.join(directory, ...relative.split('/')))
+    .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+  for (const direction of ['asc', 'desc']) {
+    const request = { query: '', sort: 'path', direction, limit: 1 };
+    let page = await host.queryTracks(request);
+    const paths = [page.rows[0].path];
+    while (page.nextCursor) {
+      page = await host.queryTracks({ ...request, contextToken: page.contextToken, cursor: page.nextCursor });
+      paths.push(page.rows[0].path);
+    }
+    assert.deepEqual(paths, direction === 'asc' ? expected : [...expected].reverse());
+    const previous = await host.queryTracks({ ...request, contextToken: page.contextToken, cursor: page.previousCursor });
+    assert.equal(previous.rows[0].path, paths.at(-2));
+    await host.releaseContext(page.contextToken);
+  }
+});
+
+test('CUE file path pages use track numbers before random IDs in both catalogs', async t => {
+  const { initializeWebSqliteRuntime, dispatchWebSqliteCommand } = await import('../../js/library/repository/web-sqlite-runtime.js');
+  for (const backend of ['Electron', 'Web']) await t.test(backend, async t => {
+    const fixture = backend === 'Electron' ? await openCatalog(t) : createTempCatalog(t, { registerCleanup: false });
+    let host = fixture?.host;
+    if (!host) {
+      await initializeWebSqliteRuntime(new DatabaseSync(fixture.dbPath));
+      t.after(async () => {
+        dispatchWebSqliteCommand('close', {});
+        await fs.promises.rm(fixture.directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      });
+      host = {
+        upsertFolders: folders => dispatchWebSqliteCommand('upsertFolders', { folders }),
+        releaseContext: contextToken => dispatchWebSqliteCommand('releaseContext', { contextToken })
+      };
+      for (const command of ['beginScanFolder', 'claimMetadataParse', 'completeMetadataParseSuccess', 'queryTracks']) {
+        host[command] = payload => dispatchWebSqliteCommand(command, payload);
+      }
+    }
+    const directory = backend === 'Electron' ? fixture.directory : '/Music';
+    await seedFolder(host, directory);
+    const scan = await host.beginScanFolder({
+      scanId: 'cue-file-order', folderId: 'folder_music', normalizedRoot: directory,
+      expectedLifecycleVersion: 3, resume: false, rootEnumerationRequired: true,
+      continuityBroken: false, sweepEligibility: 'INELIGIBLE'
+    });
+    for (const [trackUid, trackNo] of [['uid-b', 2], ['uid-a', 10], ['uid-z', 1]]) {
+      const entryKey = `cue:Album/disc.cue#${trackNo}`;
+      const { claim } = await host.claimMetadataParse({
+        folderId: 'folder_music', trackUid, logicalStorageId: entryKey,
+        lifecycleVersion: scan.lifecycleVersion, generation: scan.generation,
+        relativePath: 'Album/Image.flac', parserVersion: scan.parserVersion,
+        signature: { fileIdentity: 'cue-image', size: 1000, mtimeMs: 2000 },
+        cueSignature: 'cue-signature', sourceKind: 'cue-track', entryKey,
+        cueRelativePath: 'Album/disc.cue', startFrame: trackNo * 750, endFrame: (trackNo + 1) * 750,
+        explicitRescan: false
+      });
+      await host.completeMetadataParseSuccess({ claim, metadata: { title: trackUid, trackNo },
+        metadataStatus: 'ok', clearErrorAndRetryState: true, updateLastKnownGood: true, updateDerivedData: true });
+    }
+    for (const direction of ['asc', 'desc']) {
+      const request = { query: '', sort: 'path', direction, limit: 1 };
+      let page = await host.queryTracks(request);
+      const numbers = [page.rows[0].trackNo];
+      while (page.nextCursor) {
+        page = await host.queryTracks({ ...request, contextToken: page.contextToken, cursor: page.nextCursor });
+        numbers.push(page.rows[0].trackNo);
+      }
+      assert.deepEqual(numbers, direction === 'asc' ? [1, 2, 10] : [10, 2, 1]);
+      const previous = await host.queryTracks({ ...request, contextToken: page.contextToken, cursor: page.previousCursor });
+      assert.equal(previous.rows[0].trackNo, 2);
+      await host.releaseContext(page.contextToken);
+    }
+  });
 });
 
 test('Electron folder browsing mirrors physical hierarchy counts and direct-track scopes', async t => {

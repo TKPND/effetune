@@ -35,7 +35,7 @@ Use the opt-in decoded telemetry callback or subscription API to observe this an
 
 ## Spectrogram
 
-Creates colorful patterns that show how your music changes over time. Colors show how strong each sound is, while vertical position shows its frequency.
+Shows how your music changes over time. Color intensity shows how strong each frequency is, while vertical position shows its frequency.
 
 The graph scrolls from right to left at a steady speed, with marks every second.
 
@@ -65,6 +65,7 @@ The graph scrolls from right to left at a steady speed, with marks every second.
   - Higher numbers: More frequency detail, but slower time updates
   - Lower numbers: Faster movement, but less frequency detail
   - With **Log (HQ)**, Points sets the short analysis window; a four-times-longer window improves low-frequency separation.
+- **Color** - **Normal** uses the theme’s graph color, with stronger frequencies shown more brightly. **Heatmap** (default) uses the original dark-to-bright multicolor scale. Switching color recolors the existing history.
 - **Frequency Scale** - **Log** gives low frequencies more display space. **Log (HQ)** adds a longer measurement for clearer separation of nearby bass frequencies while retaining the short measurement for higher frequencies. It uses more processing and low-frequency changes can take longer to appear or fade; it does not change the audio. **Linear** places equal frequency widths at equal intervals.
 - **Keyboard** - Shows a static keyboard guide at the right of the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log**, **Log (HQ)**, or **Linear**; **Log (HQ)** uses the same logarithmic spacing as **Log**, while with **Linear**, low-frequency keys look narrower.
 - The analyzer uses the average of the left and right channels. Mono input is analyzed directly.

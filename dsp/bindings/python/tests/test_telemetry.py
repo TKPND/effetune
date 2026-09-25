@@ -146,6 +146,17 @@ class TelemetryDecoderTests(unittest.TestCase):
         self.assertEqual(frame.current_db[0], -10.0)
         self.assertEqual(frame.peak_db[0], -5.0)
 
+    def test_chroma_spiral_accepts_only_hq_spectrum(self) -> None:
+        packet = _hq_packet(frame_type=4, tap_id=7)
+        nodes = {7: ("ChromaSpiral", "chroma", 0)}
+        frames, _ = _decode_telemetry_packet(bytes(packet), nodes, 0)
+        self.assertEqual(len(frames), 1)
+        self.assertIsInstance(frames[0], effetune.SpectrumHqTelemetryFrame)
+        self.assertEqual(frames[0].kind, "spectrumHq")
+        struct.pack_into("<H", packet, 2, 1)
+        frames, _ = _decode_telemetry_packet(bytes(packet), nodes, 0)
+        self.assertEqual(frames, [])
+
     def test_hq_spectrogram_accepts_canonical_descending_v2_grid(self) -> None:
         nodes = {8: ("Spectrogram", "spectrogram", 0)}
         packet = _hq_packet(frame_type=5, tap_id=8)

@@ -11,6 +11,7 @@ import {
   PendingTransportSlot,
   SequenceQueueProvider
 } from './playback-sequence.js';
+import { isValidPlaybackSpeed } from './playback-speed.js';
 
 export class PlaybackManager {
   constructor(audioPlayer) {
@@ -2327,6 +2328,16 @@ export class PlaybackManager {
     return true;
   }
   
+  setPlaybackSpeed(speed) {
+    if (!isValidPlaybackSpeed(speed)) {
+      throw new RangeError('Unsupported playback speed');
+    }
+    if (this.audioPlayer.stateManager?.getStateSnapshot()?.playbackSpeed === speed) return false;
+    this.audioPlayer.applyPlaybackSpeed(speed);
+    this.audioPlayer.ui?.updatePlayerUIState();
+    return true;
+  }
+
   /**
    * Toggle repeat mode (OFF -> ALL -> ONE -> OFF)
    */

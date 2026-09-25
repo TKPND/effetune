@@ -69,6 +69,7 @@
         ['DSD64IMDSimulatorPlugin', ['dsd64-imd-df-graph', 0, 20000]],
         ['GroupDelayPEQPlugin', ['group-delay-peq-graph', 10, 40000, 20]],
         ['SpectrumAnalyzerPlugin', ['graph-container', 20, 40000]],
+        ['ChromaSpiralPlugin', ['graph-container', 0, 0]],
         ['SpectrogramPlugin', ['graph-container', 20, 40000]],
         ['NoteSpectrogramPlugin', ['graph-container', 0, 0]],
         ['PitchMeterPlugin', ['graph-container', 0, 0]],
@@ -86,6 +87,27 @@
     targets.get('FiveBandDynamicEQ').axisCheck = ['const minFreq = 10;', 'const maxFreq = 40000;'];
     targets.get('DSD64IMDSimulatorPlugin').scale = 'linear';
     targets.get('DSD64IMDSimulatorPlugin').axisCheck = ['freq / fMax', 'const fMax = 20000;'];
+
+    targets.get('ChromaSpiralPlugin').axisCheck = ['getSpiralGeometry(width, height, dpr)', 'static spiralPoint('];
+    targets.get('ChromaSpiralPlugin').axis = (plugin, box) => {
+        const { inner, pitch, midiLow, midiEnd } = plugin.getSpiralGeometry(box.width, box.height);
+        return {
+            orientation: 'polar', length: pitch > 0 ? box.width : 0, crossLength: box.height, gutter: 0,
+            pointToFreq(x, y) {
+                const dx = x - box.width / 2;
+                const dy = y - box.height / 2;
+                const phase = (Math.atan2(dx, -dy) / (2 * Math.PI) + 1) % 1;
+                // Select the closest turn at this angle; pitch stays continuous between notes.
+                const turn = Math.round((Math.hypot(dx, dy) - inner) / pitch - phase);
+                return noteFrequency(clamp(midiLow + (turn + phase) * 12, midiLow - 0.5, midiEnd));
+            },
+            toPoint(frequency) {
+                const midi = 69 + 12 * Math.log2(frequency / 440);
+                const point = plugin.constructor.spiralPoint(midi, midiLow, inner, pitch);
+                return { x: box.width / 2 + point.x, y: box.height / 2 + point.y };
+            }
+        };
+    };
 
     for (const name of ['SpectrumAnalyzerPlugin', 'SpectrogramPlugin']) {
         const vertical = name === 'SpectrogramPlugin';

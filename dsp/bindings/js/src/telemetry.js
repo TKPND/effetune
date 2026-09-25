@@ -15,6 +15,7 @@ const MULTIRES_HQ_SPECTRUM_CELLS = 2048;
 const MULTIRES_HQ_SPECTROGRAM_CELLS = 256;
 
 const ANALYZER_FRAMES = Object.freeze({
+  ChromaSpiral: [SPECTRUM_FRAME, [2]],
   LevelMeter: [LEVEL_FRAME, [1]],
   NoteSpectrogram: [NOTE_SPECTROGRAM_FRAME, [3]],
   Oscilloscope: [SCOPE_FRAME, [2]],

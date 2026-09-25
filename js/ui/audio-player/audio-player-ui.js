@@ -5,6 +5,25 @@
  */
 
 import { validateSelectionDescriptor } from '../../library/repository/selection-descriptor.js';
+import { updateRangeFill } from '../range-fill.js';
+import {
+  PLAYBACK_SPEED_MAX,
+  PLAYBACK_SPEED_MIN,
+  PLAYBACK_SPEED_STEP,
+  PLAYBACK_SPEED_STEPS,
+  normalizePlaybackSpeed
+} from './playback-speed.js';
+
+const SPEED_SLIDER_MAX = 4000;
+const SPEED_SLIDER_RATIO = PLAYBACK_SPEED_MAX / PLAYBACK_SPEED_MIN;
+
+function speedToSliderPosition(speed) {
+  return Math.round(Math.log(speed / PLAYBACK_SPEED_MIN) / Math.log(SPEED_SLIDER_RATIO) * SPEED_SLIDER_MAX);
+}
+
+function sliderPositionToSpeed(position) {
+  return normalizePlaybackSpeed(PLAYBACK_SPEED_MIN * SPEED_SLIDER_RATIO ** (position / SPEED_SLIDER_MAX));
+}
 
 // Inline transport-control icons (colored white via the .player-button CSS rule).
 // Kept as a shared map so play/pause and repeat icon swaps reuse the same markup.
@@ -60,6 +79,7 @@ export class AudioPlayerUI {
     this.nextButton = null;
     this.repeatButton = null;
     this.shuffleButton = null;
+    this.speedButton = null;
     this.closeButton = null;
     this.expandButton = null;
     this.miniPlayerButton = null;
@@ -73,9 +93,9 @@ export class AudioPlayerUI {
     this.pendingArtworkPreloadUrl = null;
     this.lastAppliedArtworkUrl = null;
     this.playlistDisplay = null;
-    this.libraryContextMenu = null;
-    this.libraryContextMenuCleanup = null;
-    this.libraryContextMenuReturnFocus = null;
+    this.playerPopup = null;
+    this.playerPopupCleanup = null;
+    this.playerPopupReturnFocus = null;
     this.queueRenderGeneration = 0;
     this.updateInterval = null;
     this.positionRaf = null;
@@ -262,6 +282,7 @@ export class AudioPlayerUI {
         <button class="player-button next-button" title="${window.uiManager ? window.uiManager.t('ui.title.nextTrack') : 'Next track'}">${ICON.next}</button>
         <button class="player-button repeat-button" title="${window.uiManager ? window.uiManager.t('ui.title.repeat') : 'Toggle repeat mode'}">${repeatIcon}</button>
         <button class="player-button shuffle-button" title="${window.uiManager ? window.uiManager.t('ui.title.shuffle') : 'Toggle shuffle'}">${ICON.shuffle}</button>
+        <button class="player-button speed-button" type="button" title="${window.uiManager ? window.uiManager.t('ui.title.playbackSpeed') : 'Playback speed'}" aria-haspopup="dialog" aria-expanded="false">${state?.playbackSpeed ?? 1}x</button>
         ${miniPlayerControls}
         <button class="player-button expand-button" title="${window.uiManager ? window.uiManager.t('ui.title.expandPlayer') : 'Expand player'}">${this.desktopQueueExpanded ? ICON.collapse : ICON.expand}</button>
         <button class="player-button close-button" title="${window.uiManager ? window.uiManager.t('ui.title.closePlayer') : 'Close player'}">${ICON.close}</button>
@@ -280,6 +301,7 @@ export class AudioPlayerUI {
     this.nextButton = container.querySelector('.next-button');
     this.repeatButton = container.querySelector('.repeat-button');
     this.shuffleButton = container.querySelector('.shuffle-button');
+    this.speedButton = container.querySelector('.speed-button');
     this.closeButton = container.querySelector('.close-button');
     this.expandButton = container.querySelector('.expand-button');
     this.miniPlayerButton = container.querySelector('.mini-player-button');
@@ -363,6 +385,7 @@ export class AudioPlayerUI {
     this.shuffleButton.addEventListener('click', () => void runPlaybackCommand(
       () => this.audioPlayer.playbackManager.toggleShuffleMode()
     ));
+    this.speedButton.addEventListener('click', () => this.openSpeedPopup(runPlaybackCommand));
     
     // Update UI based on loaded state
     this.setMiniMode(window.uiManager?.miniPlayerMode === true);
@@ -535,6 +558,13 @@ export class AudioPlayerUI {
     const state = this.audioPlayer.stateManager?.getStateSnapshot();
     const repeatMode = state?.repeatMode || 'OFF';
     const shuffleMode = state?.shuffleMode || false;
+    const playbackSpeed = state?.playbackSpeed ?? 1;
+
+    if (this.speedButton) {
+      this.speedButton.textContent = `${playbackSpeed}x`;
+      this.speedButton.setAttribute('data-active', playbackSpeed === 1 ? 'false' : 'true');
+    }
+    this.syncSpeedPopup(playbackSpeed);
 
     // Keep the visual state in sync and let CSS render the active face.
     const repeatActive = repeatMode === 'ALL' || repeatMode === 'ONE';
@@ -984,6 +1014,110 @@ export class AudioPlayerUI {
     revealPlaylistItem(this.playlistDisplay, activeItem);
   }
 
+  openSpeedPopup(runPlaybackCommand) {
+    if (!this.speedButton || this.speedButton.disabled) return;
+    if (this.playerPopup?.getAttribute('data-kind') === 'speed') {
+      this.closePlayerPopup();
+      return;
+    }
+
+    this.closePlayerPopup();
+    const popup = document.createElement('div');
+    popup.className = 'player-speed-popup';
+    popup.setAttribute('role', 'dialog');
+    popup.setAttribute('aria-label', this.speedButton.title);
+    popup.setAttribute('data-kind', 'speed');
+    const rect = this.speedButton.getBoundingClientRect?.() || { left: 16, bottom: 48 };
+    popup.style.left = `${Math.max(4, rect.left)}px`;
+    popup.style.top = `${Math.max(4, rect.bottom + 4)}px`;
+    const currentSpeed = this.audioPlayer.stateManager?.getStateSnapshot?.()?.playbackSpeed ?? 1;
+    const presets = document.createElement('div');
+    presets.className = 'player-speed-presets';
+    let selectedPreset = null;
+    const applySpeed = speed => {
+      void runPlaybackCommand(() => this.audioPlayer.playbackManager.setPlaybackSpeed(speed));
+      this.syncSpeedPopup(this.audioPlayer.stateManager?.getStateSnapshot?.()?.playbackSpeed ?? 1);
+    };
+    for (const speed of PLAYBACK_SPEED_STEPS) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'player-speed-preset';
+      item.dataset.speed = String(speed);
+      item.setAttribute('aria-pressed', speed === currentSpeed ? 'true' : 'false');
+      item.textContent = `${speed}x`;
+      item.addEventListener('click', () => applySpeed(speed));
+      presets.appendChild(item);
+      if (speed === currentSpeed) selectedPreset = item;
+    }
+    const custom = document.createElement('div');
+    custom.className = 'player-speed-custom';
+    const slider = document.createElement('input');
+    slider.className = 'player-speed-slider';
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = String(SPEED_SLIDER_MAX);
+    slider.step = '1';
+    slider.value = String(speedToSliderPosition(currentSpeed));
+    slider.setAttribute('aria-label', this.speedButton.title);
+    slider.addEventListener('input', () => {
+      const speed = sliderPositionToSpeed(Number(slider.value));
+      if (speed !== null) applySpeed(speed);
+    });
+    slider.addEventListener('keydown', event => {
+      const direction = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[event.key];
+      if (direction === undefined && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      const current = this.audioPlayer.stateManager?.getStateSnapshot?.()?.playbackSpeed ?? 1;
+      const speed = event.key === 'Home' ? PLAYBACK_SPEED_MIN : event.key === 'End' ? PLAYBACK_SPEED_MAX :
+        Math.min(PLAYBACK_SPEED_MAX, Math.max(PLAYBACK_SPEED_MIN, Math.round((current + direction * PLAYBACK_SPEED_STEP) * 100) / 100));
+      if (speed !== current) applySpeed(speed);
+    });
+    const number = document.createElement('input');
+    number.className = 'player-speed-number';
+    number.type = 'number';
+    number.inputMode = 'decimal';
+    number.min = String(PLAYBACK_SPEED_MIN);
+    number.max = String(PLAYBACK_SPEED_MAX);
+    number.step = String(PLAYBACK_SPEED_STEP);
+    number.value = String(currentSpeed);
+    number.setAttribute('aria-label', this.speedButton.title);
+    const commitNumber = () => {
+      const speed = normalizePlaybackSpeed(number.value);
+      if (speed !== null) applySpeed(speed);
+      this.syncSpeedPopup(this.audioPlayer.stateManager?.getStateSnapshot?.()?.playbackSpeed ?? 1);
+    };
+    number.addEventListener('change', commitNumber);
+    number.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      commitNumber();
+    });
+    custom.appendChild(slider);
+    custom.appendChild(number);
+    popup.appendChild(presets);
+    popup.appendChild(custom);
+    document.body.appendChild(popup);
+    this.playerPopup = popup;
+    this.playerPopupReturnFocus = this.speedButton;
+    this.speedButton.setAttribute('aria-expanded', 'true');
+    this.syncSpeedPopup(currentSpeed);
+    this.attachPlayerPopupDismiss(popup, this.speedButton);
+    clampMenuToViewport(popup);
+    (selectedPreset || slider).focus?.();
+  }
+
+  syncSpeedPopup(speed) {
+    if (this.playerPopup?.getAttribute('data-kind') !== 'speed') return;
+    const slider = this.playerPopup.querySelector('.player-speed-slider');
+    slider.value = String(speedToSliderPosition(speed));
+    slider.setAttribute('aria-valuetext', `${speed}x`);
+    updateRangeFill(slider);
+    this.playerPopup.querySelector('.player-speed-number').value = String(speed);
+    for (const preset of this.playerPopup.querySelector('.player-speed-presets').children) {
+      preset.setAttribute('aria-pressed', Number(preset.dataset.speed) === speed ? 'true' : 'false');
+    }
+  }
+
   async openLibraryTrackMenu(event, track) {
     if (!track) return;
     event.preventDefault?.();
@@ -991,7 +1125,7 @@ export class AudioPlayerUI {
     const libraryTrack = manager?.findTrackForPlaybackEntry?.(track);
     const libraryTrackId = track?.libraryTrackId || track?.trackUid ||
       libraryTrack?.trackUid || libraryTrack?.id;
-    this.closeLibraryContextMenu();
+    this.closePlayerPopup();
     const menu = document.createElement('div');
     menu.className = 'player-library-context-menu';
     menu.setAttribute('role', 'menu');
@@ -1009,29 +1143,29 @@ export class AudioPlayerUI {
     `;
     menu.querySelector('[data-action="show"]')?.addEventListener('click', async () => {
       await window.uiManager?.showLibraryTrack?.(libraryTrackId);
-      this.closeLibraryContextMenu();
+      this.closePlayerPopup();
     });
     menu.querySelector('[data-action="album"]')?.addEventListener('click', async () => {
       await window.uiManager?.showLibraryTrack?.(libraryTrackId, { view: 'album' });
-      this.closeLibraryContextMenu();
+      this.closePlayerPopup();
     });
     menu.querySelector('[data-action="artist"]')?.addEventListener('click', async () => {
       await window.uiManager?.showLibraryTrack?.(libraryTrackId, { view: 'artist' });
-      this.closeLibraryContextMenu();
+      this.closePlayerPopup();
     });
     menu.querySelector('[data-action="playlist"]')?.addEventListener('click', async () => {
       const rect = menu.getBoundingClientRect?.() || { left: event.clientX || 0, top: event.clientY || 0 };
       await this.openPlayerPlaylistMenu({ clientX: rect.left, clientY: rect.top }, [libraryTrackId]);
     });
     menu.querySelector('[data-action="save-queue"]')?.addEventListener('click', async () => {
-      this.closeLibraryContextMenu();
+      this.closePlayerPopup();
       await this.saveQueueAsPlaylist();
     });
     document.body.appendChild(menu);
-    this.libraryContextMenu = menu;
-    this.libraryContextMenuReturnFocus = event.currentTarget || event.target || null;
-    menu.addEventListener('keydown', keyEvent => this.handleLibraryMenuKeyDown(keyEvent));
-    this.attachLibraryContextMenuDismiss(menu);
+    this.playerPopup = menu;
+    this.playerPopupReturnFocus = event.currentTarget || event.target || null;
+    menu.addEventListener('keydown', keyEvent => this.handlePlayerMenuKeyDown(keyEvent));
+    this.attachPlayerPopupDismiss(menu);
     clampMenuToViewport(menu);
     menu.querySelector('button:not(:disabled)')?.focus?.();
   }
@@ -1041,7 +1175,7 @@ export class AudioPlayerUI {
       const manager = await this.getLibraryManager();
       if (!manager) return;
       const playlists = await listAllPlayerPlaylists(manager.playlists);
-      this.closeLibraryContextMenu();
+      this.closePlayerPopup();
       const menu = document.createElement('div');
       menu.className = 'player-library-context-menu';
       menu.setAttribute('role', 'menu');
@@ -1052,7 +1186,7 @@ export class AudioPlayerUI {
         ${playlists.map(playlist => `<button type="button" role="menuitem" data-playlist-id="${escapeHtml(playlist.id)}">${escapeHtml(playlist.name)}</button>`).join('')}
       `;
       menu.querySelector('[data-action="new"]')?.addEventListener('click', async () => {
-        this.closeLibraryContextMenu();
+        this.closePlayerPopup();
         try {
           const name = await this.promptText('library.prompt.playlistName', this.t('library.prompt.queuePlaylistName'));
           if (name) await manager.playlists.create(name, trackIds);
@@ -1084,17 +1218,17 @@ export class AudioPlayerUI {
             await manager.playlists.addTracks(button.dataset.playlistId, selectionDescriptor, {
               expectedTargetVersion: target.version
             });
-            this.closeLibraryContextMenu();
+            this.closePlayerPopup();
           } finally {
             if (contextToken) await manager.releaseContext?.(contextToken);
           }
         });
       });
       document.body.appendChild(menu);
-      this.libraryContextMenu = menu;
-      this.libraryContextMenuReturnFocus = document.activeElement || null;
-      menu.addEventListener('keydown', keyEvent => this.handleLibraryMenuKeyDown(keyEvent));
-      this.attachLibraryContextMenuDismiss(menu);
+      this.playerPopup = menu;
+      this.playerPopupReturnFocus = document.activeElement || null;
+      menu.addEventListener('keydown', keyEvent => this.handlePlayerMenuKeyDown(keyEvent));
+      this.attachPlayerPopupDismiss(menu);
       clampMenuToViewport(menu);
       menu.querySelector('button:not(:disabled)')?.focus?.();
     } catch (error) {
@@ -1229,43 +1363,44 @@ export class AudioPlayerUI {
     });
   }
 
-  attachLibraryContextMenuDismiss(menu) {
+  attachPlayerPopupDismiss(menu, trigger = null) {
     const closeOnPointerDown = event => {
-      if (menu.contains?.(event.target)) return;
-      this.closeLibraryContextMenu();
+      if (menu.contains?.(event.target) || trigger === event.target || trigger?.contains?.(event.target)) return;
+      this.closePlayerPopup();
     };
     const closeOnKeyDown = event => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        this.closeLibraryContextMenu();
+        this.closePlayerPopup();
       }
     };
     document.addEventListener?.('pointerdown', closeOnPointerDown);
     document.addEventListener?.('keydown', closeOnKeyDown);
-    this.libraryContextMenuCleanup = () => {
+    this.playerPopupCleanup = () => {
       document.removeEventListener?.('pointerdown', closeOnPointerDown);
       document.removeEventListener?.('keydown', closeOnKeyDown);
     };
   }
 
-  closeLibraryContextMenu() {
-    const returnFocus = this.libraryContextMenuReturnFocus;
-    this.libraryContextMenuCleanup?.();
-    this.libraryContextMenuCleanup = null;
-    if (this.libraryContextMenu?.parentNode) {
-      this.libraryContextMenu.parentNode.removeChild(this.libraryContextMenu);
+  closePlayerPopup() {
+    const returnFocus = this.playerPopupReturnFocus;
+    this.playerPopupCleanup?.();
+    this.playerPopupCleanup = null;
+    if (this.playerPopup?.parentNode) {
+      this.playerPopup.parentNode.removeChild(this.playerPopup);
     }
-    this.libraryContextMenu = null;
-    this.libraryContextMenuReturnFocus = null;
+    this.playerPopup = null;
+    this.playerPopupReturnFocus = null;
+    this.speedButton?.setAttribute('aria-expanded', 'false');
     returnFocus?.focus?.();
   }
 
-  handleLibraryMenuKeyDown(event) {
+  handlePlayerMenuKeyDown(event) {
     const items = Array.from(event.currentTarget.querySelectorAll?.('button:not(:disabled)') || []);
     const index = items.indexOf(document.activeElement);
     if (event.key === 'Escape') {
       event.preventDefault();
-      this.closeLibraryContextMenu();
+      this.closePlayerPopup();
       return;
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1391,7 +1526,7 @@ export class AudioPlayerUI {
       this.positionRaf = null;
     }
     this.documentRef?.removeEventListener?.('visibilitychange', this.onVisibilityChange);
-    this.closeLibraryContextMenu();
+    this.closePlayerPopup();
     this.removeStateListeners();
     
     if (this.container && this.container.parentNode) {
@@ -1408,6 +1543,7 @@ export class AudioPlayerUI {
     this.nextButton = null;
     this.repeatButton = null;
     this.shuffleButton = null;
+    this.speedButton = null;
     this.closeButton = null;
     this.expandButton = null;
     this.miniPlayerButton = null;

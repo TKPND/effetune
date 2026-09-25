@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { PlaybackManager } from '../../js/ui/audio-player/playback-manager.js';
+import { StateManager } from '../../js/ui/audio-player/state-manager.js';
+import { PLAYBACK_SPEED_STEPS, normalizePlaybackSpeed } from '../../js/ui/audio-player/playback-speed.js';
 import { CatalogSequence } from '../../js/ui/audio-player/playback-sequence.js';
 import { flushMicrotasks, withGlobals } from '../helpers/global-test-utils.mjs';
 
@@ -265,6 +267,38 @@ async function withPlaybackGlobals(options, callback) {
 function makeManager(audioPlayer) {
   return new PlaybackManager(audioPlayer);
 }
+
+test('playback speed applies each selected step without persistence', async () => {
+  await withPlaybackGlobals({}, () => {
+    const audioPlayer = {
+      ui: { updatePlayerUIState() {} },
+      contextManager: { clearNextTrackBuffer() {} }
+    };
+    audioPlayer.stateManager = new StateManager(audioPlayer);
+    audioPlayer.applyPlaybackSpeed = speed => {
+      audioPlayer.stateManager.updateState({ playbackSpeed: speed }, 'test');
+    };
+    const manager = makeManager(audioPlayer);
+    assert.equal(audioPlayer.stateManager.getStateSnapshot().playbackSpeed, 1);
+    for (const speed of PLAYBACK_SPEED_STEPS) {
+      const previousSpeed = audioPlayer.stateManager.getStateSnapshot().playbackSpeed;
+      assert.equal(manager.setPlaybackSpeed(speed), speed !== previousSpeed);
+      assert.equal(audioPlayer.stateManager.getStateSnapshot().playbackSpeed, speed);
+    }
+    assert.equal(manager.setPlaybackSpeed(4), false);
+    assert.equal(manager.setPlaybackSpeed(1.23), true);
+    assert.equal(audioPlayer.stateManager.getStateSnapshot().playbackSpeed, 1.23);
+    assert.equal(normalizePlaybackSpeed('1.235'), 1.24);
+    assert.equal(normalizePlaybackSpeed('5'), null);
+    for (const invalid of [0.24, 4.01, 1.234, NaN, Infinity]) {
+      assert.throws(() => manager.setPlaybackSpeed(invalid), RangeError);
+    }
+    audioPlayer.stateManager.updateState({ playbackSpeed: 1.234 }, 'test_invalid');
+    assert.equal(audioPlayer.stateManager.getStateSnapshot().playbackSpeed, 1);
+    assert.deepEqual(manager.getPersistentPlayerState(), { repeatMode: 'OFF', shuffleMode: false });
+    manager.dispose();
+  });
+});
 
 function setPlaylist(manager, names = ['One', 'Two', 'Three']) {
   manager.playlist = names.map(name => manager.withImmutableEntryInstanceId({

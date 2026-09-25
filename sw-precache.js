@@ -1,4 +1,4 @@
-self.EFFECTUNE_CACHE_VERSION = "effetune-v2.11.0-0a37a0448c18c5dd";
+self.EFFECTUNE_CACHE_VERSION = "effetune-v2.11.0-7a09ec36a3660bfb";
 self.EFFECTUNE_PRECACHE_URLS = [
   "./effetune-library.css",
   "./effetune-mobile.css",
@@ -199,6 +199,7 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/ui/audio-player/playback-region.js",
   "./js/ui/audio-player/playback-sequence.js",
   "./js/ui/audio-player/playback-source-policy.js",
+  "./js/ui/audio-player/playback-speed.js",
   "./js/ui/audio-player/rolling-pcm-core.js",
   "./js/ui/audio-player/rolling-pcm-policy.js",
   "./js/ui/audio-player/rolling-pcm-protocol.js",
@@ -276,9 +277,19 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./js/vendor/sqlite/sqlite3.mjs",
   "./js/vendor/sqlite/sqlite3.wasm",
   "./js/vendor/sqlite/vendor.json",
+  "./js/visualizer/visualizer-analyzer-display.js",
+  "./js/visualizer/visualizer-editor.js",
+  "./js/visualizer/visualizer-effects.js",
+  "./js/visualizer/visualizer-model.js",
+  "./js/visualizer/visualizer-palette-presets.js",
+  "./js/visualizer/visualizer-preset-store.js",
+  "./js/visualizer/visualizer-renderer.js",
+  "./js/visualizer/visualizer-sources.js",
+  "./js/visualizer/visualizer-view.js",
   "./manifest.json",
   "./package.json",
   "./pipeline-analyzer.css",
+  "./plugins/analyzer/chroma_spiral.js",
   "./plugins/analyzer/level_meter.css",
   "./plugins/analyzer/level_meter.js",
   "./plugins/analyzer/note_spectrogram.js",
@@ -476,6 +487,11 @@ self.EFFECTUNE_PRECACHE_URLS = [
   "./presets/spkr_sim/vintage_full_range.effetune_preset",
   "./presets/utils/bgm.effetune_preset",
   "./presets/visualize/all_analyzers.effetune_preset",
+  "./presets/visualizer/16x9.json",
+  "./presets/visualizer/1x1.json",
+  "./presets/visualizer/21x9.json",
+  "./presets/visualizer/4x3.json",
+  "./presets/visualizer/9x16.json",
   "./sw.js",
   "./user-data-backup.css"
 ];

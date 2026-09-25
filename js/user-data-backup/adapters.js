@@ -1,6 +1,8 @@
 import { PluginPresetStore } from '../ui/pipeline/plugin-preset-store.js';
 import measurementStorage, { validateMeasurementBackup } from '../../features/measurement/dataStorage.js';
 import { getDefaultIrLibraryService } from '../ir-library/service.js';
+import { VisualizerPresetStore } from '../visualizer/visualizer-preset-store.js';
+import { validateLayout } from '../visualizer/visualizer-model.js';
 
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -9,6 +11,7 @@ const irName = entry => entry.originals.map(original => original.fileName).join(
 export function createUserDataBackupAdapter(options = {}) {
     const presets = options.presetManager;
     const pluginPresets = options.pluginPresetStore || presets?.pipelineManager?.core?.pluginPresetDialog?.store || new PluginPresetStore();
+    const visualizerPresets = options.visualizerPresetStore || (globalThis.indexedDB ? new VisualizerPresetStore() : null);
     const measurements = options.measurementStorage || measurementStorage;
     const client = options.extensionClient;
     const irLibrary = async () => options.irLibrary || globalThis.window?.irLibraryService || getDefaultIrLibraryService();
@@ -45,6 +48,9 @@ export function createUserDataBackupAdapter(options = {}) {
                 }
                 return result;
             });
+            if (!client && visualizerPresets) await read('visualizer', async () => (await visualizerPresets.readBackupSnapshot()).map(({ name, layout }) => ({
+                key: `visualizer:${name}`, id: name, kind: 'visualizer', name, data: layout
+            })));
             await read('ir', async () => (await (await irOwner()).readBackupSnapshot()).map(data => ({
                 key: `ir:${data.entry.irId}`, id: data.entry.irId, kind: 'ir', name: irName(data.entry), data
             })));
@@ -56,8 +62,12 @@ export function createUserDataBackupAdapter(options = {}) {
 
         validateItem(item) {
             if (typeof item.name !== 'string' || !item.name.trim()) return 'Enter a name for this item.';
-            if ((item.kind === 'pipeline' || item.kind === 'plugin') && RESERVED_NAMES.has(item.name)) {
+            if (item.kind === 'visualizer' && (client || !visualizerPresets)) return 'Visualizer presets are unavailable in this environment.';
+            if ((item.kind === 'pipeline' || item.kind === 'plugin' || item.kind === 'visualizer') && RESERVED_NAMES.has(item.name)) {
                 return 'This preset name cannot be used. Rename it before creating a backup.';
+            }
+            if (item.kind === 'visualizer' && !validateLayout(item.data)) {
+                return 'The visualizer preset is incomplete. Create a new backup from the original data.';
             }
             if (item.kind === 'plugin' && (typeof item.pluginName !== 'string' || !item.pluginName.trim() || RESERVED_NAMES.has(item.pluginName))) {
                 return 'This effect name cannot be used.';
@@ -93,6 +103,10 @@ export function createUserDataBackupAdapter(options = {}) {
             }
             if (item.kind === 'plugin') {
                 await pluginPresets.appendPreset(item.pluginName, name, data);
+                return { id: name, name };
+            }
+            if (item.kind === 'visualizer' && !client) {
+                await visualizerPresets.appendUserPreset(name, data);
                 return { id: name, name };
             }
             if (item.kind === 'ir') {

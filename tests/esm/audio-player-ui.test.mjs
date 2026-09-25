@@ -17,7 +17,9 @@ class FakeElement {
     this.title = '';
     this.value = '';
     this.disabled = false;
-    this.style = {};
+    this.style = {
+      setProperty(name, value) { this[name] = value; }
+    };
     this._innerHTML = '';
     this.offsetHeight = 20;
     this.scrollTop = 0;
@@ -59,6 +61,10 @@ class FakeElement {
 
   classList() {
     return this.className.split(/\s+/).filter(Boolean);
+  }
+
+  matches(selector) {
+    return selector === 'input[type="range"]' && this.tagName === 'INPUT' && this.type === 'range';
   }
 
   appendChild(child) {
@@ -119,8 +125,20 @@ class FakeElement {
   }
 
   dispatchEvent(type, event = {}) {
-    const eventObject = { target: this, ...event };
+    const eventObject = { target: this, currentTarget: this, ...event };
     return (this.eventListeners.get(type) || []).map(listener => listener(eventObject));
+  }
+
+  click() {
+    this.dispatchEvent('click');
+  }
+
+  focus() {
+    this.ownerDocument.activeElement = this;
+  }
+
+  contains(element) {
+    return element === this || this.children.some(child => child.contains(element));
   }
 
   querySelector(selector) {
@@ -134,6 +152,9 @@ class FakeElement {
   }
 
   querySelectorAll(selector) {
+    if (selector === 'button:not(:disabled)') {
+      return this.children.filter(child => child.tagName === 'BUTTON' && !child.disabled);
+    }
     if (selector.startsWith('.')) {
       const className = selector.slice(1);
       return this.children.filter(child => child.classList().includes(className));
@@ -176,6 +197,18 @@ function createDocument(calls, options = {}) {
     body: null,
     mainContainer: null,
     dbtPanel: null,
+    activeElement: null,
+    eventListeners: new Map(),
+    addEventListener(type, listener) {
+      if (!this.eventListeners.has(type)) this.eventListeners.set(type, []);
+      this.eventListeners.get(type).push(listener);
+    },
+    removeEventListener(type, listener) {
+      this.eventListeners.set(type, (this.eventListeners.get(type) || []).filter(item => item !== listener));
+    },
+    dispatchEvent(type, event = {}) {
+      for (const listener of this.eventListeners.get(type) || []) listener(event);
+    },
     createElement(tagName) {
       return new FakeElement(tagName, documentRef, calls);
     },
@@ -234,6 +267,7 @@ function createDocument(calls, options = {}) {
         'next-button',
         'repeat-button',
         'shuffle-button',
+        'speed-button',
         'expand-button',
         'close-button'
       ];
@@ -361,6 +395,9 @@ function createAudioPlayer(calls, options = {}) {
       toggleShuffleMode() {
         calls.push(['toggleShuffleMode']);
       },
+      setPlaybackSpeed(speed) {
+        calls.push(['setPlaybackSpeed', speed]);
+      },
       selectQueueOrdinal(ordinal, selectionOptions) {
         calls.push(['selectQueueOrdinal', ordinal, { ...selectionOptions }]);
         return Promise.resolve({ accepted: true });
@@ -484,6 +521,8 @@ test('creates translated controls, inserts before the double blind panel, and wi
     assert.match(ui.repeatButton.innerHTML, /M11\.3 10\.3/);
     assert.equal(ui.shuffleButton.disabled, true);
     assert.equal(ui.shuffleButton.style.opacity, '0.5');
+    assert.equal(ui.speedButton.title, 'T:ui.title.playbackSpeed');
+    assert.equal(ui.speedButton.textContent, '1x');
 
     ui.playPauseButton.dispatchEvent('click');
     ui.stopButton.dispatchEvent('click');
@@ -491,6 +530,9 @@ test('creates translated controls, inserts before the double blind panel, and wi
     ui.nextButton.dispatchEvent('click');
     ui.repeatButton.dispatchEvent('click');
     ui.shuffleButton.dispatchEvent('click');
+    ui.speedButton.dispatchEvent('click');
+    assert.equal(ui.playerPopup?.getAttribute('data-kind'), 'speed');
+    ui.closePlayerPopup();
     ui.closeButton.dispatchEvent('click');
 
     assert.deepEqual(calls.filter(call => [
@@ -559,6 +601,7 @@ test('createPlayerUI uses fallback text and handles alternate insertion targets'
     assert.equal(ui.nextButton.title, 'Next track');
     assert.equal(ui.repeatButton.title, 'Toggle repeat mode');
     assert.equal(ui.shuffleButton.title, 'Toggle shuffle');
+    assert.equal(ui.speedButton.title, 'Playback speed');
     assert.equal(ui.closeButton.title, 'Close player');
   });
 
@@ -570,6 +613,159 @@ test('createPlayerUI uses fallback text and handles alternate insertion targets'
 
     assert.equal(container.parentNode, null);
     assert.equal(documentRef.body.children.includes(container), false);
+  });
+});
+
+test('speed popup keeps presets, slider, number, and button display synchronized', async () => {
+  await withAudioPlayerGlobals({}, async ({ calls, documentRef }) => {
+    const player = createAudioPlayer(calls, { state: { playbackSpeed: 1 } });
+    const ui = new AudioPlayerUI(player);
+    player.playbackManager.setPlaybackSpeed = speed => {
+      calls.push(['setPlaybackSpeed', speed]);
+      player.stateManager.setState({ playbackSpeed: speed });
+      ui.updatePlayerUIState();
+    };
+    ui.createPlayerUI();
+
+    ui.speedButton.click();
+    const popup = ui.playerPopup;
+    const presets = popup.querySelector('.player-speed-presets').children;
+    const slider = popup.querySelector('.player-speed-slider');
+    const number = popup.querySelector('.player-speed-number');
+    const assertSliderFill = () => {
+      const fill = Number.parseFloat(slider.style['--et-range-fill']);
+      assert.ok(Math.abs(fill - Number(slider.value) / 40) < 1e-9);
+    };
+    assert.equal(ui.speedButton.getAttribute('aria-expanded'), 'true');
+    assert.equal(popup.getAttribute('role'), 'dialog');
+    assert.deepEqual(presets.map(item => item.textContent), [
+      '0.25x', '0.5x', '0.75x', '1x', '1.25x', '1.5x', '2x', '3x', '4x'
+    ]);
+    assert.equal(presets[3].getAttribute('aria-pressed'), 'true');
+    assert.equal(slider.min, '0');
+    assert.equal(slider.max, '4000');
+    assert.equal(slider.value, '2000');
+    assertSliderFill();
+    assert.equal(slider.style['--et-range-origin'], '0%');
+    assert.equal(slider.getAttribute('aria-valuetext'), '1x');
+    assert.equal(number.value, '1');
+    assert.equal(documentRef.activeElement, presets[3]);
+
+    presets[4].click();
+    assert.deepEqual(calls.filter(call => call[0] === 'setPlaybackSpeed'), [['setPlaybackSpeed', 1.25]]);
+    assert.equal(ui.speedButton.textContent, '1.25x');
+    assert.equal(ui.playerPopup, popup);
+    assert.equal(presets[4].getAttribute('aria-pressed'), 'true');
+    assert.equal(slider.value, String(Math.round(Math.log(1.25 / 0.25) / Math.log(16) * 4000)));
+    assertSliderFill();
+    assert.equal(number.value, '1.25');
+
+    presets[0].click();
+    assert.equal(slider.value, '0');
+    assertSliderFill();
+    presets[8].click();
+    assert.equal(slider.value, '4000');
+    assertSliderFill();
+
+    slider.value = '2000';
+    slider.dispatchEvent('input');
+    assert.equal(ui.speedButton.textContent, '1x');
+    assert.equal(slider.getAttribute('aria-valuetext'), '1x');
+    slider.dispatchEvent('keydown', { key: 'ArrowRight', preventDefault() {} });
+    assert.equal(ui.speedButton.textContent, '1.01x');
+    slider.dispatchEvent('keydown', { key: 'ArrowLeft', preventDefault() {} });
+    assert.equal(ui.speedButton.textContent, '1x');
+
+    slider.value = '57';
+    slider.dispatchEvent('input');
+    assert.equal(ui.speedButton.textContent, '0.26x');
+    assert.equal(number.value, '0.26');
+    assertSliderFill();
+    assert.equal(presets.some(item => item.getAttribute('aria-pressed') === 'true'), false);
+
+    number.value = '1.235';
+    number.dispatchEvent('keydown', { key: 'Enter', preventDefault() {} });
+    assert.equal(ui.speedButton.textContent, '1.24x');
+    assertSliderFill();
+    assert.equal(number.value, '1.24');
+
+    number.value = '2.37';
+    assert.equal(ui.speedButton.textContent, '1.24x');
+    number.dispatchEvent('change');
+    assert.equal(ui.speedButton.textContent, '2.37x');
+    assertSliderFill();
+
+    number.value = '';
+    number.dispatchEvent('change');
+    assert.equal(number.value, '2.37');
+    number.value = '5';
+    number.dispatchEvent('change');
+    assert.equal(number.value, '2.37');
+
+    slider.dispatchEvent('keydown', { key: 'Home', preventDefault() {} });
+    assert.equal(ui.speedButton.textContent, '0.25x');
+    slider.dispatchEvent('keydown', { key: 'End', preventDefault() {} });
+    assert.equal(ui.speedButton.textContent, '4x');
+
+    documentRef.dispatchEvent('pointerdown', { target: ui.speedButton });
+    assert.equal(ui.playerPopup, popup);
+    ui.speedButton.click();
+    assert.equal(ui.playerPopup, null);
+    assert.equal(ui.speedButton.getAttribute('aria-expanded'), 'false');
+    assert.equal(documentRef.activeElement, ui.speedButton);
+
+    ui.speedButton.click();
+    const reopenedSlider = ui.playerPopup.querySelector('.player-speed-slider');
+    assert.equal(reopenedSlider.value, '4000');
+    assert.equal(reopenedSlider.style['--et-range-fill'], '100%');
+    documentRef.dispatchEvent('pointerdown', { target: documentRef.body });
+    assert.equal(ui.playerPopup, null);
+
+    ui.speedButton.click();
+    documentRef.dispatchEvent('keydown', { key: 'Escape', preventDefault() {} });
+    assert.equal(ui.playerPopup, null);
+    ui.removeUI();
+    assert.equal(documentRef.eventListeners.get('pointerdown')?.length, 0);
+  });
+});
+
+test('speed popup opens in mini and mobile player layouts', async () => {
+  for (const options of [
+    { windowOptions: { electronAPI: {}, uiManager: { miniPlayerMode: true } } },
+    { documentOptions: { mobilePlayerView: true }, windowOptions: { uiManager: { layoutMode: { isMobile: true } } } }
+  ]) {
+    await withAudioPlayerGlobals(options, async ({ calls }) => {
+      const ui = new AudioPlayerUI(createAudioPlayer(calls));
+      ui.createPlayerUI();
+      ui.speedButton.click();
+      assert.equal(ui.playerPopup?.querySelector('.player-speed-presets').children.length, 9);
+      assert.ok(ui.playerPopup?.querySelector('.player-speed-slider'));
+      assert.ok(ui.playerPopup?.querySelector('.player-speed-number'));
+      ui.removeUI();
+    });
+  }
+});
+
+test('logarithmic speed slider can select every 0.01x speed', async () => {
+  await withAudioPlayerGlobals({}, async ({ calls }) => {
+    const player = createAudioPlayer(calls, { state: { playbackSpeed: 1 } });
+    const ui = new AudioPlayerUI(player);
+    player.playbackManager.setPlaybackSpeed = speed => {
+      player.stateManager.setState({ playbackSpeed: speed });
+      ui.updatePlayerUIState();
+    };
+    ui.createPlayerUI();
+    ui.speedButton.click();
+    const slider = ui.playerPopup.querySelector('.player-speed-slider');
+
+    for (let hundredths = 25; hundredths <= 400; hundredths++) {
+      const speed = hundredths / 100;
+      slider.value = String(Math.round(Math.log(speed / 0.25) / Math.log(16) * 4000));
+      slider.dispatchEvent('input');
+      assert.equal(player.stateManager.getStateSnapshot().playbackSpeed, speed);
+    }
+
+    ui.removeUI();
   });
 });
 
@@ -655,10 +851,18 @@ test('updatePlayerUIState handles repeat, shuffle, default, and missing-control 
 
   ui.repeatButton = createControlElement(calls, 'repeat-button');
   ui.shuffleButton = createControlElement(calls, 'shuffle-button');
+  ui.speedButton = createControlElement(calls, 'speed-button');
 
   ui.updatePlayerUIState();
   assert.equal(ui.repeatButton.attributes.get('data-active'), 'true');
   assert.equal(ui.shuffleButton.attributes.get('data-active'), 'true');
+  assert.equal(ui.speedButton.textContent, '1x');
+  assert.equal(ui.speedButton.attributes.get('data-active'), 'false');
+
+  player.stateManager.setState({ playbackSpeed: 1.25 });
+  ui.updatePlayerUIState();
+  assert.equal(ui.speedButton.textContent, '1.25x');
+  assert.equal(ui.speedButton.attributes.get('data-active'), 'true');
 
   player.stateManager.setState({ repeatMode: 'ONE', shuffleMode: true });
   ui.updatePlayerUIState();
@@ -1437,7 +1641,7 @@ test('library queue helpers notify now playing and save library queues as playli
     assert.ok(documentRef.body.children.some(child => child.className === 'player-library-context-menu'));
     assert.ok(calls.some(call => call[0] === 'preventDefault'));
 
-    ui.closeLibraryContextMenu();
+    ui.closePlayerPopup();
     await ui.openLibraryTrackMenu({ preventDefault() {}, clientX: 20, clientY: 30 }, {
       trackUid: 'catalog-track',
       title: 'Catalog Track'

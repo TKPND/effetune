@@ -19,6 +19,19 @@ function createTarget(kind = 'div', { range = false, contentEditable = false } =
   };
 }
 
+test('Visualizer does not edit the hidden pipeline with shortcuts or paste', async () => {
+  await withGlobals({ document: { body: { classList: { contains: name => name === 'view-visualizer' } } } }, () => {
+    const context = createContext();
+    for (const options of [{ key: 'Delete' }, { key: 'z', ctrlKey: true }, { key: 's', ctrlKey: true }]) {
+      assert.equal(handlePipelineKeyboardShortcut(createEvent(options), context), false);
+    }
+    const event = createEvent();
+    event.clipboardData = { getData: () => '[{"nm":"Volume"}]' };
+    assert.equal(handlePipelinePasteEvent(event, context), false);
+    assert.deepEqual(context.calls, []);
+  });
+});
+
 function createEvent(options = {}) {
   const event = {
     key: options.key,

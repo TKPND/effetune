@@ -22,7 +22,7 @@ integrated-LUFS/true-peak measurement.
 
 ## Analyzers and telemetry
 
-`LevelMeter`, `NoteSpectrogram`, `Oscilloscope`, `PitchMeter`,
+`ChromaSpiral`, `LevelMeter`, `NoteSpectrogram`, `Oscilloscope`, `PitchMeter`,
 `SpectrumAnalyzer`, `Spectrogram`, and `StereoMeter` expose decoded semantic observations in Python, JavaScript offline and
 streaming processing, and AudioWorklet. Telemetry is opt-in: the first callback or
 subscriber enables it and the last unsubscribe disables it. Long renders drain after

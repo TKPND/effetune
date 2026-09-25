@@ -1159,7 +1159,7 @@ class NativeChainTests(unittest.TestCase):
         np.testing.assert_array_equal(first, second)
         self.assertFalse(np.array_equal(first, other))
 
-    def test_all_76_wrappers_pack_parameters_and_execute_natively(self) -> None:
+    def test_all_wrappers_pack_parameters_and_execute_natively(self) -> None:
         source = np.vstack(
             (
                 np.linspace(-0.8, 0.8, 257, dtype=np.float32),
@@ -1177,7 +1177,7 @@ class NativeChainTests(unittest.TestCase):
             topology="automatic",
         )
         source_four_channels = np.vstack((source, source))
-        self.assertEqual(len(EFFECT_METADATA["effects"]), 106)
+        self.assertEqual(len(EFFECT_METADATA["effects"]), 107)
         for metadata in EFFECT_METADATA["effects"]:
             effect_type = metadata["type"]
             definition = metadata["parameters"][0] if metadata["parameters"] else None

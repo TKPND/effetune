@@ -34,6 +34,7 @@ Sem mitos audiófilos, apenas pura ciência.
 - Interface de arrastar e soltar para construir cadeias de efeitos
 - Sistema de efeitos expansível com efeitos categorizados
 - Visualização de áudio ao vivo
+- Layouts do Visualizer com gráficos animados, capa e informações da faixa
 - Pipeline de áudio que pode ser modificado em tempo real
 - Processamento offline de arquivos de áudio com a cadeia de efeitos atual
 - Biblioteca de música para navegar por subpastas locais, metadados e playlists
@@ -54,6 +55,7 @@ Antes de usar o EffeTune, você precisará configurar o roteamento de áudio. Ve
    - Ou selecione Abrir arquivo de música... no menu Arquivo (apenas aplicativo desktop)
    - Ou arraste o arquivo de música para a janela
 - Para usar apenas o player, selecione Nenhum (somente player de arquivos de música) como dispositivo de entrada em Configuração de Áudio para não usar uma entrada de áudio ao vivo
+- Clique no botão de velocidade ao lado de Shuffle para abrir o pop-up. Escolha uma das nove predefinições ou use o controle deslizante horizontal ou o campo numérico para ajustar a velocidade de 0,25x a 4x em incrementos de 0,01x. O tom é preservado.
 
 ### Configuração para Serviços de Streaming
 
@@ -90,7 +92,7 @@ Para usar o EffeTune com players de CD, players de rede ou outras fontes física
 
 ### Configurações do Aplicativo
 
-Abra **Configuração...** no menu **Configurações** para escolher o idioma, a opção **Visualização ao iniciar:** e o comportamento do pipeline de efeitos na inicialização. A opção **Visualização ao iniciar:** pode ser **Effect Pipeline (padrão)** ou **Biblioteca de música**. Ao escolher **Biblioteca de música**, use a lista ao lado para definir qual seção será exibida primeiro: **Faixas**, **Álbuns**, **Artistas**, **Gêneros**, **Subpastas**, **Pastas** ou **Playlists**. Em **Tema**, escolha as cores do aplicativo: Graphite (padrão), Paper, Midnight, Ember ou Mint.
+Abra **Configuração...** no menu **Configurações** para escolher o idioma, a opção **Visualização ao iniciar:** e o comportamento do pipeline de efeitos na inicialização. A opção **Visualização ao iniciar:** pode ser **Effect Pipeline (padrão)**, **Biblioteca de música** ou **Visualizer**. Ao escolher **Biblioteca de música**, use a lista ao lado para definir qual seção será exibida primeiro: **Faixas**, **Álbuns**, **Artistas**, **Gêneros**, **Subpastas**, **Pastas** ou **Playlists**. Em **Tema**, escolha as cores do aplicativo: Graphite (padrão), Paper, Midnight, Ember ou Mint.
 
 As versões desktop compatíveis também podem ser controladas por aplicativos OpenHome na mesma rede local. O recurso fica desativado por padrão; consulte [Controle remoto OpenHome](music-library.md#controle-remoto-openhome-aplicativo-desktop) para ver configuração, acesso à rede, compatibilidade e limitações.
 
@@ -108,6 +110,10 @@ Nos layouts para PC e dispositivos móveis, quando uma pesquisa de faixas ou os 
 Os navegadores Chromium para PC podem manter o acesso às pastas de música selecionadas entre sessões. No Safari, Firefox, navegadores móveis e outros ambientes sem acesso persistente a pastas, selecione novamente a pasta ou os arquivos após cada recarregamento; o EffeTune os reconecta ao catálogo existente.
 
 Coleções grandes são carregadas do armazenamento em etapas; a velocidade de varredura e carregamento depende do dispositivo, da coleção e da memória disponível. Uma rolagem muito rápida pode mostrar linhas vazias por alguns instantes enquanto as próximas faixas são carregadas, principalmente em armazenamento lento.
+
+### Visualizar o áudio
+
+Abra **Visualizer** pelo cabeçalho, pela aba móvel **Player** ou pelo menu desktop **Visualizar**. Escolha um layout incluído ou use **Edit** para organizar gráficos, capa e dados da faixa. As mudanças aparecem na hora e voltam na próxima abertura; salve uma cópia com nome no diálogo de presets. Consulte o [guia do Visualizer](visualizer.md).
 
 ### Construindo Sua Cadeia de Efeitos
 
@@ -152,6 +158,8 @@ Os recursos de importação, exportação e compartilhamento de arquivos `.effet
 ### Backup e restauração dos dados salvos
 
 Abra **Settings > Backup / Restaurar** para transferir presets de pipeline e de efeitos, respostas ao impulso e medições entre o aplicativo web, o aplicativo desktop e a extensão. Selecione itens individuais ou categorias inteiras. Ao selecionar um preset, os dados necessários também são selecionados; ao remover esses dados, os presets dependentes também são desmarcados.
+
+Os backups web e desktop incluem presets nomeados do Visualizer e suas imagens de fundo, mas não o layout atual.
 
 **Incluir dados de medição** e **Incluir dados de resposta ao impulso** ficam ativados por padrão. Se uma opção for desativada, apenas as referências serão salvas e os mesmos dados precisarão existir no destino. As respostas são restauradas na **Impulse Response Library**. Dados idênticos são reutilizados; itens diferentes com o mesmo nome recebem uma numeração. O pipeline atual, o volume, o preset selecionado, os dispositivos e as regras de URL não são alterados.
 
@@ -281,7 +289,7 @@ Para consultar frequência, fase, atraso de grupo mínimo, atraso de grupo exced
 
 ### Reprodução sem intervalos
 
-**Reprodução sem intervalos** vem ativada por padrão e pode ser alterada em **Configuração de Áudio**. Quando está ativada, faixas locais compatíveis são reproduzidas sem intervalo; o suporte é limitado pelo formato do arquivo e pelo navegador ou aplicativo em uso. Formatos não suportados e alguns ambientes móveis usam automaticamente um modo alternativo que limita a memória, portanto ainda pode haver um breve intervalo. Ao desativá-la, o aplicativo prioriza menor uso de memória e estabilidade, e pode haver um pequeno intervalo entre as faixas. Alterar essa opção não interrompe a faixa atual.
+**Reprodução sem intervalos** vem ativada por padrão e pode ser alterada em **Configuração de Áudio**. Quando está ativada, faixas locais compatíveis são reproduzidas sem intervalo; o suporte é limitado pelo formato do arquivo e pelo navegador ou aplicativo em uso. Formatos não suportados e alguns ambientes móveis usam automaticamente um modo alternativo que limita a memória, portanto ainda pode haver um breve intervalo. Ao desativá-la, o aplicativo prioriza menor uso de memória e estabilidade, e pode haver um pequeno intervalo entre as faixas. Alterar essa opção não interrompe a faixa atual. A reprodução sem intervalos fica indisponível enquanto a velocidade não estiver em 1x. Se você mudar a velocidade durante uma faixa reproduzida sem intervalos, ela será retomada da mesma posição após uma breve interrupção.
 
 ## Combinações Comuns de Efeitos
 

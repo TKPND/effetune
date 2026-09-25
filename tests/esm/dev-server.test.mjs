@@ -67,7 +67,8 @@ test('web-only startup serves the working tree without preparing a documentation
     '/js/app.js',
     '/plugins/plugins.txt',
     '/presets/presets.txt',
-    '/sw.js'
+    '/sw.js',
+    '/user-data-backup.css'
   ]) {
     assert.equal(requestStatus(asset), 200, asset);
   }

@@ -1,6 +1,6 @@
 {
   "abiVersion": 1,
-  "sourceDigest": "sha256:93ff60418986d8f642493de24c62feb7b65f51ae5a7b3b56be7d1d48bac10fae",
+  "sourceDigest": "sha256:323e7beb0afa74d89be56e5571aa8667febeb5a34ea8eb0b5125e894bbf3c26e",
   "emsdkVersion": "6.0.2",
   "g726PerformanceInput": {
     "contract": "g726-production-performance-input-sha256-v2",
@@ -391,6 +391,12 @@
     }
   },
   "kernels": [
+    {
+      "name": "ChromaSpiralPlugin",
+      "hash": 2166136261,
+      "byteCapacity": 0,
+      "assets": []
+    },
     {
       "name": "LevelMeterPlugin",
       "hash": 2166136261,
@@ -1085,7 +1091,7 @@
     }
   ],
   "sizes": {
-    "baseline": 7140028,
-    "simd": 7276724
+    "baseline": 7143106,
+    "simd": 7279875
   }
 }

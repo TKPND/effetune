@@ -488,7 +488,10 @@ test('Frequency Preview preserves visible graphs through the real canvas CSS cas
   { timeout: 60_000 }, async () => {
     const browser = await chromium.launch({ headless: true });
     try {
-      for (const width of [1280, 360]) {
+      for (const [width, zoom] of [
+        [1280, 0.75], [1280, 1], [1280, 1.5],
+        [360, 0.75], [360, 1], [360, 1.5]
+      ]) {
         const page = await browser.newPage({ viewport: { width, height: 1100 } });
         try {
           await page.setContent('<main class="pipeline-item"></main>');
@@ -499,6 +502,7 @@ test('Frequency Preview preserves visible graphs through the real canvas CSS cas
             window.audioManager = { pipeline: [], setFrequencyPreview() {} };
           }, width === 360);
           await loadCssInApplicationOrder(page);
+          await page.evaluate(value => { document.body.style.zoom = value; }, zoom);
           await loadTargetScripts(page);
           await page.addScriptTag({ content: await fs.readFile('plugins/frequency-preview.js', 'utf8') });
           for (const name of ['BandPassFilterPlugin', 'FiveBandPEQPlugin']) {
@@ -530,7 +534,8 @@ test('Frequency Preview preserves visible graphs through the real canvas CSS cas
             assert.equal(geometry.background, 'rgba(0, 0, 0, 0)', `${name} ${width}px transparent preview`);
             assert.equal(geometry.margin, '0px', `${name} ${width}px preview margin`);
             assert.equal(geometry.border, '0px', `${name} ${width}px preview border`);
-            assert.deepEqual(rectangleMismatches(geometry.rect, geometry.expected), [], `${name} ${width}px preview box`);
+            assert.deepEqual(rectangleMismatches(geometry.rect, geometry.expected), [],
+              `${name} ${width}px zoom ${zoom} preview box`);
             assert.ok(baseline.equals(await graph.screenshot()), `${name} ${width}px original graph stays visible after attach`);
             const { left, top, right, bottom } = geometry.rect;
             await page.mouse.move(left + (right - left) * 0.3, top + (bottom - top) * 0.25);
@@ -541,7 +546,32 @@ test('Frequency Preview preserves visible graphs through the real canvas CSS cas
             }), true, `${name} ${width}px preview trace appears`);
             await page.mouse.up();
             await page.mouse.move(0, 0);
-            assert.ok(baseline.equals(await graph.screenshot()), `${name} ${width}px original graph stays visible after stop`);
+            assert.equal(await page.evaluate(() => {
+              const canvas = window.previewFixture.instance.canvas;
+              return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+                .some((value, index) => index % 4 === 3 && value > 0);
+            }), false, `${name} ${width}px zoom ${zoom} preview clears`);
+            if (zoom === 1) {
+              assert.ok(baseline.equals(await graph.screenshot()),
+                `${name} ${width}px original graph stays visible after stop`);
+            }
+            if (name === 'FiveBandPEQPlugin') {
+              const alignment = await page.evaluate(() => {
+                const plugin = window.previewFixture.plugin;
+                const rect = plugin.graphContainer.getBoundingClientRect();
+                const clientX = rect.left + rect.width / 2;
+                const clientY = rect.top + rect.height / 2;
+                plugin.activeDragMarker = 0;
+                plugin.hasMoved = true;
+                plugin.handleDragMove({ clientX, clientY });
+                const marker = plugin.markers[0].getBoundingClientRect();
+                plugin.handleDragEnd();
+                return { x: marker.left + marker.width / 2 - clientX,
+                  y: marker.top + marker.height / 2 - clientY };
+              });
+              assert.ok(Math.abs(alignment.x) < 1 && Math.abs(alignment.y) < 1,
+                `${name} ${width}px zoom ${zoom} handle follows pointer: ${JSON.stringify(alignment)}`);
+            }
           }
         } finally {
           await page.close();
@@ -568,7 +598,7 @@ const layoutTargets = [
   { name: 'RoomEqPlugin', path: 'eq/room_eq', prefix: 'room-eq-tab', button: '.room-eq-tab' }
 ];
 
-test('effect rows align single-line controls and tabs retain the largest default page',
+test('effect rows keep equal heights with wrapped labels and tabs retain the largest default page',
   { timeout: 60_000 }, async () => {
     const browser = await chromium.launch({ headless: true });
     try {
@@ -621,6 +651,56 @@ test('effect rows align single-line controls and tabs retain the largest default
           assert.deepEqual(shared.rows, Array(5).fill(expectedHeight), `${width}px shared row heights`);
           assert.deepEqual(shared.fields, Array(3).fill(expectedHeight), `${width}px shared field heights`);
           assert.ok(shared.glyphs.every(height => height < expectedHeight), 'choice glyphs retain their compact size');
+
+          for (const control of ['number', 'select']) {
+            const rows = await page.evaluate(control => {
+              const plugin = new PluginBase('Layout', 'Wrapped labels');
+              const container = document.createElement('div');
+              container.className = 'plugin-parameter-ui';
+              for (const label of ['Highest Note', 'Highest Note (gypq)', 'Gain', 'Release Time (ms)']) {
+                const row = control === 'number'
+                  ? plugin.createParameterControl(label, 1, 10000, 1, 3000, () => {})
+                  : plugin.createSelectControl(label, ['A', 'B'], 'A', () => {});
+                // Mobile labels normally size to their text; constrain the column to exercise wrapping.
+                if (document.body.classList.contains('layout-mobile')) {
+                  row.querySelector('label').style.width = '120px';
+                }
+                container.append(row);
+              }
+              document.querySelector('.plugin-ui').replaceChildren(container);
+              return [...container.children].map(row => {
+                const label = row.querySelector('label');
+                const text = document.createRange();
+                text.selectNodeContents(label);
+                const field = row.querySelector('input[type="number"], select').getBoundingClientRect();
+                return {
+                  label: label.textContent,
+                  lineCount: new Set([...text.getClientRects()].map(rect => rect.top)).size,
+                  height: row.getBoundingClientRect().height,
+                  fieldHeight: field.height,
+                  fieldTop: field.top
+                };
+              });
+            }, control);
+            for (const [index, row] of rows.entries()) {
+              const context = `${width}px ${control} ${row.label}`;
+              assert.equal(row.lineCount, index % 2 === 0 ? 1 : 2,
+                `${context} renders the expected number of text lines`);
+              assert.equal(row.height, expectedHeight, `${context} preserves the standard row height`);
+              assert.equal(row.fieldHeight, expectedHeight, `${context} preserves the standard field height`);
+              if (index > 0) {
+                assert.equal(row.fieldTop - rows[index - 1].fieldTop, expectedHeight + 4,
+                  `${context} preserves equal field spacing`);
+              }
+            }
+            const fixture = page.locator('.plugin-ui');
+            const clipped = await fixture.screenshot();
+            await fixture.locator('label').evaluateAll(labels => {
+              for (const label of labels) label.style.overflow = 'visible';
+            });
+            assert.ok(clipped.equals(await fixture.screenshot()),
+              `${width}px ${control} preserves complete glyphs, including descenders on both text lines`);
+          }
 
           for (const target of layoutTargets) {
             const { name, prefix } = target;

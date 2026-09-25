@@ -240,8 +240,8 @@ test('mobile player places the queue list below the primary play pause control',
   );
   assert.match(
     controlsRule,
-    /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\);/,
-    'mobile player controls should own the six-column control grid'
+    /grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\);/,
+    'mobile player controls should own the seven-column control grid'
   );
   assert.match(
     controlsRule,
@@ -250,7 +250,7 @@ test('mobile player places the queue list below the primary play pause control',
   );
   assert.match(
     controlsRule,
-    /"shuffle previous stop next repeat close"\s*"play play play play play play"\s*"playlist playlist playlist playlist playlist playlist"/,
+    /"shuffle speed previous stop next repeat close"\s*"play play play play play play play"\s*"playlist playlist playlist playlist playlist playlist playlist"/,
     'mobile player controls should place the playlist after the primary play/pause row in the same grid'
   );
   assert.match(
@@ -271,6 +271,7 @@ test('mobile player places the queue list below the primary play pause control',
     ['body.layout-mobile .seek-bar', 'seek'],
     ['body.layout-mobile .time-display', 'time'],
     ['body.layout-mobile .shuffle-button', 'shuffle'],
+    ['body.layout-mobile .speed-button', 'speed'],
     ['body.layout-mobile .prev-button', 'previous'],
     ['body.layout-mobile .stop-button', 'stop'],
     ['body.layout-mobile .next-button', 'next'],

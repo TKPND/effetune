@@ -166,6 +166,12 @@ function captureInitialStartupSearch(windowRef = window) {
     let search = '';
     try {
         search = windowRef.location?.search || '';
+        const params = new URLSearchParams(search);
+        // A reload keeps history state; a newly opened share URL has no matching provenance.
+        if (params.has('p') && windowRef.history?.state?.effetuneReflectedPipeline === params.get('p')) {
+            params.delete('p');
+            search = params.toString();
+        }
     } catch (error) {
         search = '';
     }
@@ -270,6 +276,10 @@ function addDocumentBodyClass(documentRef, className) {
 }
 
 function applyInitialStartupViewClass(config, windowRef = window) {
+    if (config?.startupView === 'visualizer' && !hasExplicitStartupViewRequest(windowRef)) {
+        addDocumentBodyClass(getStartupDocument(windowRef), 'view-visualizer');
+        return;
+    }
     if (!shouldUseLibraryStartupView(config, windowRef)) return;
     const documentRef = getStartupDocument(windowRef);
     // The class only hides the effect pipeline once the Music Library sheet is present,
@@ -670,6 +680,11 @@ class App {
             }
         }
 
+        if (startupConfig.startupView === 'visualizer' && !hasExplicitStartupViewRequest(window)) {
+            try { await this.uiManager?.showVisualizerView?.(); }
+            catch (error) { console.error('Error opening Visualizer startup view:', error); }
+            return;
+        }
         if (!shouldUseLibraryStartupView(startupConfig, window)) {
             return;
         }

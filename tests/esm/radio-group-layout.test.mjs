@@ -16,7 +16,11 @@ test('radio choices wrap as intact, uniformly spaced control-height units', () =
   );
   assert.match(
     appCss,
-    /\.plugin-parameter-ui\s+\.parameter-row\.radio-group\s*\{[^}]*column-gap:\s*20px;[^}]*row-gap:\s*4px;/s
+    /\.plugin-parameter-ui\s+\.parameter-row\.radio-group\s*\{[^}]*column-gap:\s*10px;[^}]*row-gap:\s*4px;/s
+  );
+  assert.match(
+    appCss,
+    /\.plugin-parameter-ui\s+\.parameter-row\.radio-group\s*>\s*label:first-child\s*\{[^}]*margin-right:\s*0;/s
   );
   assert.match(
     appCss,

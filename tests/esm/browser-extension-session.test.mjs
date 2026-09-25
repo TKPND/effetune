@@ -8,15 +8,19 @@ import { AudioIOManager } from '../../js/audio/audio-io-manager.js';
 
 const hostSource = (await readFile(new URL('../../extension/offscreen.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
 
-async function hostHarness(loaded = {}, { startStatus = () => 'processing', failSave = () => false } = {}) {
+async function hostHarness(loaded = {}, { startStatus = () => 'processing', failSave = () => false,
+    failContext = () => false } = {}) {
     const saves = [];
     let saving = 0;
     let maximumSaving = 0;
     let nextId = 0;
     const frames = [];
+    const audioSessions = [];
+    const decodeContexts = [];
     class MessageChannel {
         constructor() {
             const session = { status: 'stopped', plugins: [], masterBypass: false, irIds: [] };
+            audioSessions.push(session);
             this.port1 = { start() {}, close() {}, postMessage: data => {
                 if (data.kind !== 'request') return;
                 const args = data.args;
@@ -25,6 +29,10 @@ async function hostHarness(loaded = {}, { startStatus = () => 'processing', fail
                 if (data.command === 'stop') session.status = 'stopped';
                 if (data.command === 'setBypass') session.masterBypass = args.enabled;
                 if (data.command === 'rebuild') session.sampleRate = args.sampleRate;
+                if (data.command === 'workletMessage' && args.message?.type === 'updatePlugin') {
+                    session.plugins = session.plugins.map(plugin => plugin.id === args.message.plugin.id
+                        ? { ...plugin, ...args.message.plugin.parameters, en: args.message.plugin.enabled } : plugin);
+                }
                 queueMicrotask(() => this.port1.onmessage({ data: { kind: 'response', requestId: data.requestId,
                     ok: true, state: structuredClone(session) } }));
             } };
@@ -37,7 +45,15 @@ async function hostHarness(loaded = {}, { startStatus = () => 'processing', fail
         matchUrlRule, validateRules, MessageChannel,
         crypto: { randomUUID: () => String(++nextId) },
         BroadcastChannel: class { postMessage() {} },
-        AudioContext: class { constructor(options) { this.sampleRate = options?.sampleRate || 48000; } async close() {} },
+        AudioContext: class {
+            constructor(options) {
+                if (failContext(options?.sampleRate)) throw new Error('Audio context unavailable');
+                this.sampleRate = options?.sampleRate || 48000;
+                this.closed = false;
+                decodeContexts.push(this);
+            }
+            async close() { this.closed = true; }
+        },
         window: { location: { origin: 'chrome-extension://test' } },
         document: { createElement: () => {
             const frame = { dataset: {}, remove() {}, contentWindow: { postMessage() {} } };
@@ -52,7 +68,8 @@ async function hostHarness(loaded = {}, { startStatus = () => 'processing', fail
             await new Promise(resolve => setTimeout(resolve, 2));
             saves.push(value); saving--;
         },
-        initializePluginModel: async () => ({ createPlugin: () => ({ setWasmAssetTargetResolver() {} }) }),
+        initializePluginModel: async () => ({ pluginClasses: { Default: class DefaultPlugin {} },
+            createPlugin: () => ({ setWasmAssetTargetResolver() {} }) }),
         createPipelineModels: async preset => preset.plugins,
         serializePipeline: models => models,
         getPresetPluginStates: preset => preset.plugins,
@@ -62,8 +79,107 @@ async function hostHarness(loaded = {}, { startStatus = () => 'processing', fail
     vm.runInContext(hostSource, context);
     const run = (command, args = {}, clientId = 'editor') => context.enqueue(command, args, clientId);
     await run('getState');
-    return { context, run, saves, frames, maximumSaving: () => maximumSaving };
+    return { context, run, saves, frames, audioSessions, decodeContexts,
+        maximumSaving: () => maximumSaving };
 }
+
+test('sample-rate context creation failure keeps the active and saved rate', async () => {
+    let rejectContext = false;
+    const host = await hostHarness({}, { failContext: rate => rejectContext && rate === 96000 });
+    await host.run('start', { tabId: 1, url: 'https://test/', streamId: 'a' });
+    const previousContext = host.context.window.audioContext;
+    const previousSessions = structuredClone(host.audioSessions);
+    rejectContext = true;
+    await assert.rejects(host.run('setSampleRate', { sampleRate: 96000 }), /Audio context unavailable/);
+    assert.equal((await host.run('getState')).sampleRate, null);
+    assert.equal(host.context.window.audioContext, previousContext);
+    assert.equal(previousContext.closed, false);
+    assert.deepEqual(structuredClone(host.audioSessions), previousSessions);
+    assert.equal(host.saves.length, 0);
+    rejectContext = false;
+    await host.run('setSampleRate', { sampleRate: 96000 });
+    assert.equal(host.saves.at(-1).sampleRate, 96000);
+    assert.equal(host.context.window.audioContext.sampleRate, 96000);
+});
+
+test('sample-rate storage failure closes the candidate and retains the previous context', async () => {
+    let rejectSave = false;
+    const host = await hostHarness({}, { failSave: () => rejectSave });
+    await host.run('start', { tabId: 1, url: 'https://test/', streamId: 'a' });
+    const previousContext = host.context.window.audioContext;
+    const previousSessions = structuredClone(host.audioSessions);
+    rejectSave = true;
+    await assert.rejects(host.run('setSampleRate', { sampleRate: 96000 }), /Storage unavailable/);
+    assert.equal((await host.run('getState')).sampleRate, null);
+    assert.equal(host.context.window.audioContext, previousContext);
+    assert.equal(previousContext.closed, false);
+    assert.equal(host.decodeContexts.at(-1).closed, true);
+    assert.deepEqual(structuredClone(host.audioSessions), previousSessions);
+    assert.equal(host.saves.length, 0);
+    rejectSave = false;
+    await host.run('setSampleRate', { sampleRate: 96000 });
+    assert.equal(host.saves.at(-1).sampleRate, 96000);
+    assert.equal(host.context.window.audioContext.sampleRate, 96000);
+});
+
+test('failed persistent edits restore settings, audio and preset bindings before later saves', async () => {
+    const edits = [
+        ['setRules', () => ({ rules: [] })],
+        ['savePreset', () => ({ name: 'Saved' })],
+        ['setPipeline', () => ({ plugins: [{ nm: 'Edited default' }] })],
+        ['importPreset', () => ({ name: 'Imported', preset: { plugins: [{ nm: 'Imported' }] } })],
+        ['setPipeline', sessionId => ({ sessionId, plugins: [{ nm: 'Edited bound' }] })],
+        ['setPipeline', (_sessionId, unboundId) => ({ sessionId: unboundId, plugins: [{ nm: 'Edited unbound' }] })],
+        ['importPreset', sessionId => ({ sessionId, name: 'Imported', preset: { plugins: [{ nm: 'Imported' }] } })],
+        ['applyPreset', sessionId => ({ sessionId, name: 'Other' })],
+        ['deletePreset', () => ({ name: 'Music' })],
+        ['workletMessage', sessionId => ({ sessionId, message: { type: 'updatePlugin',
+            plugin: { id: 7, enabled: false, parameters: { gain: 12 } } } })],
+        ['workletMessage', () => ({ message: { type: 'updatePlugin',
+            plugin: { id: 8, type: 'DefaultPlugin', enabled: false, parameters: { gain: 12 } } } })],
+        ['setSampleRate', () => ({ sampleRate: 96000 })]
+    ];
+    for (const [command, args] of edits) {
+        let rejectSave = false;
+        const host = await hostHarness({ plugins: [{ id: 8, nm: 'Default' }],
+            presets: { Music: { plugins: [{ id: 7, nm: 'Music' }] }, Other: { plugins: [{ nm: 'Other' }] } },
+            rules: [{ pattern: 'music.test/*', preset: 'Music', enabled: true }] }, { failSave: () => rejectSave });
+        const started = await host.run('start', { tabId: 1, url: 'https://music.test/', streamId: 'a' });
+        await host.run('start', { tabId: 2, url: 'https://music.test/second', streamId: 'b' });
+        const unbound = await host.run('start', { tabId: 3, url: 'https://other.test/', streamId: 'c' });
+        const { revision: _revision, ...before } = structuredClone(await host.run('getState'));
+        const audioBefore = structuredClone(host.audioSessions);
+        const decodeContext = host.context.window.audioContext;
+        rejectSave = true;
+        await assert.rejects(host.run(command, args(started.sessionId, unbound.sessionId)), /Storage unavailable/, command);
+        const { revision: _afterRevision, ...after } = structuredClone(await host.run('getState'));
+        assert.deepEqual(after, before, command);
+        assert.deepEqual(host.audioSessions, audioBefore, command);
+        assert.equal(host.context.window.audioContext, decodeContext, command);
+        rejectSave = false;
+        await host.run('savePreset', { name: 'Later' });
+        const { presets, ...saved } = host.saves.at(-1);
+        const { sessions: _sessions, presets: originalPresets, ...originalSettings } = before;
+        assert.deepEqual(saved, originalSettings, command);
+        assert.deepEqual(presets, { ...originalPresets,
+            Later: { plugins: before.plugins.map(({ id, ...plugin }) => plugin) } }, command);
+    }
+});
+
+test('all preset writers reject reserved names before applying audio changes', async () => {
+    const host = await hostHarness({ plugins: [{ nm: 'Default' }] });
+    const started = await host.run('start', { tabId: 1, url: 'https://test/', streamId: 'a' });
+    const audioBefore = structuredClone(host.audioSessions);
+    for (const command of ['savePreset', 'importPreset', 'appendBackupPreset']) {
+        for (const name of ['__proto__', 'constructor', 'prototype']) {
+            await assert.rejects(host.run(command, { sessionId: started.sessionId, name: ` ${name} `,
+                preset: { plugins: [{ nm: 'Imported' }] } }), /different preset name/);
+        }
+    }
+    assert.deepEqual(host.audioSessions, audioBefore);
+    assert.deepEqual(structuredClone(await host.run('readBackupPresets')), {});
+    assert.equal(host.saves.length, 0);
+});
 
 test('backup presets are stored without applying or changing sessions, rules or unsupported parameters', async () => {
     let rejectSave = false;

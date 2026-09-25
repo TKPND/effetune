@@ -7,6 +7,7 @@ function createHarness({
   deferFullScreenExit = false,
   fullScreen = false,
   savedMiniBounds = null,
+  workAreaHeight = 900,
   contentSizeDeficit = [0, 0],
   deferContentLayout = false
 } = {}) {
@@ -97,6 +98,9 @@ function createHarness({
       })
     },
     shell: {},
+    screen: { getDisplayMatching: () => ({ workArea: {
+      x: 0, y: 0, width: 1600, height: workAreaHeight
+    } }) },
     systemPreferences: {}
   };
   const windowState = {
@@ -107,7 +111,11 @@ function createHarness({
       bounds: savedMiniBounds,
       alwaysOnTop: false
     } : null,
-    resolveMiniPlayerBounds: bounds => bounds,
+    resolveMiniPlayerBounds: bounds => ({
+      ...bounds,
+      x: Math.min(Math.max(bounds.x, 0), Math.max(0, 1600 - bounds.width)),
+      y: Math.min(Math.max(bounds.y, 0), Math.max(0, workAreaHeight - bounds.height))
+    }),
     resolveWindowBoundsForRestore: () => ({ x: 100, y: 80, width: 1200, height: 800 }),
     enterMiniMode: () => calls.push('enterMiniMode'),
     exitMiniMode: () => calls.push('exitMiniMode'),
@@ -237,6 +245,24 @@ test('saved mini position is reused with the fixed default mini size', async () 
     call[1] === 420 && call[2] === 120), true);
   assert.equal(harness.calls.some(call => Array.isArray(call) && call[0] === 'setPosition' &&
     call[1] === 500 && call[2] === 60), true);
+});
+
+test('Visualizer mini player adds a ratio area only when requested and fits its native frame in the work area', async () => {
+  const visualizer = createHarness();
+  const setVisualizerMode = visualizer.handlers.get('set-mini-player-mode');
+  await setVisualizerMode({}, { enabled: true, visualizerAspect: '16:9' });
+  assert.deepEqual(visualizer.mainWindow.getContentSize(), [420, 356]);
+
+  const capped = createHarness({ workAreaHeight: 500 });
+  await capped.handlers.get('set-mini-player-mode')({}, {
+    enabled: true, visualizerAspect: '9:16'
+  });
+  assert.deepEqual(capped.mainWindow.getContentSize(), [420, 430]);
+  assert.deepEqual(capped.mainWindow.getBounds(), { x: 880, y: 0, width: 436, height: 500 });
+
+  const ordinary = createHarness();
+  await ordinary.handlers.get('set-mini-player-mode')({}, { enabled: true });
+  assert.deepEqual(ordinary.mainWindow.getContentSize(), [420, 120]);
 });
 
 test('assigning a replacement main window clears stale mini mode tracking', async () => {

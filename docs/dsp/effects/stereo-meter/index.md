@@ -67,6 +67,7 @@ A fascinating visualization tool that lets you see how your music creates a sens
   - Lower values: See quick musical changes
   - Higher values: See overall sound patterns
   - Default: 100 ms works well for most music
+- **Gain** (0-24 dB; default 0 dB) - Enlarges only the dots and peak line in the diamond. Raise it to see quieter patterns more clearly. It does not change the sound or the correlation and balance readings.
 
 ### Enjoying Your Music
 1. **Watch Different Styles**

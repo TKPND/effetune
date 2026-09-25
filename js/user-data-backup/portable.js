@@ -2,8 +2,9 @@ import { convertLongToShortFormat } from '../utils/serialization-utils.js';
 import { sha256IrBytes } from '../ir-library/ir-library-id.js';
 import { IR_LIBRARY_MAX_ORIGINAL_BYTES } from '../ir-library/ir-library-limits.js';
 import { numberedIrOriginalNames } from '../ir-library/ir-library-name.js';
+import { validateLayout } from '../visualizer/visualizer-model.js';
 
-export const KINDS = ['pipeline', 'plugin', 'ir', 'measurement'];
+export const KINDS = ['pipeline', 'plugin', 'visualizer', 'ir', 'measurement'];
 export const MAX_BACKUP_BYTES = 256 * 1024 * 1024;
 export const MAX_JSON_BYTES = 8 * 1024 * 1024;
 export const MAX_ITEMS = 10000;
@@ -97,6 +98,7 @@ function contentValue(item) {
         return data;
     }
     if (item.kind === 'plugin') return { pluginName: item.pluginName, params: item.data };
+    if (item.kind === 'visualizer') return clone(item.data);
     if (item.kind === 'ir') return { composition: item.data.entry.composition,
         originals: item.data.originals.map(original => ({ role: original.role, sha256: original.sha256 })) };
     const data = clone(item.data);
@@ -114,6 +116,9 @@ export function validateItemShape(item) {
         throw new Error('The backup contains an invalid item.');
     }
     if (item.kind === 'pipeline') pluginParameters(item);
+    if (item.kind === 'visualizer' && !validateLayout(item.data)) {
+        throw new Error('The backup contains an invalid visualizer preset.');
+    }
     if (item.kind === 'plugin' && (!record(item.data) || typeof item.pluginName !== 'string' || !item.pluginName)) {
         throw new Error('The backup contains an invalid effect preset.');
     }
@@ -132,7 +137,7 @@ export function validateItemShape(item) {
 }
 
 export function nameIssue(item) {
-    if ((item.kind === 'pipeline' || item.kind === 'plugin') &&
+    if ((item.kind === 'pipeline' || item.kind === 'plugin' || item.kind === 'visualizer') &&
         (reserved.has(item.name.trim()) || (item.kind === 'plugin' && reserved.has(item.pluginName)))) {
         return 'This name cannot be saved. Rename the original item and create another backup.';
     }

@@ -34,6 +34,7 @@ Sin mitos audiophiles, solo pura ciencia.
 - Interfaz de arrastrar y soltar para construir cadenas de efectos
 - Sistema de efectos ampliable con efectos categorizados
 - Visualización de audio en vivo
+- Diseños de Visualizer personalizables con gráficos animados, carátulas y datos de pistas
 - Cadena de procesamiento de audio que se puede modificar en tiempo real
 - Procesamiento de archivos de audio sin conexión con la cadena de efectos actual
 - Exploración de subcarpetas locales, metadatos y listas de reproducción con la Biblioteca musical
@@ -54,6 +55,7 @@ Antes de usar EffeTune, deberás configurar el enrutamiento de audio. Aquí se e
    - O selecciona **Abrir archivo de música...** desde el menú **Archivo** (solo aplicación de escritorio)
    - O arrastra el archivo de música a la ventana
 - Para usar solo el reproductor, selecciona Ninguno (solo reproductor de archivos de música) como dispositivo de entrada en Configuración de audio y evita usar una entrada de audio en vivo
+- Pulsa el botón de velocidad junto a Shuffle para abrir la ventana emergente. Elige uno de los nueve ajustes predefinidos o usa el control deslizante horizontal o el campo numérico para ajustar la velocidad de 0,25x a 4x en incrementos de 0,01x. El tono se conserva.
 
 ### Configuración para Servicios de Streaming
 
@@ -90,7 +92,7 @@ Para usar EffeTune con reproductores de CD, reproductores de red u otras fuentes
 
 ### Configuración de la aplicación
 
-En el menú **Configuración**, abre **Configuración...** para elegir el idioma, la vista al inicio y el comportamiento del pipeline de efectos al iniciar. La vista al inicio puede ser **Effect Pipeline (predeterminado)** o **Biblioteca musical**. Si eliges **Biblioteca musical**, usa la lista de al lado para elegir qué sección aparecerá primero: **Pistas**, **Álbumes**, **Artistas**, **Géneros**, **Subcarpetas**, **Carpetas** o **Listas de reproducción**. En **Tema**, elige los colores de la aplicación: Graphite (predeterminado), Paper, Midnight, Ember o Mint.
+En el menú **Configuración**, abre **Configuración...** para elegir el idioma, la vista al inicio y el comportamiento del pipeline de efectos al iniciar. La vista al inicio puede ser **Effect Pipeline (predeterminado)**, **Biblioteca musical** o **Visualizer**. Si eliges **Biblioteca musical**, usa la lista de al lado para elegir qué sección aparecerá primero: **Pistas**, **Álbumes**, **Artistas**, **Géneros**, **Subcarpetas**, **Carpetas** o **Listas de reproducción**. En **Tema**, elige los colores de la aplicación: Graphite (predeterminado), Paper, Midnight, Ember o Mint.
 
 Las versiones de escritorio compatibles también pueden controlarse desde aplicaciones OpenHome en la misma red local. Esta función está desactivada de forma predeterminada; consulta [Control remoto OpenHome](music-library.md#control-remoto-openhome-aplicación-de-escritorio) para conocer la configuración, el acceso de red, la compatibilidad y las limitaciones.
 
@@ -108,6 +110,10 @@ Tanto en el diseño para PC como en el móvil, si una búsqueda de pistas o los 
 Los navegadores Chromium de PC pueden conservar el acceso a las carpetas de música seleccionadas entre sesiones. En Safari, Firefox, navegadores móviles y otros entornos sin acceso persistente a carpetas, vuelve a seleccionar la carpeta o los archivos después de cada recarga; EffeTune los enlaza con el catálogo existente.
 
 Las colecciones grandes se cargan por etapas desde el almacenamiento; la velocidad de análisis y carga depende del dispositivo, la colección y la memoria disponible. Al desplazarte muy rápido pueden aparecer filas vacías durante unos instantes mientras se cargan las pistas siguientes, sobre todo con almacenamiento lento.
+
+### Visualizar el audio
+
+Abre **Visualizer** desde la cabecera en PC, la pestaña **Reproductor** en móvil o el menú **Ver** de la aplicación de escritorio. Elige un diseño incluido o usa **Edit** para organizar gráficos, carátula y datos de la pista. Los cambios se aplican al instante y vuelven al abrir la aplicación; guarda una copia con nombre desde el diálogo de presets. Consulta la [guía de Visualizer](visualizer.md).
 
 ### Creando tu Cadena de Efectos
 
@@ -152,6 +158,8 @@ La importación, exportación y uso compartido de archivos `.effetune_preset` si
 ### Copia de seguridad y restauración de datos guardados
 
 Abre **Settings > Copia de seguridad / Restaurar** para transferir presets de cadena, presets de efectos, respuestas al impulso y mediciones entre la aplicación web, la de escritorio y la extensión. Puedes seleccionar elementos o categorías completas. Al elegir un preset también se seleccionan sus datos necesarios; si quitas esos datos, el preset dependiente también se desmarca.
+
+Los backups de las aplicaciones web y de escritorio también incluyen los presets de Visualizer guardados y sus imágenes de fondo, pero no el diseño actual sin nombre.
 
 **Incluir datos de medición** e **Incluir datos de respuesta al impulso** están activados por defecto. Si desactivas una opción, solo se guardan referencias y en el destino deben existir los mismos datos. Las respuestas se restauran en **Impulse Response Library**. Los datos idénticos se reutilizan y los elementos distintos con el mismo nombre reciben un número. La cadena actual, el volumen, el preset seleccionado, los dispositivos y las reglas URL no cambian.
 
@@ -281,7 +289,7 @@ Para consultar la frecuencia, fase, retardo de grupo mínimo, retardo de grupo e
 
 ### Reproducción sin pausas
 
-**Reproducción sin pausas** está activada de forma predeterminada y puede cambiarse en **Configuración de audio**. Cuando está activada, las pistas locales compatibles se enlazan sin pausa; la compatibilidad está limitada por el formato del archivo y el navegador o la aplicación actuales. Los formatos no compatibles y algunos entornos móviles usan automáticamente un modo alternativo que limita la memoria, por lo que aún puede haber una pausa breve. Al desactivarla se priorizan un menor uso de memoria y la estabilidad, y puede aparecer una pausa breve entre pistas. Cambiar esta opción no interrumpe la pista actual.
+**Reproducción sin pausas** está activada de forma predeterminada y puede cambiarse en **Configuración de audio**. Cuando está activada, las pistas locales compatibles se enlazan sin pausa; la compatibilidad está limitada por el formato del archivo y el navegador o la aplicación actuales. Los formatos no compatibles y algunos entornos móviles usan automáticamente un modo alternativo que limita la memoria, por lo que aún puede haber una pausa breve. Al desactivarla se priorizan un menor uso de memoria y la estabilidad, y puede aparecer una pausa breve entre pistas. Cambiar esta opción no interrumpe la pista actual. La reproducción sin pausas no está disponible mientras la velocidad no sea 1x. Si cambias la velocidad durante una pista que se reproducía sin pausas, la reproducción se reanuda desde la misma posición tras una breve interrupción.
 
 ## Combinaciones Comunes de Efectos
 

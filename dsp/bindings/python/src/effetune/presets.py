@@ -166,6 +166,12 @@ _LEGACY_FREQUENCY_SCALE_EFFECTS_V1 = ("SpectrumAnalyzer", "Spectrogram")
 # boolean before discarding it so other unknown parameters remain strict.
 _LEGACY_KEYBOARD_DISPLAY_EFFECTS_V1 = ("SpectrumAnalyzer", "Spectrogram")
 
+_LEGACY_COLOR_DISPLAY_VALUES_V1 = {
+    "PitchMeter": ("Normal", "Heatmap", "Rainbow"),
+    "SpectrumAnalyzer": ("Normal", "Heatmap", "Rainbow"),
+    "Spectrogram": ("Normal", "Heatmap"),
+}
+
 
 def _drop_echoed_structural_keys_v1(
     parameters: dict[str, Any], effect_type: str
@@ -301,6 +307,14 @@ def _prepare_legacy_parameters_v1(
             raise ValidationError(
                 f"legacy {effect_type} contains invalid keyboard display state"
             )
+    if effect_type in _LEGACY_COLOR_DISPLAY_VALUES_V1 and "cl" in parameters:
+        color = parameters.pop("cl")
+        if color not in _LEGACY_COLOR_DISPLAY_VALUES_V1[effect_type]:
+            raise ValidationError(f"legacy {effect_type} contains invalid color display state")
+    if effect_type == "StereoMeter" and "gn" in parameters:
+        gain = parameters.pop("gn")
+        if type(gain) not in (int, float) or not math.isfinite(gain) or not 0 <= gain <= 24:
+            raise ValidationError("legacy StereoMeter contains invalid gain display state")
     if effect_type == "SpectrumAnalyzer" and "dm" in parameters:
         display_mode = parameters.pop("dm")
         if display_mode not in ("line", "bar"):
@@ -315,6 +329,23 @@ def _prepare_legacy_parameters_v1(
         layout = parameters.pop("ly")
         if layout not in ("Vertical", "Horizontal"):
             raise ValidationError("legacy PitchMeter contains invalid layout state")
+    if effect_type == "ChromaSpiral":
+        if "dm" in parameters:
+            display_mode = parameters.pop("dm")
+            if type(display_mode) is not int or display_mode not in (0, 1, 2):
+                raise ValidationError("legacy ChromaSpiral contains invalid color state")
+        for key, minimum, maximum in (("lo", 1, 8), ("hi", 1, 9)):
+            if key not in parameters:
+                continue
+            value = parameters.pop(key)
+            if type(value) is not int or not minimum <= value <= maximum:
+                raise ValidationError(f"legacy ChromaSpiral contains invalid {key} display state")
+        for key, minimum, maximum in (("ft", -6, 6), ("lr", 6, 96), ("df", -120, -24)):
+            if key not in parameters:
+                continue
+            value = parameters.pop(key)
+            if type(value) not in (int, float) or not minimum <= value <= maximum or not math.isfinite(value):
+                raise ValidationError(f"legacy ChromaSpiral contains invalid {key} display state")
     processing_enabled = True
     if effect_type == "Matrix" and "mx" in parameters:
         if "matrixRoutes" in parameters:

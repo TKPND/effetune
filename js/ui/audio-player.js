@@ -97,6 +97,11 @@ export class AudioPlayer {
     return cleanup;
   }
 
+  applyPlaybackSpeed(speed) {
+    this.stateManager.updateState({ playbackSpeed: speed }, 'playback_speed_change');
+    this.contextManager.applyPlaybackSpeed();
+  }
+
   activateOpenHomePlaybackAdapter() {
     if (!this.openHomePlaybackAdapter) {
       this.openHomePlaybackAdapter = new OpenHomePlaybackAdapter(this);
@@ -276,7 +281,8 @@ export class AudioPlayer {
           this.ui.prevButton,
           this.ui.nextButton,
           this.ui.repeatButton,
-          this.ui.shuffleButton
+          this.ui.shuffleButton,
+          this.ui.speedButton
         ];
         
         controls.forEach(control => {

@@ -154,6 +154,7 @@ async function withAppModule(options = {}, callback) {
       }
     },
     history: {
+      state: options.historyState ?? null,
       replaceState(state, title, url) {
         if (options.historyReplaceStateError) throw options.historyReplaceStateError;
         calls.push(['history.replaceState', state, title, url]);
@@ -327,6 +328,9 @@ function createDependencies(calls, options = {}) {
     async showLibraryView(viewOptions) {
       calls.push(['ui.showLibraryView', viewOptions]);
       if (options.showLibraryReject) throw new Error('library failed');
+    },
+    async showVisualizerView() {
+      calls.push(['ui.showVisualizerView']);
     },
     deferLibraryStartupView(initialView) {
       calls.push(['ui.deferLibraryStartupView', initialView]);
@@ -865,6 +869,17 @@ test('startup view preference opens library unless explicit URL content takes pr
     window.electronIntegration = { isElectron: false };
     const app = new mod.App({
       ...createDependencies(calls),
+      loadStartupConfig: async () => ({ startupView: 'library', libraryStartupView: 'files' })
+    });
+
+    await app.applyStartupViewPreference();
+    assert.equal(calls.some(call => call[0] === 'ui.showLibraryView' && call[1]?.initialView === 'files'), true);
+  });
+
+  await withAppModule({}, async ({ calls, mod, window }) => {
+    window.electronIntegration = { isElectron: false };
+    const app = new mod.App({
+      ...createDependencies(calls),
       loadStartupConfig: async () => ({ startupView: 'library', libraryStartupView: 'playlists' })
     });
 
@@ -975,6 +990,46 @@ test('startup view preference opens library unless explicit URL content takes pr
     assert.equal(calls.some(call => call[0] === 'ui.showLibraryView' &&
       call[1]?.initialView === 'folders'), true);
   });
+});
+
+test('Visualizer startup distinguishes reflected reloads from explicit URL requests', async () => {
+  for (const [search, historyState, expected] of [
+    ['', null, true],
+    ['?p=local', { effetuneReflectedPipeline: 'local', effetuneVisualizer: 1 }, true],
+    ['?p=shared', null, false],
+    ['?p=shared', { effetuneReflectedPipeline: 'local' }, false],
+    ['?p=local&dbt=shared', { effetuneReflectedPipeline: 'local' }, false],
+    ['?p=local&restorePipeline=transient', { effetuneReflectedPipeline: 'local' }, false]
+  ]) {
+    await withAppModule({ search, historyState }, async ({ calls, mod, window }) => {
+      window.appConfig = { startupView: 'visualizer' };
+      window.electronIntegration = { isElectron: false };
+      const app = new mod.App(createDependencies(calls));
+      // Later URL reflection must not change the captured startup decision.
+      window.location.search = '?p=updated';
+      window.history.state = { effetuneReflectedPipeline: 'updated' };
+      await app.applyStartupViewPreference();
+      assert.equal(app.hasExplicitStartupViewRequest(), !expected, search);
+      assert.equal(calls.some(call => call[0] === 'ui.showVisualizerView'), expected, search);
+    });
+  }
+});
+
+test('initialize opens the configured Visualizer before the pipeline UI renders', async () => {
+  await withAppModule({ search: '?p=local', historyState: { effetuneReflectedPipeline: 'local' } },
+    async ({ calls, mod, timers, window }) => {
+      window.appConfig = { startupView: 'visualizer' };
+      window.electronIntegration = { isElectron: false };
+      const app = new mod.App(createDependencies(calls));
+      const pending = app.initialize();
+      await flushAndRunTimers(timers);
+      await pending;
+      const names = calls.map(call => call[0]);
+      const visualizerIndex = names.indexOf('ui.showVisualizerView');
+      assert.notEqual(visualizerIndex, -1);
+      assert.ok(visualizerIndex < names.indexOf('ui.updatePipelineUI'));
+      assert.equal(names.filter(name => name === 'ui.showVisualizerView').length, 1);
+    });
 });
 
 test('initialize opens the configured library startup view before the pipeline UI renders', async () => {

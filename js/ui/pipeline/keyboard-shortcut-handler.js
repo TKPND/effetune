@@ -25,6 +25,7 @@ export function handlePipelineKeyboardShortcut(event, {
     readTextFromClipboard = defaultReadTextFromClipboard,
     uiManager = typeof window !== 'undefined' ? window.uiManager : null
 }) {
+    if (globalThis.document?.body?.classList?.contains('view-visualizer')) return false;
     const key = event.key ? event.key.toLowerCase() : '';
     const isCommandShortcut = event.ctrlKey || event.metaKey;
 
@@ -114,6 +115,7 @@ export function handlePipelineKeyboardShortcut(event, {
 export function handlePipelinePasteEvent(event, {
     clipboardManager
 }) {
+    if (globalThis.document?.body?.classList?.contains('view-visualizer')) return false;
     if (isTextEditingTarget(event.target)) {
         return false;
     }

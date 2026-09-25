@@ -19,11 +19,12 @@ const files = {
   GroupDelayEqPlugin: 'eq/group_delay_eq', GroupDelayPEQPlugin: 'eq/group_delay_peq',
   ExciterPlugin: 'saturation/exciter', DSD64IMDSimulatorPlugin: 'lofi/dsd64_imd_simulator',
   SpectrumAnalyzerPlugin: 'analyzer/spectrum_analyzer', SpectrogramPlugin: 'analyzer/spectrogram',
+  ChromaSpiralPlugin: 'analyzer/chroma_spiral',
   NoteSpectrogramPlugin: 'analyzer/note_spectrogram', PitchMeterPlugin: 'analyzer/pitch_meter',
   PhaseSelectEqPlugin: 'spatial/phase_select_eq'
 };
 
-test('all 27 frequency axes match plugin selectors and coordinate definitions', () => {
+test('all frequency axes match plugin selectors and coordinate definitions', () => {
   assert.deepEqual([...axes.targets.keys()].sort(), Object.keys(files).sort());
   for (const [name, target] of axes.targets) {
     const source = fs.readFileSync(new URL(`../../plugins/${files[name]}.js`, import.meta.url), 'utf8');
@@ -42,6 +43,31 @@ test('all 27 frequency axes match plugin selectors and coordinate definitions', 
       }
     } else {
       for (const marker of target.axisCheck) assert.ok(source.includes(marker), `${name}: ${marker}`);
+    }
+  }
+});
+
+test('Chroma pointer coordinates follow C, A and adjacent spiral turns at each graph size', () => {
+  const sandbox = { window: {}, PluginBase: class {} };
+  vm.runInNewContext(fs.readFileSync(new URL('../../plugins/analyzer/chroma_spiral.js', import.meta.url), 'utf8'), sandbox);
+  const Plugin = sandbox.window.ChromaSpiralPlugin;
+  const plugin = Object.create(Plugin.prototype);
+  for (const size of [306, 640]) {
+    for (const [lo, hi] of [[1, 7], [4, 4], [8, 9]]) {
+      Object.assign(plugin, { lo, hi });
+      const geometry = plugin.getSpiralGeometry(size, size);
+      const axis = axes.getAxis(plugin, axes.targets.get('ChromaSpiralPlugin'), { width: size, height: size });
+      for (const midi of [(lo + 1) * 12 - 0.25, (lo + 1) * 12, (lo + 1) * 12 + 9,
+        (hi + 1) * 12, (hi + 1) * 12 + 9.25, (hi + 2) * 12 - 0.5]) {
+        const rendered = Plugin.spiralPoint(midi, geometry.midiLow, geometry.inner, geometry.pitch);
+        const frequency = axes.noteFrequency(midi);
+        const point = axis.toPoint(frequency);
+        assert.ok(Math.abs(point.x - size / 2 - rendered.x) < 1e-9);
+        assert.ok(Math.abs(point.y - size / 2 - rendered.y) < 1e-9);
+        assert.ok(Math.abs(axis.pointToFreq(point.x, point.y) / frequency - 1) < 1e-10);
+      }
+      assert.equal(axis.pointToFreq(size / 2, size / 2 - size * 2), axes.noteFrequency(geometry.midiEnd));
+      assert.equal(axis.pointToFreq(size / 2, size / 2), axes.noteFrequency(geometry.midiLow - 0.5));
     }
   }
 });

@@ -1,0 +1,265 @@
+export const ASPECTS = ['16:9', '21:9', '4:3', '1:1', '9:16'];
+export const ASPECT_FILES = Object.freeze({
+    '16:9': '16x9.json', '21:9': '21x9.json', '4:3': '4x3.json',
+    '1:1': '1x1.json', '9:16': '9x16.json'
+});
+
+export const VISUAL_TYPES = ['spectrum', 'spectrogram', 'oscilloscope', 'stereo', 'level-meter', 'notes', 'chroma'];
+export const META_TYPES = ['artwork', 'title', 'album', 'artist'];
+export const ITEM_TYPES = [...VISUAL_TYPES, ...META_TYPES];
+export const MAX_ITEMS = 64;
+export const MAX_EFFECTS = 16;
+export const FONT_FAMILIES = Object.freeze([
+    ['sans-serif', 'Sans-serif'], ['serif', 'Serif'], ['monospace', 'Monospace'],
+    ['system-ui', 'System UI'], ['Arial, Helvetica, sans-serif', 'Arial'],
+    ['Verdana, Geneva, sans-serif', 'Verdana'], ['Georgia, "Times New Roman", serif', 'Georgia'],
+    ['"Courier New", Courier, monospace', 'Courier New'], ['cursive', 'Cursive']
+]);
+export const THEME_COLOR_ROLES = Object.freeze([
+    'graph-bg-deep', 'graph-base-soft', 'graph-grid-subtle', 'graph-grid-soft', 'graph-grid-strong',
+    'graph-label', 'text-primary', 'graph-trace-tertiary'
+]);
+// Graphite defaults from effetune-theme.css; the soft grid retains its 20% alpha.
+export const DEFAULT_THEME_COLORS = Object.freeze({
+    'graph-bg-deep': '#000000', 'graph-base-soft': '#232323', // theme-allow: Fixed Visualizer Graphite defaults.
+    'graph-grid-subtle': '#323233', 'graph-grid-soft': '#f6f8fb33', // theme-allow: Fixed Visualizer Graphite defaults.
+    'graph-grid-strong': '#555657', 'graph-label': '#666666', // theme-allow: Fixed Visualizer Graphite defaults.
+    'text-primary': '#f6f8fb', 'graph-trace-tertiary': '#7f8081' // theme-allow: Fixed Visualizer Graphite defaults.
+});
+export const DEFAULT_TRACE_COLOR = '#00ff00'; // theme-allow: Fixed Visualizer Graphite trace.
+export const EFFECT_CATALOG = Object.freeze({
+    opacity: { label: 'Opacity', defaultAmount: 1, allowedOn: ['item', 'background'] },
+    glow: { label: 'Glow', defaultAmount: 0.5, allowedOn: ['item'] },
+    outline: { label: 'Outline', defaultAmount: 0.5, allowedOn: ['item'] },
+    blur: { label: 'Blur', defaultAmount: 0.3, allowedOn: ['item', 'background'] },
+    trail: { label: 'Trail', defaultAmount: 0.5, allowedOn: ['item'] },
+    'scale-pulse': { label: 'Scale Pulse', defaultAmount: 0.4, allowedOn: ['item'] },
+    symmetry: { label: 'Symmetry', defaultAmount: 0.5, allowedOn: ['item'] },
+    shake: { label: 'Shake', defaultAmount: 0.4, allowedOn: ['item'] },
+    'trail-feedback': { label: 'Trail Feedback', defaultAmount: 0.4, allowedOn: ['item'] },
+    particles: { label: 'Particles', defaultAmount: 0.5, allowedOn: ['item'] },
+    'ken-burns': { label: 'Ken Burns', defaultAmount: 0.4, allowedOn: ['item', 'background'] },
+    flash: { label: 'Flash', defaultAmount: 0.5, allowedOn: ['background'] }
+});
+
+const CHANNELS = new Set([null, 'L', 'R', ...Array.from({ length: 7 }, (_, i) => `${2 * i + 3}${2 * i + 4}`),
+    ...Array.from({ length: 16 }, (_, i) => `${i + 1}`)]);
+const MOD_SOURCES = ['none', 'time', 'level', 'bass'];
+const DEFAULT_PALETTE = { stops: [{ pos: 0, color: '#40dfff' }], motion: { mode: 'none', speed: 0.25 } }; // theme-allow: Editable scene palette default.
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const choice = (value, choices, fallback) => choices.includes(value) ? value : fallback;
+const number = (value, fallback, min, max) => Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+const color = (value, fallback) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+
+export function normalizePalette(value, maxStops = 8) {
+    const input = isRecord(value) ? value : {};
+    const stops = Array.isArray(input.stops) ? input.stops.slice(0, maxStops).map(stop => ({
+        pos: number(stop?.pos, 0, 0, 1), color: color(stop?.color, '#40dfff') // theme-allow: Editable scene palette fallback.
+    })).sort((a, b) => a.pos - b.pos) : [];
+    return {
+        stops: stops.length ? stops : structuredClone(DEFAULT_PALETTE.stops),
+        motion: {
+            mode: choice(input.motion?.mode, ['none', 'hue', 'scroll'], 'none'),
+            speed: number(input.motion?.speed, 0.25, 0, 4)
+        }
+    };
+}
+
+export function normalizeEffect(value, target = 'item') {
+    if (!isRecord(value) || !EFFECT_CATALOG[value.type]?.allowedOn.includes(target)) return null;
+    return {
+        type: value.type,
+        enabled: value.enabled !== false,
+        amount: number(value.amount, EFFECT_CATALOG[value.type].defaultAmount, 0, 1),
+        ...(value.type === 'trail-feedback' && Object.hasOwn(value, 'angle')
+            ? { angle: number(value.angle, 1.15, -3, 3) } : {}),
+        ...(value.type === 'trail-feedback' && Object.hasOwn(value, 'flowX')
+            ? { flowX: number(value.flowX, 0, -1, 1) } : {}),
+        ...(value.type === 'trail-feedback' && Object.hasOwn(value, 'flowY')
+            ? { flowY: number(value.flowY, 0, -1, 1) } : {}),
+        ...(value.type === 'trail-feedback' && Object.hasOwn(value, 'zoom')
+            ? { zoom: number(value.zoom, 2, -2, 2) } : {}),
+        palette: normalizePalette(value.palette),
+        mod: {
+            source: choice(value.mod?.source, MOD_SOURCES, 'none'),
+            depth: number(value.mod?.depth, 0, 0, 1),
+            speed: number(value.mod?.speed, 1, 0, 8)
+        }
+    };
+}
+
+function normalizeEffects(values, target) {
+    return (Array.isArray(values) ? values : []).slice(0, MAX_EFFECTS)
+        .map(value => normalizeEffect(value, target)).filter(Boolean);
+}
+
+function normalizeStyle(type, input) {
+    const style = isRecord(input) ? input : {};
+    if (['title', 'album', 'artist'].includes(type)) return {
+        fontSize: number(style.fontSize, 36, 8, 200),
+        fontFamily: choice(style.fontFamily, FONT_FAMILIES.map(([family]) => family), 'sans-serif'),
+        bold: style.bold === true,
+        italic: style.italic === true,
+        align: choice(style.align, ['left', 'center', 'right'], 'left')
+    };
+    if (type === 'artwork') return { rounded: style.rounded === true };
+    return {};
+}
+
+export function normalizeParams(type, input) {
+    const params = isRecord(input) ? input : {};
+    const axes = {
+        showAxes: params.showAxes === true,
+        showAxisNumbers: params.showAxisNumbers === true
+    };
+    if (type === 'spectrum' || type === 'spectrogram') return {
+        dr: Math.round(number(params.dr, -96, -144, -48)),
+        pt: Math.round(number(params.pt, 12, 8, 14)),
+        sc: choice(params.sc, ['log', 'log-hq', 'linear'], 'log-hq'),
+        kb: params.kb === true,
+        ...(type === 'spectrum' ? {
+            dm: choice(params.dm, ['line', 'bar'], 'line'),
+            quantizeBars: params.quantizeBars !== false,
+            orientation: choice(params.orientation, ['horizontal', 'vertical'], 'horizontal')
+        } : {}),
+        gainDb: Math.round(number(params.gainDb, 0, -24, 24)), ...axes
+    };
+    if (type === 'stereo') return { wt: Math.round(number(params.wt, 0.1, 0.01, 1) * 1000) / 1000,
+        gainDb: Math.round(number(params.gainDb, 0, -24, 24)),
+        showCorrelation: params.showCorrelation !== false, showBalance: params.showBalance !== false, ...axes };
+    if (type === 'oscilloscope') return {
+        dt: Math.round(number(params.dt, 0.01, 0.001, 0.1) * 1000) / 1000,
+        tm: choice(params.tm, ['Auto', 'Normal'], 'Auto'),
+        tl: Math.round(number(params.tl, 0, -1, 1) * 100) / 100,
+        te: choice(params.te, ['Rising', 'Falling'], 'Rising'),
+        ho: Math.round(number(params.ho, 0.0001, 0.0001, 0.01) * 10000) / 10000,
+        dl: Math.round(number(params.dl, 0, -96, 0)),
+        vo: Math.round(number(params.vo, 0, -1, 1) * 100) / 100, ...axes
+    };
+    if (type === 'level-meter') return {
+        dr: Math.round(number(params.dr, -96, -144, -48)),
+        orientation: choice(params.orientation, ['horizontal', 'vertical'], 'horizontal'),
+        showLevelValues: params.showLevelValues === true, ...axes
+    };
+    if (type === 'notes') {
+        const mn = Math.round(number(params.mn, 28, 21, 108));
+        return {
+            pr: choice(params.pr, ['Semitone', 'High'], 'Semitone'),
+            ly: choice(params.ly, ['Horizontal', 'Vertical'], 'Horizontal'),
+            kb: params.kb === true,
+            vl: params.vl !== false,
+            ts: Math.round(number(params.ts, 2, 1, 10)),
+            mn, mx: Math.max(mn, Math.round(number(params.mx, 91, 21, 108))),
+            nc: Math.round(number(params.nc, 8, 1, 16)), ...axes
+        };
+    }
+    if (type === 'chroma') {
+        const lo = Math.round(number(params.lo, 1, 1, 8));
+        return {
+            dm: choice(params.dm, [0, 1], 0), lo,
+            hi: Math.max(lo, Math.round(number(params.hi, 7, 1, 9))),
+            ft: Math.round(number(params.ft, 3, -6, 6) * 2) / 2,
+            lr: Math.round(number(params.lr, 24, 6, 96)),
+            df: Math.round(number(params.df, -60, -120, -24)), ...axes
+        };
+    }
+    return {};
+}
+
+export function paletteModesForType(type) {
+    if (type === 'artwork') return [];
+    const modes = ['solid', 'gradient'];
+    if (['spectrum', 'notes', 'chroma'].includes(type)) modes.push('note-colors');
+    if (['spectrum', 'spectrogram', 'chroma', 'level-meter'].includes(type)) modes.push('heatmap');
+    return modes;
+}
+
+function itemPalette(type, value) {
+    const octave = type === 'notes' || type === 'chroma';
+    const palette = normalizePalette(value, octave ? 13 : 8);
+    if (type !== 'artwork') {
+        palette.mode = choice(value?.mode, paletteModesForType(type), 'solid');
+        palette.color = color(value?.color, '#40dfff'); // theme-allow: Editable scene palette fallback.
+    }
+    if (octave) palette.mapping = choice(value?.mapping, ['range', 'octave'], 'range');
+    return palette;
+}
+
+export function createItem(type, id = globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(36).slice(2)}`) {
+    if (!ITEM_TYPES.includes(type)) throw new TypeError('Unknown visualizer item type');
+    return {
+        id, type, rect: { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }, channel: null,
+        flipX: false, flipY: false, palette: itemPalette(type), params: normalizeParams(type), style: normalizeStyle(type), effects: []
+    };
+}
+
+export function createDefaultLayout() {
+    return {
+        aspect: '16:9', background: { color: '#080d1c', image: null, effects: [] }, // theme-allow: Editable scene background default.
+        items: [createItem('spectrum', 'main-spectrum')]
+    };
+}
+
+export function normalizeLayout(value) {
+    const input = isRecord(value) ? value : {};
+    const background = isRecord(input.background) ? input.background : {};
+    const themeColors = Object.fromEntries(THEME_COLOR_ROLES.flatMap(role =>
+        typeof background.themeColors?.[role] === 'string' && /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(background.themeColors[role])
+            ? [[role, background.themeColors[role]]] : []));
+    const seen = new Set();
+    const items = (Array.isArray(input.items) ? input.items : []).slice(0, MAX_ITEMS).flatMap((raw, index) => {
+        if (!isRecord(raw) || !ITEM_TYPES.includes(raw.type)) return [];
+        const base = createItem(raw.type, `item-${index + 1}`);
+        const id = typeof raw.id === 'string' && raw.id.trim() && raw.id.length <= 128 ? raw.id : base.id;
+        if (seen.has(id)) return [];
+        seen.add(id);
+        const rect = isRecord(raw.rect) ? raw.rect : {};
+        const w = number(rect.w, base.rect.w, 0.02, 1);
+        const h = number(rect.h, base.rect.h, 0.02, 1);
+        return [{
+            id, type: raw.type,
+            rect: { x: number(rect.x, base.rect.x, 0, 1 - w), y: number(rect.y, base.rect.y, 0, 1 - h), w, h },
+            channel: VISUAL_TYPES.includes(raw.type) && CHANNELS.has(raw.channel) ? raw.channel : null,
+            flipX: raw.flipX === true, flipY: raw.flipY === true,
+            palette: itemPalette(raw.type, raw.palette), params: normalizeParams(raw.type, raw.params), style: normalizeStyle(raw.type, raw.style),
+            effects: normalizeEffects(raw.effects, 'item')
+        }];
+    });
+    return {
+        aspect: choice(input.aspect, ASPECTS, '16:9'),
+        background: {
+            color: color(background.color, '#080d1c'), // theme-allow: Editable scene background fallback.
+            image: typeof background.image === 'string' && /^data:image\/(?:png|jpeg|webp);base64,/i.test(background.image)
+                ? background.image : null,
+            effects: normalizeEffects(background.effects, 'background'),
+            ...(Object.keys(themeColors).length ? { themeColors } : {})
+        },
+        items
+    };
+}
+
+export function validateLayout(value) {
+    if (!isRecord(value) || !ASPECTS.includes(value.aspect) || !isRecord(value.background) ||
+        !Array.isArray(value.items) || value.items.length > MAX_ITEMS) return false;
+    if (value.background.image !== null &&
+        (typeof value.background.image !== 'string' || !/^data:image\/(?:png|jpeg|webp);base64,/i.test(value.background.image))) return false;
+    const same = (a, b) => {
+        if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) &&
+            a.length === b.length && a.every((entry, index) => same(entry, b[index]));
+        if (isRecord(a) || isRecord(b)) return isRecord(a) && isRecord(b) &&
+            Object.keys(a).length === Object.keys(b).length &&
+            Object.keys(a).every(key => Object.hasOwn(b, key) && same(a[key], b[key]));
+        return a === b;
+    };
+    return same(value, normalizeLayout(value));
+}
+
+export function layoutsEqual(a, b) {
+    return JSON.stringify(snapshotLayout(a)) === JSON.stringify(snapshotLayout(b));
+}
+
+export function snapshotLayout(value) {
+    const layout = normalizeLayout(value);
+    layout.background.themeColors = { ...DEFAULT_THEME_COLORS, ...layout.background.themeColors };
+    return layout;
+}

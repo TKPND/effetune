@@ -22,7 +22,8 @@ const webAppRootFiles = new Set([
   'package.json',
   'pipeline-analyzer.css',
   'sw-precache.js',
-  'sw.js'
+  'sw.js',
+  'user-data-backup.css'
 ]);
 const webAppAssetDirectories = new Set([
   'features',

@@ -19,7 +19,11 @@ const SPECTRUM_LOG_DISPLAY_FREQ_RANGE =
 class SpectrumAnalyzerPlugin extends PluginBase {
     constructor() {
         super('Spectrum Analyzer', 'Real-time spectrum analyzer with peak hold');
-        
+        this.initializeDisplayState();
+        this.registerProcessor(SpectrumAnalyzerPlugin.processorFunction);
+    }
+
+    initializeDisplayState() {
         // Initialize parameters
         this.dr = -96;
         this.pt = 12;
@@ -29,6 +33,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this.hqReceiver = null;
         this.kb = false;
         this.dm = 'line';
+        this.cl = 'Normal';
+        this.colorGradient = null;
         const fftSize = 1 << this.pt; // Using bit shift for power of 2
         this.spectrum = new Float32Array(fftSize >> 1).fill(-144);
         this.peaks = new Float32Array(fftSize >> 1).fill(-144);
@@ -68,8 +74,6 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         // Store event listeners for cleanup
         this.boundEventListeners = new Map();
 
-        // Register processor function
-        this.registerProcessor(SpectrumAnalyzerPlugin.processorFunction);
         this.observer = null;
         this.resizeGraphDisposer = null;
         this.graphDpr = 1;
@@ -256,12 +260,26 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this.drawGraph();
     }
 
+    setColor(value) {
+        if (!['Normal', 'Heatmap', 'Rainbow'].includes(value) || value === this.cl) return;
+        this.cl = value;
+        this.colorGradient = null;
+        this.updateParameters();
+        this.drawGraph();
+    }
+
     frequencyToX(freq, width) {
         if (this.sc === 'linear') {
             return width * (freq - SPECTRUM_MIN_DISPLAY_FREQ) / SPECTRUM_DISPLAY_FREQ_RANGE;
         }
         return width * (Math.log10(freq) - SPECTRUM_LOG_MIN_DISPLAY_FREQ) /
             SPECTRUM_LOG_DISPLAY_FREQ_RANGE;
+    }
+
+    displayXToFrequency(position) {
+        return this.sc === 'linear'
+            ? SPECTRUM_MIN_DISPLAY_FREQ + position * SPECTRUM_DISPLAY_FREQ_RANGE
+            : 10 ** (SPECTRUM_LOG_MIN_DISPLAY_FREQ + position * SPECTRUM_LOG_DISPLAY_FREQ_RANGE);
     }
 
     // Reset parameters
@@ -271,6 +289,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         this.setFrequencyScale('log');
         this.setKeyboardVisible(false);
         this.setDisplayMode('line');
+        this.setColor('Normal');
     }
 
     getParameters() {
@@ -283,7 +302,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             kb: this.kb,
             sc: this.sc,
             hq: this.sc === 'log-hq',
-            dm: this.dm
+            dm: this.dm,
+            cl: this.cl
         };
     }
 
@@ -296,6 +316,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         else if (params.hq === true) this.setFrequencyScale('log-hq');
         else if (params.hq === false && this.sc === 'log-hq') this.setFrequencyScale('log');
         if (params.dm !== undefined) this.setDisplayMode(params.dm);
+        if (params.cl !== undefined) this.setColor(params.cl);
         this.updateParameters();
     }
 
@@ -600,6 +621,16 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             value => this.setDisplayMode(value), 'dm'
         );
         container.appendChild(displayModeRow);
+        container.appendChild(this.createRadioGroup(
+            'Color',
+            [
+                { value: 'Normal', label: 'Normal' },
+                { value: 'Heatmap', label: 'Heatmap' },
+                { value: 'Rainbow', label: 'Note Colors' }
+            ],
+            this.cl,
+            value => this.setColor(value), 'cl'
+        ));
         container.appendChild(this.createCheckboxControl(
             'Keyboard', this.kb, value => this.setKeyboardVisible(value), 'kb'
         ));
@@ -635,6 +666,8 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             if (logScaleRadio) logScaleRadio.checked = true;
             const lineDisplayRadio = displayModeRow.querySelector('input[value="line"]');
             if (lineDisplayRadio) lineDisplayRadio.checked = true;
+            const normalColorRadio = container.querySelector('input[value="Normal"]');
+            if (normalColorRadio) normalColorRadio.checked = true;
 
             this.reset(); // This will call setDBRange and setPoints
         };
@@ -778,7 +811,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
     }
 
     drawKeyboard(ctx, width, height, gutter, dpr) {
-        const background = (window.ThemePalette?.get('graph-bg-deep') ?? '')
+        const background = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '')
             .match(/[\d.]+/g)?.slice(0, 3).map(Number);
         if (!background || background.length !== 3) return;
         const light = background.every(channel => channel > 127);
@@ -794,7 +827,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         // A continuous white base keeps subpixel keys aligned without gaps.
         ctx.fillStyle = 'rgb(' + white + ', ' + white + ', ' + white + ')'; // theme-allow: Theme-dependent keyboard color.
         ctx.fillRect(0, edge, width, gutter);
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-label') ?? '');
+        ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-label') ?? '');
         ctx.lineWidth = dpr;
         for (const key of keys) {
             if (key.black || key.whiteStart <= 0 || key.whiteStart >= width) continue;
@@ -816,35 +849,45 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         ctx.font = (7 * dpr) + 'px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        let lastLabelRight = -Infinity;
         for (const key of keys) {
             if (key.midi % 12 !== 0) continue;
             const label = 'C' + (key.midi / 12 - 1);
             const center = (key.whiteStart + key.whiteEnd) / 2;
             const labelWidth = ctx.measureText(label).width;
             const halfExtent = labelWidth / 2;
-            if (center - halfExtent < key.whiteStart + dpr ||
-                center + halfExtent > key.whiteEnd - dpr ||
+            const fitsWhiteKey = center - halfExtent >= key.whiteStart + dpr &&
+                center + halfExtent <= key.whiteEnd - dpr;
+            if ((this.displayOptions?.textContext
+                ? center - halfExtent < lastLabelRight + dpr : !fitsWhiteKey) ||
                 center - halfExtent < dpr || center + halfExtent > width - dpr) continue;
-            ctx.fillText(label, center, edge + blackDepth + (gutter - blackDepth) / 2);
+            (this.displayOptions?.textContext ?? ctx).fillText(label, center, edge + blackDepth + (gutter - blackDepth) / 2);
+            lastLabelRight = center + halfExtent;
         }
         ctx.restore();
     }
 
     drawGraph(now = performance.now()) {
+        if (this.displayOptions?.deferDraw) return;
         if (!this.canvas) return;
         
         const ctx = this.canvas.getContext('2d', { alpha: false });
         const width = this.canvas.width;
         const height = this.canvas.height;
         const dpr = this.graphDpr || 1;
-        const isNarrow = this.graphCssWidth < 500;
-        const keyboardGutter = this.kb && height > 44.8 * dpr ? 44.8 * dpr : 0;
-        const plotHeight = height - keyboardGutter;
+        const vertical = this.displayOptions?.orientation === 'vertical';
+        const graphWidth = vertical ? height : width;
+        const graphHeight = vertical ? width : height;
+        const isNarrow = (vertical ? graphWidth / dpr : this.graphCssWidth) < 500;
+        const keyboardDepth = 44.8 * (this.displayOptions?.preserveKeyboardAspect ? graphWidth / 1024 : dpr);
+        const keyboardGutter = this.kb && graphHeight > keyboardDepth ? keyboardDepth : 0;
+        const plotHeight = graphHeight - keyboardGutter;
 
-        ctx.fillStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '');
+        if (this.displayOptions?.transparent) ctx.clearRect(0, 0, width, height);
+        else ctx.fillRect(0, 0, width, height);
 
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-grid-subtle') ?? '');
+        ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-grid-subtle') ?? '');
         ctx.lineWidth = dpr;
 
         // --- Dynamic Frequency Axis Scaling ---
@@ -854,44 +897,54 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         const maxDisplayFreq = SPECTRUM_MAX_DISPLAY_FREQ;
 
         if (this.sampleRate <= 0 || nyquistFreq <= minDisplayFreq) { // Not enough range or invalid sampleRate
-            ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? '');
+            ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('text-primary') ?? '');
             ctx.font = `${14 * dpr}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillText('Invalid Sample Rate or Range', width / 2, height / 2);
+            (this.displayOptions?.textContext ?? ctx).fillText('Invalid Sample Rate or Range', width / 2, height / 2);
             return;
         }
 
         if (maxDisplayFreq <= minDisplayFreq) {
-             ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? ''); ctx.font = `${14 * dpr}px Arial`; ctx.textAlign = 'center';
-             ctx.fillText('Invalid Frequency Range', width / 2, height / 2);
+             ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('text-primary') ?? ''); ctx.font = `${14 * dpr}px Arial`; ctx.textAlign = 'center';
+             (this.displayOptions?.textContext ?? ctx).fillText('Invalid Frequency Range', width / 2, height / 2);
              return;
         }
 
+        if (vertical) {
+            ctx.save();
+            ctx.translate(width, height);
+            ctx.transform(0, -1, -1, 0, 0, 0);
+        }
         if (keyboardGutter) {
             ctx.save();
             ctx.beginPath();
-            ctx.rect(0, 0, width, plotHeight);
+            ctx.rect(0, 0, graphWidth, plotHeight);
             ctx.clip();
         }
         const drawBars = this.dm === 'bar';
         const deferredTicks = this.drawGrid(
-            ctx, width, plotHeight, dpr, isNarrow, drawBars, Boolean(keyboardGutter)
+            ctx, graphWidth, plotHeight, dpr, isNarrow, drawBars, Boolean(keyboardGutter)
         );
         if (drawBars) {
-            const levels = this.collectSpectrumLevels(width, now);
+            const levels = this.collectSpectrumLevels(graphWidth, now);
             const bandCount = isNarrow ? SPECTRUM_NARROW_BAR_COUNT : SPECTRUM_WIDE_BAR_COUNT;
-            const bands = SpectrumAnalyzerPlugin.aggregateBands(levels, width, bandCount);
-            this.drawSpectrumBars(ctx, bands, width, plotHeight, dpr);
-            this.drawAxisLabels(ctx, width, plotHeight, dpr, isNarrow, deferredTicks, !keyboardGutter);
+            const bands = SpectrumAnalyzerPlugin.aggregateBands(levels, graphWidth, bandCount);
+            const draw = target => this.drawSpectrumBars(target, bands, graphWidth, plotHeight, dpr);
+            if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(ctx, draw, { width: graphWidth, height: plotHeight });
+            else draw(ctx);
+            this.drawAxisLabels(ctx, graphWidth, plotHeight, dpr, isNarrow, deferredTicks, !keyboardGutter);
         } else {
-            this.drawAxisLabels(ctx, width, plotHeight, dpr, isNarrow, deferredTicks, !keyboardGutter);
-            const levels = this.collectSpectrumLevels(width, now);
-            this.drawSpectrumLines(ctx, levels, plotHeight, dpr);
+            this.drawAxisLabels(ctx, graphWidth, plotHeight, dpr, isNarrow, deferredTicks, !keyboardGutter);
+            const levels = this.collectSpectrumLevels(graphWidth, now);
+            const draw = target => this.drawSpectrumLines(target, levels, graphWidth, plotHeight, dpr);
+            if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(ctx, draw, { width: graphWidth, height: plotHeight });
+            else draw(ctx);
         }
         if (keyboardGutter) {
             ctx.restore();
-            this.drawKeyboard(ctx, width, height, keyboardGutter, dpr);
+            this.drawKeyboard(ctx, graphWidth, graphHeight, keyboardGutter, dpr);
         }
+        if (vertical) ctx.restore();
     }
 
     drawGrid(ctx, width, height, dpr, isNarrow, deferTicks, keyboard) {
@@ -904,14 +957,14 @@ class SpectrumAnalyzerPlugin extends PluginBase {
                 const pitchClass = (key.midi % 12 + 12) % 12;
                 if ((pitchClass !== 0 && pitchClass !== 5) ||
                     key.start <= 0 || key.start >= width) continue;
-                ctx.strokeStyle = (window.ThemePalette?.get(
+                ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get(
                     pitchClass === 0 ? 'graph-grid-strong' : 'graph-grid-subtle'
                 ) ?? '');
                 ctx.lineWidth = dpr;
                 ctx.beginPath();
                 ctx.moveTo(key.start, 0);
                 ctx.lineTo(key.start, height);
-                ctx.stroke();
+                if (this.displayOptions?.showAxes !== false) ctx.stroke();
             }
         } else {
             // Vertical grid lines (frequency) - Dynamic
@@ -935,10 +988,10 @@ class SpectrumAnalyzerPlugin extends PluginBase {
                     ctx.beginPath();
                     ctx.moveTo(x, 0);
                     ctx.lineTo(x, height);
-                    ctx.stroke();
+                    if (this.displayOptions?.showAxes !== false) ctx.stroke();
 
                     if (freq !== minDisplayFreq && freq !== maxDisplayFreq && x > width*0.02 && x < width*0.98) { // Avoid clutter at edges
-                        ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? '');
+                        ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-label') ?? '');
                         ctx.font = `${(isNarrow ? 11 : 12) * dpr}px Arial`;
                         ctx.textAlign = 'center';
                         const text = freq >= 1000 ? `${Math.round(freq / 100)/10}k` : freq;
@@ -946,7 +999,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
                         if (deferTicks) {
                             deferredTicks.push({ text, x, y, fillStyle: ctx.fillStyle, font: ctx.font, textAlign: ctx.textAlign });
                         } else {
-                            ctx.fillText(text, x, y);
+                            if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText(text, x, y);
                         }
                     }
                 }
@@ -954,7 +1007,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         }
 
         // Horizontal grid lines (dB) - No change to this logic
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-grid-subtle') ?? '');
+        ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-grid-subtle') ?? '');
         ctx.lineWidth = dpr;
         const dbStep = isNarrow ? 24 : 12;
         for (let db = 0; db >= this.dr; db -= dbStep) {
@@ -962,16 +1015,16 @@ class SpectrumAnalyzerPlugin extends PluginBase {
             ctx.beginPath();
             ctx.moveTo(0, y);
             ctx.lineTo(width, y);
-            ctx.stroke();
+            if (this.displayOptions?.showAxes !== false) ctx.stroke();
             if (db !== 0 && db !== this.dr) {
-                ctx.fillStyle = (window.ThemePalette?.get('graph-label') ?? ''); ctx.font = `${(isNarrow ? 11 : 12) * dpr}px Arial`; ctx.textAlign = 'right';
+                ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-label') ?? ''); ctx.font = `${(isNarrow ? 11 : 12) * dpr}px Arial`; ctx.textAlign = 'right';
                 const text = `${db}dB`;
                 const x = (isNarrow ? 46 : 80) * dpr;
                 const labelY = y + (6 * dpr);
                 if (deferTicks) {
                     deferredTicks.push({ text, x, y: labelY, fillStyle: ctx.fillStyle, font: ctx.font, textAlign: ctx.textAlign });
                 } else {
-                    ctx.fillText(text, x, labelY);
+                    if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText(text, x, labelY);
                 }
             }
         }
@@ -979,31 +1032,32 @@ class SpectrumAnalyzerPlugin extends PluginBase {
     }
 
     drawAxisLabels(ctx, width, height, dpr, isNarrow, deferredTicks, showFrequency) {
+        if (this.displayOptions?.showAxisNumbers === false) return;
         const outline = this.dm === 'bar';
         if (outline) {
             ctx.save();
-            ctx.strokeStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
+            ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '');
             ctx.lineWidth = 2 * dpr;
             ctx.lineJoin = 'round';
         }
         // Draw axis labels
-        ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? ''); ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
+        ctx.fillStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('text-primary') ?? ''); ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
         if (showFrequency) {
-            if (outline) ctx.strokeText('Frequency (Hz)', width / 2, height - (8 * dpr));
-            ctx.fillText('Frequency (Hz)', width / 2, height - (8 * dpr));
+            if (outline) (this.displayOptions?.textContext ?? ctx).strokeText('Frequency (Hz)', width / 2, height - (8 * dpr));
+            (this.displayOptions?.textContext ?? ctx).fillText('Frequency (Hz)', width / 2, height - (8 * dpr));
         }
         ctx.save();
         ctx.translate((isNarrow ? 18 : 20) * dpr, height / 2); ctx.rotate(-Math.PI / 2);
-        if (outline) ctx.strokeText('Level (dB)', 0, 0);
-        ctx.fillText('Level (dB)', 0, 0);
+        if (outline) (this.displayOptions?.textContext ?? ctx).strokeText('Level (dB)', 0, 0);
+        (this.displayOptions?.textContext ?? ctx).fillText('Level (dB)', 0, 0);
         ctx.restore();
 
         for (const tick of deferredTicks) {
             ctx.fillStyle = tick.fillStyle;
             ctx.font = tick.font;
             ctx.textAlign = tick.textAlign;
-            if (outline) ctx.strokeText(tick.text, tick.x, tick.y);
-            ctx.fillText(tick.text, tick.x, tick.y);
+            if (outline) (this.displayOptions?.textContext ?? ctx).strokeText(tick.text, tick.x, tick.y);
+            (this.displayOptions?.textContext ?? ctx).fillText(tick.text, tick.x, tick.y);
         }
         if (outline) ctx.restore();
     }
@@ -1050,10 +1104,49 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         return [...xToLevels.entries()].sort((a, b) => a[0] - b[0]);
     }
 
-    drawSpectrumLines(ctx, levels, height, dpr) {
+    getColorStyle(ctx, width, height) {
+        if (this.cl === 'Normal') return null;
+        const key = `${this.cl}|${this.sc}|${width}|${height}`;
+        if (this.colorGradient?.context === ctx && this.colorGradient.key === key) {
+            return this.colorGradient.style;
+        }
+        let gradient;
+        if (this.cl === 'Heatmap') {
+            const lut = window.SpectrogramPlugin?.getHeatmapLuts().rgba;
+            if (!lut) return null;
+            gradient = ctx.createLinearGradient(0, height, 0, 0);
+            for (let intensity = 0; intensity < 256; intensity++) {
+                const offset = intensity * 4;
+                gradient.addColorStop(intensity / 255,
+                    `rgba(${lut[offset]},${lut[offset + 1]},${lut[offset + 2]},${lut[offset + 3] / 255})`); // theme-allow: Shared Spectrogram heatmap colormap.
+            }
+        } else {
+            const noteColor = window.NoteSpectrogramPlugin?.noteColor;
+            if (!noteColor) return null;
+            gradient = ctx.createLinearGradient(0, 0, width, 0);
+            const firstMidi = 69 + 12 * Math.log2(this.displayXToFrequency(0) / 440);
+            const lastMidi = 69 + 12 * Math.log2(this.displayXToFrequency(1) / 440);
+            const addStop = (position, midi) => {
+                const color = noteColor(midi);
+                gradient.addColorStop(position, `rgb(${color.map(Math.round).join(',')})`); // theme-allow: Shared Note Spectrogram note colormap.
+            };
+            addStop(0, firstMidi);
+            for (let midi = Math.ceil(firstMidi); midi <= Math.floor(lastMidi); midi++) {
+                const frequency = 440 * 2 ** ((midi - 69) / 12);
+                addStop(this.frequencyToX(frequency, width) / width, midi);
+            }
+            addStop(1, lastMidi);
+        }
+        this.colorGradient = { context: ctx, key, style: gradient };
+        return gradient;
+    }
+
+    drawSpectrumLines(ctx, levels, width, height, dpr) {
         // Draw spectrum line
         ctx.beginPath();
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-trace-fill') ?? ''); ctx.lineWidth = 2 * dpr;
+        const colorStyle = this.displayOptions?.traceStyle?.(ctx, width, height) ??
+            this.getColorStyle(ctx, width, height);
+        ctx.strokeStyle = (colorStyle ?? window.ThemePalette?.get('graph-trace-fill') ?? ''); ctx.lineWidth = 2 * dpr;
         let first = true;
         for (const [x, [spectrumLevel]] of levels) {
             const y = height * (spectrumLevel / this.dr);
@@ -1068,7 +1161,7 @@ class SpectrumAnalyzerPlugin extends PluginBase {
 
         // Draw peak hold line
         ctx.beginPath();
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-trace') ?? ''); ctx.lineWidth = dpr;
+        ctx.strokeStyle = (colorStyle ?? window.ThemePalette?.get('graph-trace') ?? ''); ctx.lineWidth = dpr;
         first = true;
         for (const [x, [, peakLevel]] of levels) {
             const y = height * (peakLevel / this.dr);
@@ -1118,20 +1211,34 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         const barWidth = availableWidth >= 1 ? availableWidth : 1;
         const peakHeight = dpr >= 1 ? dpr : 1;
         const segmentPitch = 6 * dpr;
+        const quantize = this.displayOptions?.quantizeBars === true;
+        const fullBlockCount = Math.floor(height / segmentPitch);
 
-        ctx.fillStyle = (window.ThemePalette?.get('graph-trace-fill') ?? '');
+        const noteColor = this.cl === 'Rainbow' ? window.NoteSpectrogramPlugin?.noteColor : null;
+        const barColor = this.displayOptions?.barColor ?? (noteColor && ((band, count) => {
+            const frequency = this.displayXToFrequency((band + 0.5) / count);
+            const midi = 69 + 12 * Math.log2(frequency / 440);
+            return `rgb(${noteColor(midi).map(Math.round).join(',')})`; // theme-allow: Shared Note Spectrogram note colormap.
+        }));
+        const colors = barColor && Array.from({ length: spectrum.length }, (_, band) =>
+            barColor(band, spectrum.length));
+        const colorStyle = colors ? null : (this.displayOptions?.traceStyle?.(ctx, width, height) ??
+            this.getColorStyle(ctx, width, height));
+        if (!colors) ctx.fillStyle = (colorStyle ?? window.ThemePalette?.get('graph-trace-fill') ?? '');
         ctx.save();
         ctx.beginPath();
         for (let band = firstFilled; band <= lastFilled; band++) {
+            if (colors) ctx.fillStyle = colors[band];
             const x = band * bandWidth + gap / 2;
-            const y = height * (spectrum[band] / this.dr);
+            const rawY = height * (spectrum[band] / this.dr);
+            const y = quantize ? height - Math.floor((height - rawY) / segmentPitch) * segmentPitch : rawY;
             ctx.fillRect(x, y, barWidth, height - y);
             ctx.rect(x, y, barWidth, height - y);
         }
 
         // Cut horizontal segments only through the bar bodies, preserving the grid.
         ctx.clip();
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
+        ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '');
         ctx.lineWidth = dpr >= 1 ? dpr : 1;
         ctx.beginPath();
         for (let y = height - segmentPitch; y > 0; y -= segmentPitch) {
@@ -1141,11 +1248,15 @@ class SpectrumAnalyzerPlugin extends PluginBase {
         ctx.stroke();
         ctx.restore();
 
-        ctx.fillStyle = (window.ThemePalette?.get('graph-trace') ?? '');
+        if (!colors) ctx.fillStyle = (colorStyle ?? window.ThemePalette?.get('graph-trace') ?? '');
         for (let band = firstFilled; band <= lastFilled; band++) {
+            if (colors) ctx.fillStyle = colors[band];
             const x = band * bandWidth + gap / 2;
-            const y = height * (peaks[band] / this.dr);
-            ctx.fillRect(x, y, barWidth, peakHeight);
+            const rawY = height * (peaks[band] / this.dr);
+            const y = quantize ? height - Math.min(fullBlockCount,
+                Math.ceil((height - rawY) / segmentPitch)) * segmentPitch : rawY;
+            ctx.fillRect(x, quantize ? y + peakHeight / 2 : y, barWidth,
+                quantize ? segmentPitch - peakHeight : peakHeight);
         }
     }
 }

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 import { AudioManager } from '../../js/audio-manager.js';
+import { VISUAL_SYNC_RULES } from '../../js/audio/visual-sync.js';
 import { TelemetryHub, TELEMETRY_HEADER_BYTES } from '../../js/audio/telemetry-hub.js';
 
 function harness() {
@@ -31,7 +32,7 @@ function harness() {
     const sandbox = vm.createContext({ window: { dspTelemetryHub: hub }, PluginBase,
         performance: { now: () => now }, console });
     for (const file of ['multires-spectrum.js', 'analyzer/note_spectrogram.js',
-        'analyzer/spectrogram.js', 'analyzer/spectrum_analyzer.js']) {
+        'analyzer/spectrogram.js', 'analyzer/spectrum_analyzer.js', 'analyzer/chroma_spiral.js']) {
         vm.runInContext(fs.readFileSync(new URL('../../plugins/' + file, import.meta.url), 'utf8'), sandbox);
     }
     const note = new sandbox.window.NoteSpectrogramPlugin();
@@ -104,12 +105,13 @@ function spectrogramFrame(time) {
     return { tapId: 8, frameType: 5, formatVersion: 1, payload };
 }
 
-function hqFrame(sandbox) {
-    const analyzer = new sandbox.MultiresSpectrum(48000, 4);
-    for (let block = 0; block < 200; block++) {
+function hqFrame(sandbox, { rate = 48000, points = 10 } = {}) {
+    const analyzer = new sandbox.MultiresSpectrum(rate, 4);
+    const blocks = Math.ceil((5 * (1 << points) + rate / 30 + 128) / 128);
+    for (let block = 0; block < blocks; block++) {
         const frame = analyzer.process(new Float32Array(128),
-            { pt: 10, hq: true, dr: -96, blockSize: 128, channelCount: 1 });
-        if (frame) return { ...frame, tapId: 9 };
+            { pt: points, hq: true, dr: -96, blockSize: 128, channelCount: 1 });
+        if (frame) return { ...frame, tapId: 9, endFrame: (block + 1) * 128 };
     }
     assert.fail('HQ analysis did not complete');
 }
@@ -170,4 +172,132 @@ test('A to B to A accepts recreated Note and HQ Spectrum analyzers on the same w
     h.send([noteFrame(1, 1.52)], 74000);
     h.flush();
     assert.equal(h.note.lastFrameIndex, 1);
+});
+
+test('Visualizer analysis uses the shared output delay and its pre-delay tap', () => {
+    const h = harness();
+    const pipelineDue = h.manager._resolveVisualSyncDue(7, 51000, 7,
+        noteFrame(0, 1), 0);
+    const source = { tapId: 0xf0000000, type: 'NoteSpectrogramPlugin',
+        params: { mn: 28, mx: 91, nc: 8 } };
+    h.manager.visualizerSources = [source];
+    h.manager.visualizerSourcesByTap = new Map([[source.tapId, source]]);
+    assert.equal(h.manager.getDspTelemetryRate({ hidden: true, displayDspBypassed: true }), 60);
+    const due = h.manager._resolveVisualSyncDue(source.tapId, 51000, source.tapId,
+        { ...noteFrame(0, 1), tapId: source.tapId }, 0);
+    assert.ok(Number.isFinite(due));
+    assert.equal(h.manager._resolveVisualSyncDue(7, 51000, 7,
+        noteFrame(0, 1), 0), pipelineDue);
+    h.manager.pipeline = [];
+    const delay = h.manager._recomputeVisualSyncDelay();
+    assert.ok(delay > 0);
+});
+
+test('Spectrum Overlay uses the same HQ analysis age for output delay and frame delivery', () => {
+    const oldWindow = globalThis.window;
+    globalThis.window = { SpectrumOverlay: { quality: 'hq', TARGETS: new Set(['VolumePlugin']) } };
+    try {
+        const h = harness();
+        const plugin = { id: 22, enabled: true, getParameters: () => ({}) };
+        Object.defineProperty(plugin, 'constructor', { value: { name: 'VolumePlugin' } });
+        h.manager.pipeline = [plugin];
+        h.manager.dspLatencyTaps = { 22: { input: 0, output: 0, execution: 'js' } };
+        const generation = VISUAL_SYNC_RULES.spectrumOverlay.generationFrames(
+            { quality: 'hq' }, 48000, 'js');
+        assert.ok(generation > 2048);
+        const delay = h.manager._recomputeVisualSyncDelay();
+        assert.equal(delay, Math.ceil(generation));
+        h.manager.visualSyncDelayFrames = delay;
+        h.manager._appliedOutputDelayFrames.set(h.manager._getPrimaryWorkletNode(), delay);
+        const due = h.manager._resolveVisualSyncDue(22, 51000, 'spectrumOverlay');
+        assert.ok(Math.abs(due - 51000 / 48) < 1 / 48);
+
+        globalThis.window.SpectrumOverlay.quality = 'standard';
+        const standardDelay = h.manager._recomputeVisualSyncDelay();
+        assert.equal(standardDelay, 2048);
+        h.manager.visualSyncDelayFrames = standardDelay;
+        h.manager._appliedOutputDelayFrames.set(h.manager._getPrimaryWorkletNode(), standardDelay);
+        assert.equal(h.manager._resolveVisualSyncDue(22, 51000, 'spectrumOverlay'), 51000 / 48);
+    } finally {
+        globalThis.window = oldWindow;
+    }
+});
+
+test('Visualizer source transport preserves HQ and applies gain only to its hidden tap', () => {
+    const messages = [];
+    const node = { port: { postMessage: message => messages.push(message) } };
+    const manager = Object.assign(Object.create(AudioManager.prototype), {
+        _getPrimaryWorkletNode: () => node,
+        updateDspTelemetryRate() {},
+        _scheduleVisualSyncUpdate() {}
+    });
+    manager.setVisualizerSources([{ tapId: 0xf0000000, type: 'SpectrumAnalyzerPlugin',
+        params: { pt: 12, sc: 'log-hq', dr: -96 }, channel: 'L', gainDb: 6 }]);
+    const source = manager.visualizerSources[0];
+    assert.equal(source.params.hq, true);
+    assert.equal(source.packed[2], 1);
+    assert.equal(source.gain, 10 ** (6 / 20));
+    const message = messages.find(entry => entry.type === 'setVisualizerSources');
+    assert.equal(message.sources[0].gain, source.gain);
+    assert.equal(message.sources[0].params[2], 1);
+});
+
+
+test('Chroma and HQ Spectrum deliver the same capture at its due time and draw on the next animation frame', () => {
+    for (const [rate, points, age] of [[44100, 13, 20528], [96000, 14, 41008]]) {
+        for (const execution of ['js', 'wasm']) {
+            const h = harness();
+            h.setTime(0);
+            h.manager.contextManager.audioContext.sampleRate = rate;
+            const chroma = new h.sandbox.window.ChromaSpiralPlugin();
+            chroma.id = 10;
+            chroma.ensureDspTelemetrySubscription();
+            h.spectrum.pt = points;
+            h.manager.pipeline = [h.spectrum, chroma];
+            h.manager.dspLatencyTaps = {
+                9: { input: 0, output: 128, execution, instanceId: 109 },
+                10: { input: 0, output: 128, execution, instanceId: 110 }
+            };
+            h.hub.setSources(h.manager.dspLatencyTaps);
+            h.manager.visualSyncDelayFrames = age;
+            h.manager._appliedOutputDelayFrames.set(h.manager._getPrimaryWorkletNode(), age);
+            assert.equal(h.manager._visualSyncGeneration(chroma, 'ChromaSpiralPlugin'), age);
+            assert.equal(h.manager._visualSyncGeneration(h.spectrum, 'SpectrumAnalyzerPlugin'), age);
+            const frame = hqFrame(h.sandbox, { rate, points });
+            const expectedDue = (frame.endFrame + 128) / rate * 1000;
+            for (const id of [9, 10]) {
+                assert.equal(h.manager._resolveVisualSyncDue(id, frame.endFrame, id, frame, 0), expectedDue);
+            }
+            const draws = [[], []];
+            const animations = [];
+            for (const [index, plugin] of [h.spectrum, chroma].entries()) {
+                plugin.isVisible = true;
+                plugin.drawGraph = () => draws[index].push({ time: h.now(),
+                    frame: index === 0 ? h.spectrum.hqFrameIndex : chroma.snapshot?.frameIndex ?? -1 });
+                plugin.requestPowerAnimationFrame = (callback, kind) => {
+                    assert.equal(kind, 'analyzer');
+                    animations[index] = callback;
+                    return index + 1;
+                };
+                plugin.startAnimation();
+            }
+            const deliveries = [];
+            h.hub.subscribe(9, 4, () => deliveries.push(h.now()));
+            h.hub.subscribe(10, 4, () => deliveries.push(h.now()));
+            h.send([frame, { ...frame, tapId: 10 }], frame.endFrame, 0);
+            h.setTime(expectedDue - 0.1);
+            for (const animate of animations) animate(h.now());
+            assert.equal(chroma.snapshot, null);
+            assert.equal(h.spectrum.hqFrameIndex, -1);
+            assert.equal(deliveries.length, 0);
+            h.flush();
+            assert.deepEqual(deliveries, [expectedDue, expectedDue]);
+            assert.equal(chroma.snapshot.frameIndex, h.spectrum.hqFrameIndex);
+            h.setTime(expectedDue + 16);
+            for (const animate of animations) animate(h.now());
+            assert.deepEqual(draws[0], draws[1]);
+            assert.equal(draws[0].at(-1).frame, frame.payload.getUint32(24, true));
+            assert.equal(h.hub.getStats().subscriberErrors, 0);
+        }
+    }
 });

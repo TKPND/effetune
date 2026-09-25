@@ -23,6 +23,8 @@ const windowState = require('./window-state');
 const ipcHandlers = require('./ipc-handlers');
 const fileHandlers = require('./file-handlers');
 const { queueAutoRestart } = require('./relaunch');
+const { initializeGpuAcceleration } = require('./gpu-acceleration.cjs');
+const { createLibraryDialogTranslator } = require('./library-dialog-localization.cjs');
 const { armQuitDeadline, QUIT_DEADLINE_DEFAULT_TIMEOUT_SECONDS } = require('./quit-deadline.cjs');
 const { createInstanceRegistry } = require('./instance-registry.cjs');
 const { createAppUpdater } = require('./app-updater.cjs');
@@ -123,10 +125,9 @@ async function closeLibraryCatalogServices() {
 }
 
 async function openLibraryCatalogServices({ catalogDirectory, catalogPath }) {
-  const [catalogHost, utilityHostModule, dialogLocalization, serviceCoordinator] = [
+  const [catalogHost, utilityHostModule, serviceCoordinator] = [
     require('./library-catalog-host.cjs'),
     require('./library-catalog-utility-host.cjs'),
-    require('./library-dialog-localization.cjs'),
     require('./library-service-coordinator.cjs')
   ];
   const {
@@ -134,7 +135,6 @@ async function openLibraryCatalogServices({ catalogDirectory, catalogPath }) {
     registerLibraryCatalogControlIpc
   } = catalogHost;
   const { LibraryCatalogUtilityHost } = utilityHostModule;
-  const { createLibraryDialogTranslator } = dialogLocalization;
   const { registerLibraryServiceIpc } = serviceCoordinator;
   fs.mkdirSync(catalogDirectory, { recursive: true });
   const utilityHost = await LibraryCatalogUtilityHost.open({
@@ -1330,9 +1330,11 @@ async function initializeApp() {
     pipelineStartup: 'last',
     startupPreset: '',
     checkForUpdatesOnStartup: true,
+    hardwareAcceleration: true,
     openHomeRemoteControl: false
   };
   const cfg = { ...cfgDefaults, ...configModule.loadConfig() };
+  delete cfg.graphicsFallbackPending;
   if ('theme' in cfg) cfg.theme = themeRegistry.normalizeThemeId(cfg.theme);
   configModule.saveConfig(cfg);
   constants.setAppConfig(cfg);
@@ -1428,8 +1430,14 @@ async function initializeApp() {
 // Initialize global variables
 initGlobalVariables();
 
-// Disable hardware acceleration to avoid DXGI errors
-app.disableHardwareAcceleration();
+// Hardware acceleration is the default. Repeated GPU process failures switch
+// the next launch to software rendering; the user can retry from Config.
+const graphicsStartup = initializeGpuAcceleration({
+  app,
+  config: configModule,
+  queueRestart: queueAutoRestart,
+  isQuitting: () => isAppQuitting
+});
 
 // Store command line arguments for processing after splash screen
 constants.setSavedCommandLineMusicFiles([...process.argv]);
@@ -1551,6 +1559,25 @@ app.whenReady().then(async () => {
     await closeApplicationServices().catch(() => {});
     app.quit();
     return;
+  }
+
+  if (graphicsStartup.fallbackPending) {
+    const mainWindow = constants.getMainWindow();
+    mainWindow.once('show', () => {
+      const config = configModule.loadConfig();
+      if (config.hardwareAcceleration !== false) return;
+      const translate = createLibraryDialogTranslator({
+        getLanguagePreference: () => config.language,
+        getSystemLocale: () => app.getLocale()
+      });
+      void dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: translate('dialog.graphicsRecovery.title'),
+        message: translate('dialog.graphicsRecovery.message'),
+        buttons: [translate('dialog.config.close')],
+        noLink: true
+      }).catch(error => console.error('[graphics] Could not show the fallback notice:', error));
+    });
   }
   
   registerWatchdogPowerEvents();

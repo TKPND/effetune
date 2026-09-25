@@ -13,6 +13,7 @@ import {
     getPluginExecutionCapabilities
 } from './audio/plugin-execution-capabilities.js';
 import { TelemetryHub } from './audio/telemetry-hub.js';
+import { DSP_PARAM_PACKERS } from './audio/dsp-params.generated.js';
 import { VISUAL_SYNC_RULES, VISUAL_SYNC_MAX_OUTPUT_DELAY_SECONDS, VISUAL_SYNC_QUEUE_LIMIT,
     isVisualSyncEnabled, requiredOutputDelayFrames, audibleFrameTime, audibleContextTime, telemetryCaptureTiming } from './audio/visual-sync.js';
 import { PowerPolicyController } from './audio/power-policy-controller.js';
@@ -125,6 +126,9 @@ export class AudioManager {
         this.visualSyncEnabled = runtimeOptions.wasmOnly !== true && isVisualSyncEnabled(window.appConfig);
         this.visualSyncDelayFrames = 0;
         this.dspLatencyTaps = {};
+        this.visualizerSources = [];
+        this.visualizerSourcesByTap = new Map();
+        this.addEventListener('dspReady', () => this._postVisualizerSources());
         this._dspLatencyTapsWorklet = null;
         this._dbtOutputDelayFrames = new Map();
         this._appliedOutputDelayFrames = new Map();
@@ -1920,6 +1924,7 @@ export class AudioManager {
     }
 
     getDspTelemetryRate(state = null) {
+        if (this.visualizerSources?.length > 0) return 60;
         const controller = this.powerPolicyController;
         const hidden = typeof state?.hidden === 'boolean'
             ? state.hidden
@@ -1929,6 +1934,44 @@ export class AudioManager {
             ? state.displayDspBypassed
             : controller?.displayDspBypassed === true;
         return displayDspBypassed ? 0 : (hidden ? 15 : 60);
+    }
+
+    setVisualizerSources(sources = []) {
+        const next = [];
+        const seen = new Set();
+        for (const source of Array.isArray(sources) ? sources : []) {
+            const packer = DSP_PARAM_PACKERS.get(source?.type);
+            if (!packer || !Number.isInteger(source.tapId) || source.tapId < 0xf0000000 ||
+                source.tapId > 0xffffffff || seen.has(source.tapId)) continue;
+            seen.add(source.tapId);
+            const params = { ...source.params };
+            if (source.type === 'SpectrumAnalyzerPlugin' || source.type === 'SpectrogramPlugin') {
+                params.hq = params.sc === 'log-hq';
+            }
+            const gainDb = Number.isFinite(source.gainDb) && source.type !== 'NoteSpectrogramPlugin'
+                ? Math.max(-24, Math.min(24, source.gainDb)) : 0;
+            next.push({
+                tapId: source.tapId, type: source.type, params,
+                channel: source.channel ?? null,
+                gain: 10 ** (gainDb / 20),
+                packed: packer.pack(params), paramsHash: packer.hash
+            });
+        }
+        this.visualizerSources = next;
+        this.visualizerSourcesByTap = new Map(next.map(source => [source.tapId, source]));
+        this._postVisualizerSources();
+        this.updateDspTelemetryRate();
+        this._scheduleVisualSyncUpdate();
+    }
+
+    _postVisualizerSources(workletNode = this._getPrimaryWorkletNode()) {
+        if (!workletNode?.port) return;
+        const sources = this._parallelActive || this._parallelPreparing ? [] :
+            this.visualizerSources.map(source => ({
+                tapId: source.tapId, type: source.type, channel: source.channel,
+                params: source.packed, paramsHash: source.paramsHash, gain: source.gain
+            }));
+        workletNode.port.postMessage({ type: 'setVisualizerSources', sources });
     }
 
     updateDspTelemetryRate(state = null) {
@@ -2043,11 +2086,39 @@ export class AudioManager {
         return (this._parallelActive ? this.pipelineA : this.pipeline)?.find(plugin => plugin.id === tapId);
     }
 
+    _visualSyncSource(tapId) {
+        const source = this.visualizerSourcesByTap?.get(tapId);
+        if (source) return { ruleKey: source.type, params: source.params,
+            execution: 'wasm', tap: { output: 0 } };
+        const plugin = this._visualSyncPlugin(tapId);
+        if (!plugin) return null;
+        return { ruleKey: plugin.constructor.name, params: plugin.getParameters?.() || plugin,
+            plugin,
+            execution: this.dspLatencyTaps?.[tapId]?.execution || 'js',
+            tap: this.dspLatencyTaps?.[tapId] };
+    }
+
+    _visualSyncTarget(ruleKey, params, execution, context) {
+        const rule = VISUAL_SYNC_RULES[ruleKey];
+        if (!rule) return 0;
+        const generationFrames = rule.generationFrames(params, context.sampleRate, execution);
+        const capturedColumns = execution === 'wasm' &&
+            (ruleKey === 'NoteSpectrogramPlugin' ||
+                (ruleKey === 'SpectrogramPlugin' && params.sc !== 'log-hq'));
+        if (!capturedColumns) return generationFrames;
+        const telemetryRate = this.getDspTelemetryRate({ hidden: false, displayDspBypassed: false });
+        return generationFrames + Math.ceil(context.sampleRate / telemetryRate) +
+            (this.contextManager.getRenderQuantumSize?.(context) ?? 128);
+    }
+
     _visualSyncGeneration(plugin, ruleKey) {
         const rule = VISUAL_SYNC_RULES[ruleKey];
         if (!rule) return 0;
         const execution = this.dspLatencyTaps?.[plugin.id]?.execution || 'js';
-        return rule.generationFrames(plugin.getParameters?.() || plugin,
+        const parameters = ruleKey === 'spectrumOverlay'
+            ? { quality: window.SpectrumOverlay?.quality ?? window.appConfig?.spectrumOverlayQuality }
+            : plugin.getParameters?.() || plugin;
+        return rule.generationFrames(parameters,
             this.contextManager?.audioContext?.sampleRate || this.audioContext?.sampleRate || 48000, execution);
     }
 
@@ -2063,11 +2134,11 @@ export class AudioManager {
     _resolveVisualSyncDue(tapId, endFrame, ruleKey, frame, contextFrameOffset) {
         if (!this.visualSyncEnabled || !Number.isFinite(endFrame)) return null;
         const context = this.contextManager?.audioContext;
-        const plugin = this._visualSyncPlugin(tapId);
-        if (!context || !plugin) return null;
-        const key = typeof ruleKey === 'string' ? ruleKey : plugin.constructor.name;
+        const source = this._visualSyncSource(tapId);
+        if (!context || !source) return null;
+        const key = typeof ruleKey === 'string' ? ruleKey : source.ruleKey;
         const rule = VISUAL_SYNC_RULES[key];
-        const tap = this.dspLatencyTaps?.[tapId];
+        const tap = source.tap;
         if (!rule?.synced || !tap) return null;
         const primaryWorklet = this._getPrimaryWorkletNode();
         const appliedFrames = this._appliedOutputDelayFrames?.get(primaryWorklet) || 0;
@@ -2076,7 +2147,9 @@ export class AudioManager {
         if (this._pendingOutputDelayRequests?.has(primaryWorklet) || appliedFrames !== requestedFrames) return null;
         const capture = telemetryCaptureTiming(frame, contextFrameOffset);
         return audibleFrameTime({ endFrame: capture?.endFrame ?? endFrame,
-            generationFrames: capture?.generationFrames ?? this._visualSyncGeneration(plugin, key),
+            generationFrames: capture?.generationFrames ?? (key === 'spectrumOverlay'
+                ? this._visualSyncGeneration(source.plugin, key)
+                : rule.generationFrames(source.params, context.sampleRate, source.execution)),
             tapFrames: tap[rule.tap],
             outputDelayFrames: appliedFrames,
             sampleRate: context.sampleRate });
@@ -2161,20 +2234,21 @@ export class AudioManager {
                 if (VISUAL_SYNC_RULES[key]) {
                     // Reserve the visible telemetry interval plus one render block so
                     // captured columns arrive before their fixed audible deadlines.
-                    const capturedColumns = this.dspLatencyTaps?.[plugin.id]?.execution === 'wasm' &&
-                        (key === 'NoteSpectrogramPlugin' ||
-                            (key === 'SpectrogramPlugin' && (plugin.getParameters?.() || plugin).sc !== 'log-hq'));
-                    const telemetryRate = this.getDspTelemetryRate({ hidden: false, displayDspBypassed: false });
-                    const transportFrames = capturedColumns ? Math.ceil(context.sampleRate / telemetryRate) +
-                        (this.contextManager.getRenderQuantumSize?.(context) ?? 128) : 0;
                     targets.push({ id: plugin.id, ruleKey: key,
-                        generationFrames: this._visualSyncGeneration(plugin, key) + transportFrames });
+                        generationFrames: this._visualSyncTarget(key, plugin.getParameters?.() || plugin,
+                            this.dspLatencyTaps?.[plugin.id]?.execution || 'js', context) });
                 }
                 if (window.SpectrumOverlay?.TARGETS?.has(key)) targets.push({ id: plugin.id,
-                    ruleKey: 'spectrumOverlay', generationFrames: VISUAL_SYNC_RULES.spectrumOverlay.generationFrames() });
+                    ruleKey: 'spectrumOverlay', generationFrames: this._visualSyncGeneration(plugin, 'spectrumOverlay') });
+            }
+            for (const source of this.visualizerSources || []) {
+                targets.push({ id: source.tapId, ruleKey: source.type,
+                    generationFrames: this._visualSyncTarget(source.type, source.params, 'wasm', context) });
             }
         }
-        this.visualSyncDelayFrames = context ? requiredOutputDelayFrames({ targets, taps: this.dspLatencyTaps,
+        const taps = { ...this.dspLatencyTaps };
+        for (const source of this.visualizerSources || []) taps[source.tapId] = { output: 0 };
+        this.visualSyncDelayFrames = context ? requiredOutputDelayFrames({ targets, taps,
             dbtFrames: this._dbtOutputDelayFrames?.get(this._getPrimaryWorkletNode()) || 0,
             deviceLatencyFrames: this._visualSyncDeviceLatencyFrames,
             maxFrames: VISUAL_SYNC_MAX_OUTPUT_DELAY_SECONDS * context.sampleRate }) : 0;

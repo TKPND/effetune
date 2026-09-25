@@ -7,9 +7,11 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const moduleUrl = source => 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 const selectUrl = moduleUrl(read('../../js/ui/standard-select.js'));
 const motionUrl = moduleUrl(read('../../js/ui/motion.js'));
+const capabilitiesUrl = moduleUrl(read('../../js/audio/plugin-execution-capabilities.js'));
 const routingUrl = moduleUrl(read('../../js/ui/pipeline/pipeline-routing-dialog.js')
   .replace("'../standard-select.js'", JSON.stringify(selectUrl))
-  .replace("'../motion.js'", JSON.stringify(motionUrl)));
+  .replace("'../motion.js'", JSON.stringify(motionUrl))
+  .replace("'../../audio/plugin-execution-capabilities.js'", JSON.stringify(capabilitiesUrl)));
 const css = read('../../effetune-theme.css') + read('../../effetune.css')
   .replace('@import url("effetune-theme.css");', '');
 

@@ -1,4 +1,4 @@
-const { app, ipcMain, shell, systemPreferences, Menu, clipboard } = require('electron');
+const { app, ipcMain, shell, systemPreferences, Menu, clipboard, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -45,21 +45,24 @@ function setMainMenuBarVisible(mainWin, visible) {
   if (process.platform !== 'darwin') mainWin.setMenuBarVisibility(visible);
 }
 
-function miniPlayerPlacementForWindow(mainWin) {
+function miniPlayerPlacementForWindow(mainWin, visualizerAspect = null) {
   const saved = windowState.getMiniPlayerState();
-  if (saved?.bounds) {
-    return windowState.resolveMiniPlayerBounds({
-      x: saved.bounds.x,
-      y: saved.bounds.y,
-      ...windowState.MINI_DEFAULT_SIZE
-    });
-  }
   const normalBounds = mainWin.getNormalBounds();
-  return windowState.resolveMiniPlayerBounds({
-    x: normalBounds.x + normalBounds.width - windowState.MINI_DEFAULT_SIZE.width,
-    y: normalBounds.y,
-    ...windowState.MINI_DEFAULT_SIZE
-  });
+  const width = windowState.MINI_DEFAULT_SIZE.width;
+  const height = windowState.MINI_DEFAULT_SIZE.height;
+  const bounds = { x: saved?.bounds?.x ?? normalBounds.x + normalBounds.width - width,
+    y: saved?.bounds?.y ?? normalBounds.y, width, height };
+  const ratios = {
+    '16:9': [16, 9], '21:9': [21, 9], '4:3': [4, 3],
+    '1:1': [1, 1], '9:16': [9, 16]
+  };
+  const ratio = Object.hasOwn(ratios, visualizerAspect) ? ratios[visualizerAspect] : null;
+  if (ratio) {
+    const workArea = screen.getDisplayMatching(bounds).workArea;
+    bounds.height += Math.min(Math.round(width * ratio[1] / ratio[0]),
+      Math.max(0, workArea.height - height));
+  }
+  return windowState.resolveMiniPlayerBounds(bounds);
 }
 
 async function applyMiniPlayerPlacement(mainWin, placement) {
@@ -69,31 +72,43 @@ async function applyMiniPlayerPlacement(mainWin, placement) {
   if (process.platform === 'win32') await new Promise(resolve => setImmediate(resolve));
   mainWin.setContentSize(placement.width, placement.height);
   mainWin.setPosition(placement.x, placement.y);
-
-  const outerBounds = mainWin.getBounds();
-  const visibleBounds = windowState.resolveMiniPlayerBounds(outerBounds);
-  if (visibleBounds.x !== outerBounds.x || visibleBounds.y !== outerBounds.y) {
-    mainWin.setPosition(visibleBounds.x, visibleBounds.y);
-  }
-
   if (process.platform === 'win32') {
     // Moving between DPI scales and changing native frame styles schedules
     // layout updates. Finish positioning before sizing, and let those updates
     // run before measuring: an immediate read can still return the old size.
     await new Promise(resolve => setImmediate(resolve));
+  }
+
+  const outerBounds = mainWin.getBounds();
+  const workArea = screen.getDisplayMatching(outerBounds).workArea;
+  const frameHeight = outerBounds.height - mainWin.getContentSize()[1];
+  const targetHeight = Math.min(placement.height,
+    Math.max(windowState.MINI_MIN_SIZE.height, workArea.height - frameHeight));
+  if (targetHeight < placement.height) {
+    mainWin.setContentSize(placement.width, targetHeight);
+    if (process.platform === 'win32') await new Promise(resolve => setImmediate(resolve));
+  }
+
+  if (process.platform === 'win32') {
     // Electron's native-frame conversion can undersize content at non-default
     // DPI. A second correction can be needed after fractional-DPI rounding.
     // Keep the requested size separate from the measured native content size.
     let width = placement.width;
-    let height = placement.height;
+    let height = targetHeight;
     for (let attempt = 0; attempt < 3; attempt++) {
       mainWin.setContentSize(width, height);
       await new Promise(resolve => setImmediate(resolve));
       const [contentWidth, contentHeight] = mainWin.getContentSize();
-      if (contentWidth === placement.width && contentHeight === placement.height) break;
+      if (contentWidth === placement.width && contentHeight === targetHeight) break;
       width += placement.width - contentWidth;
-      height += placement.height - contentHeight;
+      height += targetHeight - contentHeight;
     }
+  }
+
+  const finalBounds = mainWin.getBounds();
+  const visibleBounds = windowState.resolveMiniPlayerBounds(finalBounds);
+  if (visibleBounds.x !== finalBounds.x || visibleBounds.y !== finalBounds.y) {
+    mainWin.setPosition(visibleBounds.x, visibleBounds.y);
   }
 }
 
@@ -153,7 +168,7 @@ function restoreNormalWindowShape() {
   return true;
 }
 
-async function enterMiniPlayerMode(alwaysOnTop) {
+async function enterMiniPlayerMode(alwaysOnTop, visualizerAspect = null) {
   const mainWin = constants.getMainWindow();
   if (!mainWin || mainWin.isDestroyed()) throw new Error('Main window is not available');
   await leaveFullScreen(mainWin);
@@ -167,7 +182,7 @@ async function enterMiniPlayerMode(alwaysOnTop) {
     return;
   }
 
-  const miniPlacement = miniPlayerPlacementForWindow(mainWin);
+  const miniPlacement = miniPlayerPlacementForWindow(mainWin, visualizerAspect);
   wasMaximizedBeforeMiniMode = mainWin.isMaximized();
   windowState.enterMiniMode();
   windowState.suspendSave();
@@ -493,6 +508,11 @@ function createApplicationMenuTemplate(menuState = {}) {
           accelerator: 'CommandOrControl+L',
           click: () => sendToRenderer('open-library-view')
         }),
+        item('view.visualizer', {
+          label: 'Visualizer',
+          accelerator: 'CommandOrControl+Shift+V',
+          click: () => sendToRenderer('open-visualizer-view')
+        }),
         item('view.pipelineAnalyzer', {
           label: 'Pipeline Analyzer',
           type: 'checkbox',
@@ -593,7 +613,7 @@ function registerIpcHandlers({ onConfigSaved } = {}) {
   registerMeasurementBackupIpc({ ipcMain, getUserDataPath: fileHandlers.getUserDataPath });
   ipcMain.handle('set-mini-player-mode', async (event, options = {}) => {
     if (options?.enabled === true) {
-      await enterMiniPlayerMode(options.alwaysOnTop === true);
+      await enterMiniPlayerMode(options.alwaysOnTop === true, options.visualizerAspect);
     } else {
       restoreNormalWindowShape();
     }

@@ -27,6 +27,10 @@ class FakeClassList {
   contains(token) {
     return this.tokens.has(token);
   }
+  toggle(token, force = !this.tokens.has(token)) {
+    if (force) this.tokens.add(token); else this.tokens.delete(token);
+    return force;
+  }
 }
 
 class FakeElement {
@@ -641,6 +645,7 @@ test('initOpenLibraryButton wires the view switch buttons and Electron IPC callb
   assert.deepEqual(calls, [
     ['onIPC', 'open-library-view'],
     ['onIPC', 'open-effect-pipeline-view'],
+    ['onIPC', 'open-visualizer-view'],
     ['onIPC', 'add-music-folder'],
     ['onIPC', 'rescan-library'],
     ['showLibraryView'],
@@ -807,7 +812,7 @@ test('showLibraryView forwards the configured startup subview', async () => {
   assert.deepEqual(calls, [
     ['ensureLibraryManager'],
     ['libraryView.show', { focusSearch: false, returnFocus: opener, initialView: 'artists' }],
-    ['updateViewSwitchButtons', true],
+    ['updateViewSwitchButtons', 'library'],
     ['mobileNav.setView', 'library', { fromLibraryView: true }]
   ]);
 });
@@ -1742,6 +1747,81 @@ test('LibraryView marks the active desktop nav item as current', () => {
   assert.match(nav.innerHTML, /class="library-nav-item active" data-view="albums" aria-current="page"/);
   assert.doesNotMatch(nav.innerHTML, /data-view="tracks" aria-current="page"/);
   assert.match(nav.innerHTML, /data-view="subfolders"[^]*?<span class="library-count">4<\/span>/);
+  assert.match(nav.innerHTML, /data-view="subfolders"[^]*?data-view="files"[^]*?data-view="folders"/);
+  assert.match(nav.innerHTML, /data-view="files"[^]*?<span class="library-count">3<\/span>/);
+});
+
+test('Files uses path sorting independently of Tracks and persists its preference', async () => {
+  let savedState;
+  const view = createLibraryViewFixture({
+    currentView: 'files', detail: null, searchQuery: '',
+    sort: 'artist', sortDirection: 'desc', render() {}
+  });
+  await withGlobals({ localStorage: {
+    setItem(_key, value) { savedState = value; },
+    getItem() { return savedState; }
+  } }, async () => {
+    assert.deepEqual(view.getPagedQuery(), {
+      endpoint: 'tracks', query: '', sort: 'path', direction: 'asc', scope: null
+    });
+    view.applyTrackSort('path');
+    assert.equal(view.getPagedQuery().direction, 'desc');
+    view.applyTrackSort('duration');
+    assert.equal(view.getPagedQuery().sort, 'duration');
+    assert.equal(view.getPagedQuery().direction, 'asc');
+    view.applyTrackSort('artist');
+    assert.equal(view.getPagedQuery().sort, 'duration');
+    view.currentView = 'tracks';
+    assert.equal(view.getPagedQuery().sort, 'artist');
+    assert.equal(view.getPagedQuery().direction, 'desc');
+    const restored = createLibraryViewFixture({ currentView: 'files', detail: null, searchQuery: '' });
+    restored.loadUIState();
+    assert.equal(restored.getPagedQuery().sort, 'duration');
+    assert.equal(restored.getPagedQuery().direction, 'asc');
+    restored.searchQuery = 'music';
+    assert.equal(restored.getPagedQuery().sort, 'duration');
+    assert.equal(restored.getPagedQuery().query, 'music');
+  });
+});
+
+test('Files displays the escaped full path and retains direct track playback', async () => {
+  const documentRef = createDocument();
+  const played = [];
+  const view = createLibraryViewFixture({
+    currentView: 'files', detail: null, nowPlayingTrackId: null,
+    pagedFocusedEntityId: null, pagedController: { isSelected: () => false },
+    uiManager: { t: key => key },
+    dispatchPagedRowAction(_row, action) { action(); },
+    startPagedTrackPlay(item, ordinal) { played.push([item.trackUid, ordinal]); }
+  });
+  await withGlobals({ document: documentRef }, async () => {
+    const header = view.createPagedTrackHeader();
+    assert.match(header.className, /library-file-row/);
+    assert.match(header.innerHTML, /data-sort="path"/);
+    assert.doesNotMatch(header.innerHTML, /data-sort="(?:title|artist|album|genre)"/);
+    const row = view.createPagedRow({
+      trackUid: 'track-file', path: 'D:\\Music\\A & B\\<song>.flac',
+      title: 'Metadata title', artist: 'Metadata artist', album: 'Metadata album', genre: 'Rock'
+    }, 4, { queryGeneration: 1, pageAttemptId: 1 }, true);
+    assert.match(row.className, /library-file-row/);
+    assert.match(row.innerHTML, /D:\\Music\\A &amp; B\\&lt;song&gt;\.flac/);
+    assert.doesNotMatch(row.innerHTML, /Metadata|library-(?:artist|album|genre)-cell/);
+    assert.match(row.innerHTML, /library-duration-cell/);
+    await row.dispatch('dblclick');
+    assert.deepEqual(played, [['track-file', 4]]);
+
+    const cueRows = [1, 2].map(trackNo => view.createPagedRow({
+      trackUid: `cue-${trackNo}`, sourceKind: 'cue-track',
+      path: 'D:\\Music\\Album.flac', trackNo, title: 'Theme <live>'
+    }, trackNo + 4, { queryGeneration: 1, pageAttemptId: 1 }, true));
+    for (const [index, cueRow] of cueRows.entries()) {
+      assert.ok(cueRow.innerHTML.includes(
+        `<span class="library-track-title-text">D:\\Music\\Album.flac [${index + 1}. Theme &lt;live&gt;]</span>`
+      ));
+      await cueRow.dispatch('dblclick');
+    }
+    assert.deepEqual(played, [['track-file', 4], ['cue-1', 5], ['cue-2', 6]]);
+  });
 });
 
 test('LibraryView keeps paged nav buttons mounted when a nav item is clicked', async () => {

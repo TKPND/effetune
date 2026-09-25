@@ -6,7 +6,7 @@ lang: es
 
 # Cómo usar la Biblioteca musical
 
-La Biblioteca musical indexa las carpetas de música que seleccionas y te permite explorar tu colección local por pistas, álbumes, artistas, géneros, subcarpetas, carpetas, elementos añadidos recientemente y listas de reproducción. El audio reproducido pasa por el pipeline de efectos actual de EffeTune, igual que durante la reproducción normal de archivos de música.
+La Biblioteca musical indexa las carpetas de música que seleccionas y te permite explorar tu colección local por pistas, archivos, álbumes, artistas, géneros, subcarpetas, carpetas, elementos añadidos recientemente y listas de reproducción. El audio reproducido pasa por el pipeline de efectos actual de EffeTune, igual que durante la reproducción normal de archivos de música.
 
 La Biblioteca musical guarda dentro de la aplicación su catálogo, la caché de carátulas y las listas de reproducción. No edita, cambia de nombre, mueve ni elimina los archivos de audio.
 
@@ -26,7 +26,7 @@ La Biblioteca musical indexa extensiones de archivos multimedia habituales, como
 
 Para volver a editar efectos, haz clic en el botón **Effect Pipeline** en el diseño de PC o vuelve a la pestaña **Efectos** en el diseño móvil. En la aplicación de escritorio también puedes usar **Ver > Effect Pipeline** o **Ctrl+E** (**Command+E** en macOS).
 
-Si quieres que la Biblioteca musical sea la primera vista al iniciar, abre **Configuración > Configuración...** y cambia **Vista al inicio:** a **Biblioteca musical**. En la lista situada junto a **Biblioteca musical**, elige la sección que aparecerá primero: **Pistas**, **Álbumes**, **Artistas**, **Géneros**, **Subcarpetas**, **Carpetas** o **Listas de reproducción**.
+Si quieres que la Biblioteca musical sea la primera vista al iniciar, abre **Configuración > Configuración...** y cambia **Vista al inicio:** a **Biblioteca musical**. En la lista situada junto a **Biblioteca musical**, elige la sección que aparecerá primero: **Pistas**, **Archivos**, **Álbumes**, **Artistas**, **Géneros**, **Subcarpetas**, **Carpetas** o **Listas de reproducción**.
 
 ## Añadir carpetas de música
 
@@ -42,6 +42,7 @@ Si intentas añadir una carpeta que ya está dentro de una carpeta registrada, E
 Usa las pestañas de navegación para cambiar de vista en el catálogo.
 
 - **Pistas** - Muestra todas las pistas indexadas. En el diseño de PC se presenta como una tabla ordenable; en el diseño móvil, como una lista compacta.
+- **Archivos** - Muestra las pistas indexadas por la ubicación de sus archivos para que puedas elegirlas directamente. La aplicación de escritorio muestra rutas absolutas; los navegadores web muestran el nombre de la carpeta raíz de la biblioteca y la ruta relativa. Las pistas procedentes de un mismo archivo de audio CUE aparecen por separado y se pueden seleccionar individualmente.
 - **Álbumes** - Agrupa los álbumes a partir de los metadatos.
 - **Artistas** - Agrupa por artistas y artistas de álbum indicados en los metadatos.
 - **Géneros** - Agrupa por los géneros indicados en los metadatos.

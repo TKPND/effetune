@@ -137,6 +137,16 @@ test('HQ spectrum telemetry accepts the canonical v2 contract and owns its dB ar
   assert.equal(frame.currentDb[0], -10);
 });
 
+test('Chroma Spiral accepts only HQ spectrum telemetry', () => {
+  const { packet, view, bytes } = hqPacket({ frameType: 4, tapId: 7 });
+  const nodes = new Map([[7, {
+    effectType: 'ChromaSpiral', effectId: 'chroma', effectIndex: 0
+  }]]);
+  assert.equal(decodeTelemetryPacket(packet, bytes, nodes, 0).frames[0].kind, 'spectrumHq');
+  view.setUint16(2, 1, true);
+  assert.deepEqual(decodeTelemetryPacket(packet, bytes, nodes, 0).frames, []);
+});
+
 test('HQ spectrogram telemetry accepts the canonical descending v2 grid', () => {
   const valid = hqPacket({ frameType: 5, tapId: 8 });
   for (let cell = 0; cell < 256; cell++) valid.packet[64 + cell] = cell;

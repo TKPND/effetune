@@ -5,6 +5,7 @@ export const MUSIC_LIBRARY_STARTUP_VIEWS = Object.freeze([
   'artists',
   'genres',
   'subfolders',
+  'files',
   'folders',
   'playlists'
 ]);

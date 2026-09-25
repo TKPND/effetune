@@ -1,6 +1,6 @@
 ---
 title: "Analyzer Plugins - EffeTune"
-description: "Audio analysis plugins including Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer, and Stereo Meter."
+description: "Audio analysis plugins including Chroma Spiral, Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer, and Stereo Meter."
 lang: en
 ---
 
@@ -10,6 +10,7 @@ A collection of plugins that let you see your music in fascinating ways. These v
 
 ## Plugin List
 
+- [Chroma Spiral](#chroma-spiral) - Places frequency components around a note and octave spiral
 - [Level Meter](#level-meter) - Shows digital signal level and possible clipping
 - [Note Spectrogram](#note-spectrogram) - Shows estimated pitches over time as a piano roll
 - [Oscilloscope](#oscilloscope) - Shows real-time waveform visualization
@@ -17,6 +18,36 @@ A collection of plugins that let you see your music in fascinating ways. These v
 - [Spectrogram](#spectrogram) - Creates beautiful visual patterns from your music
 - [Spectrum Analyzer](#spectrum-analyzer) - Shows the different frequencies in your music
 - [Stereo Meter](#stereo-meter) - Visualizes stereo balance and phase relationships
+
+## Chroma Spiral
+
+Shows where the frequency components of your music fall among the 12 notes and across octaves, without changing the sound. Use it to see which note positions are active when harmonics overlap, compare a vocal with a bass line, or inspect the pitch range of an instrument.
+
+### Listening Guide
+
+- Play a sustained note, then look for its position and the other positions lit by its harmonics. A single note can light several note names; these are frequency components, not necessarily separate played notes.
+- Watch a chord or melody to see how its active note positions change. The display can suggest tonal patterns, but it does not identify a chord or key.
+- For a tuning check, watch whether a bright dot or the outer edge of a filled peak falls between note guides. Use Pitch Meter when you need a cents readout for one fundamental pitch.
+- Press the graph with a mouse, finger, or pen to hear a sine wave at the selected spiral position. Drag to change the tone; release or cancel the gesture to stop it. This preview works with every **Color** choice.
+
+### Parameters
+
+- **Color** - Selects how the spectrum is drawn. The same background spiral guide remains visible with every choice, even during silence.
+  - **Normal** (default): shows each frequency cell as a dot in the theme's graph trace color. Its brightness follows the cell's level, while its area grows in proportion to that level, making quieter frequencies easier to see. At maximum strength, a dot's radius reaches halfway toward the next spiral turn.
+  - **Normal 2**: fills from each frequency's spiral position out to its level in the graph trace color, without drawing a data contour.
+  - **Note Colors**: shows the same dots as Normal, but uses a different color for each note, repeated across octaves.
+- **Lowest Octave** (1 to 8; default 1) - Sets the innermost displayed octave. Raise it to focus on higher sounds.
+- **Highest Octave** (1 to 9; default 7) - Sets the outermost displayed octave. Lower it to focus on bass and midrange sounds. The two octave limits stay in order when either is changed.
+- **Frequency Tilt** (-6 to +6 dB/oct in 0.5 steps; default +3) - Adjusts the displayed level of frequencies above 100 Hz without changing the sound. Positive values make higher frequencies more prominent; negative values make them less prominent. At 0, no frequency correction is applied.
+- **Level Range** (6 to 96 dB in 1 dB steps; default 24) - Sets the width of the moving display window. Narrow it to emphasize level differences; widen it to show weaker components alongside stronger ones.
+- **Display Floor** (-120 to -24 dB in 1 dB steps; default -60) - Sets how low the moving display window may reach during quiet passages. Lower it to allow quieter components to appear within the selected **Level Range**. The window still follows recent peaks, so this setting does not guarantee that every quiet component will be visible.
+
+### Visualization Guide
+
+- Each turn covers one octave. C is at the top and note names run clockwise; inner turns are lower than outer turns. The C labels mark the octave numbers.
+- In **Normal** and **Note Colors**, brighter, larger dots indicate stronger components at their positions, including between note names. In **Normal 2**, a filled region extends farther outward for stronger components; its outer edge shows the changing spectrum without a separate contour line.
+- Dot brightness and area, and the filled area's extent, show relative strength. The display follows recent peaks, so they are not absolute level readings.
+- Low notes are less sharply separated and respond more slowly. Nearby notes in the lowest octaves may blur together.
 
 ## Level Meter
 
@@ -38,9 +69,9 @@ Shows estimated fundamental pitches (F0s) in a selectable range from A0 to C8 in
 - **Horizontal** places the keyboard at the bottom, with low notes on the left and high notes on the right. New sound appears just above the keyboard, and history scrolls upward.
 - Lines at each C mark octave boundaries.
 - Pitch rows corresponding to black piano keys use a nearly black gray background so they remain distinguishable when no note is detected.
-- **Normal** uses the theme’s graph trace color; **Note Colors** uses a different color for each note, repeated across octaves. Both show darker guide lines between E and F.
+- **Normal** uses the theme’s graph trace color; **Note Colors** uses a different color for each note, repeated across octaves. The guide lines between E and F remain visible in both modes.
 - **1/12 Octave** shows one row per semitone. **High (1/60 Octave)** divides each semitone into five rows so that small pitch movement is easier to follow; colors are blended between neighboring notes.
-- Color follows the model’s confidence from 0 (background color) to 1 (full color), including weak candidates without a display threshold. This score indicates how strongly the model supports a pitch; it is not a calibrated probability.
+- Color strength follows the model’s confidence, including weak candidates without a display threshold. Confidence indicates how strongly the model supports a pitch; it is not a calibrated probability.
 - With **Volume** on, each detected pitch becomes a bar whose opaque core thickness shows its frequency-corrected relative volume, from 1/60 octave at the bottom of the scale to 1/12 octave at the top. A fade extends 1/120 octave beyond each side of that core, adding 1/60 octave to the total footprint. **Pitch Resolution** changes the bar’s center position, not its core thickness.
 - At the keyboard edge, a soft-edged semicircle extends into the graph and shows the current volume. It responds immediately to increases and falls at 20 dB per second; there is no separate visible peak hold.
 - The volume scale covers 24 dB. Its top follows the louder of a recent reference used to stabilize the history scale (over about one second) and -36 dB, so quieter material remains readable without making louder passages fill the display continuously. This reference is separate from the current-volume semicircle.
@@ -63,7 +94,7 @@ Shows estimated fundamental pitches (F0s) in a selectable range from A0 to C8 in
   - **1/12 Octave** (default): one row per semitone, using the strongest estimate within that note.
   - **High (1/60 Octave)**: five rows per semitone for finer pitch movement.
 - **Layout** - Selects **Horizontal** (default) or **Vertical**. Switching layout preserves the existing history.
-- **Volume** - Shows relative volume in bar thickness and semicircle meters. It is on by default; turning it off keeps the original confidence-only rows.
+- **Volume** - Shows relative volume in bar thickness and semicircle meters. It is on by default; turning it off shows confidence as row intensity.
 - **Time Span** (1 to 10 s) - Sets how much time the piano roll shows
   - Shorter values make timing changes easier to see
   - Longer values show a longer musical passage at once
@@ -112,7 +143,7 @@ Tracks one fundamental pitch (F0) at a time in a two-second scrolling piano roll
 
 - **Horizontal** (default) places low notes on the left and high notes on the right. The newest estimate appears above the keyboard and history scrolls upward.
 - **Vertical** places low notes at the bottom and high notes at the top. The newest estimate appears beside the keyboard at the right and history moves left.
-- The line position shows pitch between semitones. A more confident estimate appears more strongly; the line breaks when the input is too quiet or no stable single pitch is found.
+- The line position shows pitch between semitones. A more confident estimate appears more strongly; the line breaks when the input is too quiet or no stable single pitch is found. **Heatmap** uses line color to show relative volume, while **Note Colors** follows pitch.
 - The current label shows the nearest note and the difference in cents. A positive value is above the note and a negative value is below it. The label disappears when there is no reliable estimate.
 - The note name uses the same note colors as Note Spectrogram. The large readout fits the available width and keeps the cents decimal point in a fixed position.
 
@@ -124,6 +155,7 @@ Tracks one fundamental pitch (F0) at a time in a two-second scrolling piano roll
 
 ### Parameters
 
+- **Color** - Changes the line color without changing pitch detection. **Normal** (default) uses the theme’s graph trace color; **Heatmap** follows relative volume on the same 24 dB scale as Note Spectrogram; **Note Colors** follows pitch between the note colors.
 - **Layout** - Selects **Horizontal** (default) or **Vertical**.
 - **Reference A4** (400 to 480 Hz) - Sets the tuning reference used for note names and cents. Default: 440 Hz.
 - **Lowest Note** - Sets the bottom of the displayed and analyzed range. Default: C2. The lowest available setting is A0.
@@ -132,7 +164,7 @@ Tracks one fundamental pitch (F0) at a time in a two-second scrolling piano roll
 
 ## Spectrogram
 
-Creates colorful patterns that show how your music changes over time. Colors show how strong each sound is, while vertical position shows its frequency.
+Shows how your music changes over time. Color intensity shows how strong each frequency is, while vertical position shows its frequency.
 
 The graph scrolls from right to left at a steady speed, with marks every second.
 
@@ -162,6 +194,7 @@ The graph scrolls from right to left at a steady speed, with marks every second.
   - Higher numbers: More frequency detail, but slower time updates
   - Lower numbers: Faster movement, but less frequency detail
   - With **Log (HQ)**, Points sets the short analysis window; a four-times-longer window improves low-frequency separation.
+- **Color** - **Normal** uses the theme’s graph color, with stronger frequencies shown more brightly. **Heatmap** (default) uses the original dark-to-bright multicolor scale. Switching color recolors the existing history.
 - **Frequency Scale** - **Log** gives low frequencies more display space. **Log (HQ)** adds a longer measurement for clearer separation of nearby bass frequencies while retaining the short measurement for higher frequencies. It uses more processing and low-frequency changes can take longer to appear or fade; it does not change the audio. **Linear** places equal frequency widths at equal intervals.
 - **Keyboard** - Shows a static keyboard guide at the right of the graph that relates musical notes to frequencies. It does not change the analysis or audio. The keys follow **Log**, **Log (HQ)**, or **Linear**; **Log (HQ)** uses the same logarithmic spacing as **Log**, while with **Linear**, low-frequency keys look narrower.
 - The analyzer uses the average of the left and right channels. Mono input is analyzed directly.
@@ -175,8 +208,8 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
 - Middle shows main frequencies (vocals, guitars, piano)
 - Right side shows high frequencies (cymbals, sparkle, air)
 - Higher peaks mean stronger presence of those frequencies
-- Darker green line shows the current sound
-- The brighter green line follows recent peaks and falls smoothly as they fade
+- The thicker line shows the current sound
+- The thinner line follows recent peaks and falls smoothly as they fade
 - In **Bar** display, each bar shows the strongest level in an equal-width portion of the display. **Log** and **Log (HQ)** use equal octave widths; **Linear** uses equal frequency widths.
 - The thin marker above a bar shows its recent peak and falls smoothly.
 - With **Log (HQ)**, nearby bass tones can appear as separate peaks. Their longer low-frequency measurement can take a little longer to settle or fade.
@@ -196,6 +229,7 @@ Creates a real-time visual display of your music's frequencies, from deep bass t
   - Higher numbers: More frequency detail, with slower updates
   - Lower numbers: Quicker updates, with less frequency detail
   - With **Log (HQ)**, Points sets the short analysis window; a four-times-longer window improves low-frequency separation.
+- **Color** - **Normal** (default) keeps the theme’s graph colors. **Heatmap** colors higher levels more brightly, and **Note Colors** follows the note colors across the frequency axis. The choice applies to both Line and Bar displays. With **Bar** and **Note Colors**, each bar and its peak use one color based on the band’s center frequency.
 - **Frequency Scale** - **Log** gives low frequencies more display space. **Log (HQ)** adds a longer measurement for clearer separation of nearby bass frequencies while retaining the short measurement for higher frequencies. It uses more processing and low-frequency changes can take longer to appear or fade; it does not change the audio. **Linear** places equal frequency widths at equal intervals.
 - **Display** - Changes only how the spectrum looks; it does not change the analysis or audio.
   - **Line** (default): Shows the spectrum as continuous lines.
@@ -256,6 +290,7 @@ A fascinating visualization tool that lets you see how your music creates a sens
   - Lower values: See quick musical changes
   - Higher values: See overall sound patterns
   - Default: 100 ms works well for most music
+- **Gain** (0-24 dB; default 0 dB) - Enlarges only the dots and peak line in the diamond. Raise it to see quieter patterns more clearly. It does not change the sound or the correlation and balance readings.
 
 ### Enjoying Your Music
 1. **Watch Different Styles**

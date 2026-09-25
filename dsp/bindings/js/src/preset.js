@@ -280,6 +280,12 @@ const LEGACY_FREQUENCY_SCALE_EFFECTS_V1 = Object.freeze(['SpectrumAnalyzer', 'Sp
 // boolean before discarding it so other unknown parameters remain strict.
 const LEGACY_KEYBOARD_DISPLAY_EFFECTS_V1 = Object.freeze(['SpectrumAnalyzer', 'Spectrogram']);
 
+const LEGACY_COLOR_DISPLAY_VALUES_V1 = Object.freeze({
+  PitchMeter: Object.freeze(['Normal', 'Heatmap', 'Rainbow']),
+  SpectrumAnalyzer: Object.freeze(['Normal', 'Heatmap', 'Rainbow']),
+  Spectrogram: Object.freeze(['Normal', 'Heatmap'])
+});
+
 function dropEchoedStructuralKeysV1(parameters, effectType) {
   for (const key of LEGACY_ECHOED_STRUCTURAL_KEYS_V1) delete parameters[key];
   if (LEGACY_ECHOED_ENABLED_EFFECTS_V1.includes(effectType)) delete parameters.en;
@@ -416,6 +422,20 @@ function prepareLegacyParametersV1(effectType, source) {
     }
     delete parameters.kb;
   }
+  if (Object.hasOwn(LEGACY_COLOR_DISPLAY_VALUES_V1, effectType) &&
+      Object.hasOwn(parameters, 'cl')) {
+    if (!LEGACY_COLOR_DISPLAY_VALUES_V1[effectType].includes(parameters.cl)) {
+      throw new ValidationError(`Legacy ${effectType} contains invalid color display state.`);
+    }
+    delete parameters.cl;
+  }
+  if (effectType === 'StereoMeter' && Object.hasOwn(parameters, 'gn')) {
+    if (typeof parameters.gn !== 'number' || !Number.isFinite(parameters.gn) ||
+        parameters.gn < 0 || parameters.gn > 24) {
+      throw new ValidationError('Legacy StereoMeter contains invalid gain display state.');
+    }
+    delete parameters.gn;
+  }
   if (effectType === 'SpectrumAnalyzer' && Object.hasOwn(parameters, 'dm')) {
     if (parameters.dm !== 'line' && parameters.dm !== 'bar') {
       throw new ValidationError('Legacy SpectrumAnalyzer contains invalid display mode state.');
@@ -431,6 +451,30 @@ function prepareLegacyParametersV1(effectType, source) {
       throw new ValidationError('Legacy PitchMeter contains invalid layout state.');
     }
     delete parameters.ly;
+  }
+  if (effectType === 'ChromaSpiral') {
+    if (Object.hasOwn(parameters, 'dm')) {
+      if (parameters.dm !== 0 && parameters.dm !== 1 && parameters.dm !== 2) {
+        throw new ValidationError('Legacy ChromaSpiral contains invalid color state.');
+      }
+      delete parameters.dm;
+    }
+    for (const [key, minimum, maximum] of [['lo', 1, 8], ['hi', 1, 9]]) {
+      if (!Object.hasOwn(parameters, key)) continue;
+      if (!Number.isInteger(parameters[key]) ||
+          parameters[key] < minimum || parameters[key] > maximum) {
+        throw new ValidationError(`Legacy ChromaSpiral contains invalid ${key} display state.`);
+      }
+      delete parameters[key];
+    }
+    for (const [key, minimum, maximum] of [['ft', -6, 6], ['lr', 6, 96], ['df', -120, -24]]) {
+      if (!Object.hasOwn(parameters, key)) continue;
+      if (!Number.isFinite(parameters[key]) ||
+          parameters[key] < minimum || parameters[key] > maximum) {
+        throw new ValidationError(`Legacy ChromaSpiral contains invalid ${key} display state.`);
+      }
+      delete parameters[key];
+    }
   }
   if (effectType === 'PitchMeter' && Object.hasOwn(parameters, 'ly')) {
     if (parameters.ly !== 'Vertical' && parameters.ly !== 'Horizontal') {

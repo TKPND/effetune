@@ -144,7 +144,7 @@ test('DSP landing explains the cross-surface workflow without competitor framing
   assert.match(landing, /What stays consistent \{#library-strengths\}/);
   assert.match(
     landing,
-    /Seven analyzers expose opt-in decoded observations/
+    /Eight analyzers expose opt-in decoded observations/
   );
   assert.match(landing, /all other catalog telemetry remains metadata-only/);
   assert.doesNotMatch(landing, /v0\.1 has no public observation API/);
@@ -307,6 +307,7 @@ test('analyzer telemetry documentation matches the public Phase 1 facade', () =>
     repoRoot, 'docs', 'dsp', 'reference', 'compatibility', 'index.md'
   ), 'utf8');
   for (const type of [
+    'ChromaSpiral',
     'LevelMeter',
     'Oscilloscope',
     'PitchMeter',

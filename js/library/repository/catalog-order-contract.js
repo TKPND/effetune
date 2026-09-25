@@ -8,6 +8,7 @@ const number = field => Object.freeze({ field, type: 'number', nulls: 'last' });
 
 export const TRACK_ORDER_SPECS = Object.freeze({
   title: Object.freeze([text('sortTitle')]),
+  path: Object.freeze([text('pathSort'), number('trackSort')]),
   artist: Object.freeze([
     text('sortAlbumArtist'), text('sortAlbum'), number('discSort'),
     number('trackSort'), text('sortTitle')

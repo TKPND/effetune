@@ -7,10 +7,33 @@ export function matchUrlRule(url, rules, presets) {
         const slash = rule.pattern.indexOf('/');
         const host = slash < 0 ? rule.pattern : rule.pattern.slice(0, slash);
         const path = slash < 0 ? '/*' : rule.pattern.slice(slash);
-        const expression = value => '^' + value.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$';
-        if (new RegExp(expression(host), 'i').test(parsed.host) && new RegExp(expression(path)).test(parsed.pathname)) return rule.preset;
+        if (matchesGlob(parsed.host, host, true) && matchesGlob(parsed.pathname, path)) return rule.preset;
     }
     return null;
+}
+
+function matchesGlob(value, pattern, ignoreCase = false) {
+    if (ignoreCase) {
+        value = value.toLowerCase();
+        pattern = pattern.toLowerCase();
+    }
+    const parts = pattern.split('*');
+    if (parts.length === 1) return value === pattern;
+
+    const prefix = parts[0];
+    const suffix = parts[parts.length - 1];
+    if (!value.startsWith(prefix) || !value.endsWith(suffix)) return false;
+    const suffixStart = value.length - suffix.length;
+    let position = prefix.length;
+    if (position > suffixStart) return false;
+    for (let index = 1; index < parts.length - 1; index++) {
+        const part = parts[index];
+        if (!part) continue;
+        const found = value.indexOf(part, position);
+        if (found < 0 || found + part.length > suffixStart) return false;
+        position = found + part.length;
+    }
+    return true;
 }
 
 export function validateRules(rules) {

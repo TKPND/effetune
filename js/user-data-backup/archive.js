@@ -130,7 +130,8 @@ async function readBounded(zip, entries, path, maxBytes, signal) {
 }
 
 function metadataPath(kind, key) {
-    const folder = kind === 'pipeline' || kind === 'plugin' ? `presets/${kind}` : kind === 'measurement' ? 'measurements' : 'ir';
+    const folder = kind === 'pipeline' || kind === 'plugin' || kind === 'visualizer'
+        ? `presets/${kind}` : kind === 'measurement' ? 'measurements' : 'ir';
     return `${folder}/${key}.json`;
 }
 

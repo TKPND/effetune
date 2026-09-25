@@ -106,6 +106,8 @@ function createCanvasContext() {
 
 async function loadPlugin({ telemetryHub = null, audioContext = null } = {}) {
     const source = await fs.readFile(pluginPath, 'utf8');
+    const noteSource = await fs.readFile(path.join(repoRoot, 'plugins', 'analyzer', 'note_spectrogram.js'), 'utf8');
+    const spectrogramSource = await fs.readFile(path.join(repoRoot, 'plugins', 'analyzer', 'spectrogram.js'), 'utf8');
     const context = vm.createContext({
         PluginBase: createPluginBase(),
         document: { createElement: tagName => new FakeElement(tagName) },
@@ -116,6 +118,8 @@ async function loadPlugin({ telemetryHub = null, audioContext = null } = {}) {
             ThemePalette: { get: name => `theme-${name}` }
         }
     });
+    vm.runInContext(noteSource, context, { filename: 'note_spectrogram.js' });
+    vm.runInContext(spectrogramSource, context, { filename: 'spectrogram.js' });
     vm.runInContext(source, context, { filename: pluginPath });
     assert.equal(typeof context.window.PitchMeterPlugin, 'function');
     return new context.window.PitchMeterPlugin();
@@ -160,15 +164,18 @@ test('Pitch Meter exposes its compact parameter contract and UI controls', async
     assert.equal(plugin.processor, 'return data;');
     assert.equal(plugin.constructor.executionCapabilities.requiresWasm, true);
     assert.deepEqual(JSON.parse(JSON.stringify(plugin.getParameters())), {
-        type: 'PitchMeterPlugin', enabled: true, rf: 440, mn: 36, mx: 96, ly: 'Horizontal'
+        type: 'PitchMeterPlugin', enabled: true, rf: 440, mn: 36, mx: 96, ly: 'Horizontal', cl: 'Normal'
     });
 
     plugin.setParameters({ rf: 500, mn: 12, mx: 120, ly: 'Vertical' });
     assert.deepEqual([plugin.rf, plugin.mn, plugin.mx, plugin.ly], [480, 21, 108, 'Vertical']);
+    plugin.setParameters({ cl: 'Heatmap' });
+    assert.equal(plugin.getParameters().cl, 'Heatmap');
     plugin.setParameters({ rf: 'invalid', ly: 'Diagonal' });
     assert.deepEqual([plugin.rf, plugin.ly], [480, 'Vertical']);
     plugin.reset();
     assert.deepEqual([plugin.rf, plugin.mn, plugin.mx, plugin.ly], [440, 36, 96, 'Horizontal']);
+    assert.equal(plugin.cl, 'Normal');
 
     const rows = [];
     plugin.createRadioGroup = (label, options, value, setter, modelKey) => {
@@ -194,11 +201,16 @@ test('Pitch Meter exposes its compact parameter contract and UI controls', async
     };
     plugin.createUI();
     assert.deepEqual(rows.map(row => row.label), [
-        'Layout', 'Reference A4', 'Lowest Note', 'Highest Note'
+        'Color', 'Layout', 'Reference A4', 'Lowest Note', 'Highest Note'
     ]);
-    assert.deepEqual(Array.from(rows[0].options), ['Vertical', 'Horizontal']);
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].options)), [
+        { value: 'Normal', label: 'Normal' },
+        { value: 'Heatmap', label: 'Heatmap' },
+        { value: 'Rainbow', label: 'Note Colors' }
+    ]);
+    assert.deepEqual(Array.from(rows[1].options), ['Vertical', 'Horizontal']);
     assert.deepEqual(
-        [rows[1].minimum, rows[1].maximum, rows[1].step, rows[1].unit],
+        [rows[2].minimum, rows[2].maximum, rows[2].step, rows[2].unit],
         [400, 480, 1, 'Hz']
     );
     assert.deepEqual([graphOptions.maxWidth, graphOptions.aspectRatio, graphOptions.mobileAspectRatio],
@@ -261,6 +273,22 @@ test('Pitch Meter validates telemetry and keeps only ordered frames from the new
     assert.equal(plugin.activeGeneration, 4);
     plugin.handleTelemetry(telemetryFrame({ frameIndex: 12, generation: 3 }));
     assert.equal(plugin.pitchHistory[0], 72, 'late frame from old generation is ignored');
+});
+
+test('Pitch Meter uses Note Spectrogram volume normalization for Heatmap line color', async () => {
+    const plugin = await loadPlugin();
+    plugin.handleTelemetry(telemetryFrame({ frameIndex: 0, levelDb: -12 }));
+    assert.equal(plugin.volumeHistory[0], 1);
+    plugin.handleTelemetry(telemetryFrame({ frameIndex: 1, timeSeconds: 1.01, levelDb: -36 }));
+    const latestColumn = (plugin.writeColumn + 1023) % 1024;
+    assert.equal(plugin.volumeHistory[latestColumn], 0);
+    const palette = plugin._displayPalette();
+    plugin.setParameters({ cl: 'Heatmap' });
+    assert.equal(plugin._lineColor(69, 0, palette), 'rgb(0, 0, 0)');
+    assert.equal(plugin._lineColor(69, 1, palette), 'rgb(191, 191, 191)');
+    plugin.setParameters({ cl: 'Rainbow' });
+    assert.equal(plugin._lineColor(69, 0, palette), 'rgb(129, 107, 168)');
+    assert.equal(plugin.volumeHistory[0], 1, 'changing color retains history');
 });
 
 test('Pitch Meter subscribes to frame 26 and keeps horizontal labels upright', async () => {

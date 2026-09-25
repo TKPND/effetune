@@ -1,8 +1,8 @@
 EffeTune Rolling PCM Decoder Worker
 
-Generated from mediabunny 1.59.0.
+Generated from mediabunny 1.60.0.
 Source: https://github.com/Vanilagy/mediabunny
-Bundle SHA-256: ca6bc5c7f34a9afd354541414a5f3bbf2b215cc7bea264550e0530667f55008d
+Bundle SHA-256: 24baca12bdc9508c4230890835cd849b45559c0f7e3529b230443d2454c90103
 
 mediabunny license:
 

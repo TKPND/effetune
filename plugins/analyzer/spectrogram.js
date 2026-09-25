@@ -38,8 +38,13 @@ const SPECTROGRAM_AXIS_COLOR = '#fff'; // theme-allow: Fixed axis title on the S
 class SpectrogramPlugin extends PluginBase {
     constructor() {
         super('Spectrogram', 'Real-time spectrogram analyzer');
-        
+        this.initializeDisplayState();
+        this.registerProcessor(SpectrogramPlugin.processorFunction);
+    }
+
+    initializeDisplayState() {
         // Initialize parameters
+        this.cl = 'Heatmap';
         this.dr = -96;
         this.pt = 12;  // exponent for FFT size (2^pt)
         this.sc = 'log';
@@ -113,8 +118,6 @@ class SpectrogramPlugin extends PluginBase {
         // Store event listeners for cleanup
         this.boundEventListeners = new Map();
 
-        // Register processor function (used e.g. in an AudioWorklet)
-        this.registerProcessor(SpectrogramPlugin.processorFunction);
 
         this.observer = null;
         this.resizeGraphDisposer = null;
@@ -243,6 +246,13 @@ class SpectrogramPlugin extends PluginBase {
         return y < 0 ? 0 : (y > 255 ? 255 : y);
     }
 
+    displayRowToFrequency(row) {
+        const position = 1 - row / (SPECTROGRAM_CELL_COUNT - 1);
+        return this.sc === 'linear'
+            ? SPECTROGRAM_MIN_DISPLAY_FREQ + position * SPECTROGRAM_DISPLAY_FREQ_RANGE
+            : 10 ** (SPECTROGRAM_LOG_MIN_DISPLAY_FREQ + position * SPECTROGRAM_LOG_DISPLAY_FREQ_RANGE);
+    }
+
     displayRowToCanonicalRow(row) {
         if (this.sc !== 'linear') return row;
         return SPECTROGRAM_LINEAR_TO_CANONICAL_ROW[row];
@@ -311,6 +321,14 @@ class SpectrogramPlugin extends PluginBase {
         this.updateParameters();
     }
 
+    setColor(value) {
+        if (!['Normal', 'Heatmap'].includes(value) || value === this.cl) return;
+        this.cl = value;
+        this.spectrogramColorLut = this.createSpectrogramColorLut();
+        this.repaintSpectrogramHistory();
+        this.updateParameters();
+    }
+
     resetHqDisplay() {
         // Retain the received watermark: parameter changes can coalesce while audio is paused.
         this.hqFrameIndex = -1;
@@ -336,6 +354,7 @@ class SpectrogramPlugin extends PluginBase {
         this.spectrogramBuffer.fill(-144);
         this.resetDspSpectrogramHistory();
         this.setFrequencyScale('log');
+        this.setColor('Heatmap');
         this.setKeyboardVisible(false);
         this.clearSpectrogramImage();
         this.prevTime = null;
@@ -349,6 +368,7 @@ class SpectrogramPlugin extends PluginBase {
             enabled: this.enabled,
             dr: this.dr,
             pt: this.pt,
+            cl: this.cl,
             kb: this.kb,
             sc: this.sc,
             hq: this.sc === 'log-hq'
@@ -359,6 +379,7 @@ class SpectrogramPlugin extends PluginBase {
         if (params.enabled !== undefined) this.enabled = params.enabled;
         if (params.dr !== undefined) this.setDBRange(params.dr);
         if (params.pt !== undefined) this.setPoints(params.pt);
+        if (params.cl !== undefined) this.setColor(params.cl);
         if (params.kb !== undefined) this.setKeyboardVisible(params.kb);
         if (params.sc !== undefined) this.setFrequencyScale(params.sc);
         else if (params.hq === true) this.setFrequencyScale('log-hq');
@@ -548,7 +569,7 @@ class SpectrogramPlugin extends PluginBase {
             data[index] = 0;
             data[index + 1] = 0;
             data[index + 2] = 0;
-            data[index + 3] = 255;
+            data[index + 3] = this.displayOptions?.transparent ? 0 : 255;
         }
         this.tempCtx?.putImageData(this.imageDataCache, 0, 0);
     }
@@ -666,6 +687,7 @@ class SpectrogramPlugin extends PluginBase {
             this.spectrogramBuffer[y * spectroWidth + (spectroWidth - 1)] = dbValue;
         }
         if (this.imageDataCache) {
+            const frequencyColors = this.displayOptions?.frequencyColorLut;
             for (let y = 0; y < spectroHeight; y++) {
                 const sourceRow = this.displayRowToCanonicalRow(y);
                 const dbValue = this.sampleCanonicalRow(
@@ -675,8 +697,14 @@ class SpectrogramPlugin extends PluginBase {
                     spectroWidth
                 );
                 const offset = (y * spectroWidth + spectroWidth - 1) * 4;
-                this.writeDbColor(this.imageDataCache.data, offset, dbValue);
-                this.imageDataCache.data[offset + 3] = 255;
+                const intensity = Math.round(Math.max(0, Math.min(1, 1 - dbValue / this.dr)) * 255);
+                if (this.cl === 'Heatmap' && !frequencyColors &&
+                    !this.displayOptions?.heatmapColorLut) {
+                    this.writeDbColor(this.imageDataCache.data, offset, dbValue);
+                    this.imageDataCache.data[offset + 3] = this.displayOptions?.transparent ? intensity : 255;
+                } else {
+                    this.writeColorPixel(this.imageDataCache.data, offset, intensity, y, frequencyColors);
+                }
             }
         }
         return;
@@ -732,6 +760,16 @@ class SpectrogramPlugin extends PluginBase {
         container.appendChild(pointsRow);
 
         container.appendChild(this.createRadioGroup(
+            'Color',
+            [
+                { value: 'Normal', label: 'Normal' },
+                { value: 'Heatmap', label: 'Heatmap' }
+            ],
+            this.cl,
+            value => this.setColor(value), 'cl'
+        ));
+
+        container.appendChild(this.createRadioGroup(
             'Frequency Scale',
             [
                 { value: 'log', label: 'Log' },
@@ -761,20 +799,8 @@ class SpectrogramPlugin extends PluginBase {
         this.resizeGraphDisposer = dispose;
         this.canvasCtx = this.canvas.getContext('2d', { alpha: false });
 
-        this.tempCanvas = document.createElement('canvas');
-        this.tempCanvas.width = 1024; // Width of spectrogram data
-        this.tempCanvas.height = 256; // Height of spectrogram data
-        this.tempCtx = this.tempCanvas.getContext('2d');
-        this.imageDataCache = this.tempCtx.createImageData(1024, 256);
-        const data = this.imageDataCache.data; // Fill initial cache with black
-        for (let i = 0, len = data.length; i < len; i += 4) { data[i]=0; data[i+1]=0; data[i+2]=0; data[i+3]=255; }
-        if (this.dspSpectrogramActive) {
-            this.paintDspSpectrogramImage();
-        } else {
-            this.paintLegacySpectrogramImage();
-        }
-        this.tempCtx.putImageData(this.imageDataCache, 0, 0);
-        
+        this.initializeDisplayCanvas(this.canvas);
+
         container.appendChild(graphContainer); // Add graph after controls
 
         if (this.observer == null) {
@@ -794,6 +820,24 @@ class SpectrogramPlugin extends PluginBase {
         });
 
         return container;
+    }
+
+    initializeDisplayCanvas(canvas) {
+        this.canvas = canvas;
+        this.canvasCtx = canvas.getContext('2d', { alpha: this.displayOptions?.transparent === true });
+        this.tempCanvas = document.createElement('canvas');
+        this.tempCanvas.width = 1024; // Width of spectrogram data
+        this.tempCanvas.height = 256; // Height of spectrogram data
+        this.tempCtx = this.tempCanvas.getContext('2d');
+        this.imageDataCache = this.tempCtx.createImageData(1024, 256);
+        const data = this.imageDataCache.data; // Fill initial cache with black
+        for (let i = 0, len = data.length; i < len; i += 4) { data[i]=0; data[i+1]=0; data[i+2]=0; data[i+3]=255; }
+        if (this.dspSpectrogramActive) {
+            this.paintDspSpectrogramImage();
+        } else {
+            this.paintLegacySpectrogramImage();
+        }
+        this.tempCtx.putImageData(this.imageDataCache, 0, 0);
     }
 
     handleIntersect(entries) {
@@ -864,7 +908,8 @@ class SpectrogramPlugin extends PluginBase {
         super.cleanup();
     }
 
-    createSpectrogramColorLut() {
+    static getHeatmapLuts() {
+        if (this.heatmapLuts) return this.heatmapLuts;
         const lut = new Uint8ClampedArray(256 * 3);
         for (let intensity = 0; intensity < 256; intensity++) {
             const normalized = intensity / 255;
@@ -891,22 +936,79 @@ class SpectrogramPlugin extends PluginBase {
                 (lower.b + (upper.b - lower.b) * position) * SPECTROGRAM_COLOR_BRIGHTNESS
             );
         }
+        const rgba = new Uint8ClampedArray(256 * 4);
+        for (let intensity = 0; intensity < 256; intensity++) {
+            const rgbOffset = intensity * 3, rgbaOffset = intensity * 4;
+            const maximum = Math.max(lut[rgbOffset], lut[rgbOffset + 1], lut[rgbOffset + 2]);
+            const alpha = Math.min(1, maximum / (255 * SPECTROGRAM_COLOR_BRIGHTNESS));
+            for (let channel = 0; channel < 3; channel++)
+                rgba[rgbaOffset + channel] = alpha ? Math.round(lut[rgbOffset + channel] / alpha) : 0;
+            rgba[rgbaOffset + 3] = Math.round(alpha * 255);
+        }
+        const rgbColors = Array.from({ length: 256 }, (_, index) =>
+            lut.subarray(index * 3, index * 3 + 3));
+        this.heatmapLuts = { rgb: lut, rgba, rgbColors };
+        return this.heatmapLuts;
+    }
+
+    createSpectrogramColorLut() {
+        if (this.displayOptions?.colorLut) return this.displayOptions.colorLut;
+        if (this.cl === 'Heatmap') return SpectrogramPlugin.getHeatmapLuts().rgb;
+        const palette = this.displayOptions?.themePalette ?? window.ThemePalette;
+        const background = palette?.get('graph-bg-deep')?.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+        const trace = palette?.get('graph-trace')?.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 255, 0];
+        this.colorThemeSignature = `${background.join(',')}|${trace.join(',')}`;
+        const lut = new Uint8ClampedArray(256 * 3);
+        for (let intensity = 0; intensity < 256; intensity++) {
+            const strength = intensity / 255;
+            for (let channel = 0; channel < 3; channel++) {
+                lut[intensity * 3 + channel] = Math.round(background[channel] +
+                    (trace[channel] - background[channel]) * strength);
+            }
+        }
         return lut;
+    }
+
+    writeColorPixel(pixels, offset, intensity, row, frequencyColors) {
+        if (this.writeHeatmapPixel(pixels, offset, intensity)) return;
+        const colors = frequencyColors || this.spectrogramColorLut;
+        const colorOffset = (frequencyColors ? row : intensity) * 3;
+        if (frequencyColors && !this.displayOptions?.transparent) {
+            const strength = intensity / 255;
+            for (let channel = 0; channel < 3; channel++) {
+                const background = this.spectrogramColorLut[channel];
+                pixels[offset + channel] = Math.round(background +
+                    (colors[colorOffset + channel] - background) * strength);
+            }
+        } else {
+            pixels[offset] = colors[colorOffset];
+            pixels[offset + 1] = colors[colorOffset + 1];
+            pixels[offset + 2] = colors[colorOffset + 2];
+        }
+        pixels[offset + 3] = this.displayOptions?.transparent ? intensity : 255;
+    }
+
+    writeHeatmapPixel(pixels, offset, intensity) {
+        const lut = this.displayOptions?.heatmapColorLut;
+        if (!lut) return false;
+        const source = intensity * 4;
+        pixels[offset] = lut[source];
+        pixels[offset + 1] = lut[source + 1];
+        pixels[offset + 2] = lut[source + 2];
+        pixels[offset + 3] = lut[source + 3];
+        return true;
     }
 
     paintDspSpectrogramColumn(column, intensities) {
         if (!this.imageDataCache || !this.spectrogramColorLut) return;
         const pixels = this.imageDataCache.data;
+        const frequencyColors = this.displayOptions?.frequencyColorLut;
         for (let row = 0; row < SPECTROGRAM_CELL_COUNT; row++) {
             const sourceRow = this.displayRowToCanonicalRow(row);
             const intensity = Math.round(this.sampleCanonicalRow(intensities, sourceRow));
-            const colorOffset = intensity * 3;
             const pixelOffset =
                 (row * SPECTROGRAM_HISTORY_WIDTH + column) * 4;
-            pixels[pixelOffset] = this.spectrogramColorLut[colorOffset];
-            pixels[pixelOffset + 1] = this.spectrogramColorLut[colorOffset + 1];
-            pixels[pixelOffset + 2] = this.spectrogramColorLut[colorOffset + 2];
-            pixels[pixelOffset + 3] = 255;
+            this.writeColorPixel(pixels, pixelOffset, intensity, row, frequencyColors);
         }
         this.tempCtx?.putImageData(
             this.imageDataCache,
@@ -922,6 +1024,7 @@ class SpectrogramPlugin extends PluginBase {
     paintLegacySpectrogramImage() {
         if (!this.imageDataCache || !this.spectrogramBuffer) return;
         const pixels = this.imageDataCache.data;
+        const frequencyColors = this.displayOptions?.frequencyColorLut;
         for (let row = 0; row < SPECTROGRAM_CELL_COUNT; row++) {
             const sourceRow = this.displayRowToCanonicalRow(row);
             for (let column = 0; column < SPECTROGRAM_HISTORY_WIDTH; column++) {
@@ -933,8 +1036,14 @@ class SpectrogramPlugin extends PluginBase {
                 );
                 const pixelOffset =
                     (row * SPECTROGRAM_HISTORY_WIDTH + column) * 4;
-                this.writeDbColor(pixels, pixelOffset, dbValue);
-                pixels[pixelOffset + 3] = 255;
+                const intensity = Math.round(Math.max(0, Math.min(1, 1 - dbValue / this.dr)) * 255);
+                if (this.cl === 'Heatmap' && !frequencyColors &&
+                    !this.displayOptions?.heatmapColorLut) {
+                    this.writeDbColor(pixels, pixelOffset, dbValue);
+                    pixels[pixelOffset + 3] = this.displayOptions?.transparent ? intensity : 255;
+                } else {
+                    this.writeColorPixel(pixels, pixelOffset, intensity, row, frequencyColors);
+                }
             }
         }
     }
@@ -945,6 +1054,7 @@ class SpectrogramPlugin extends PluginBase {
             return;
         }
         const pixels = this.imageDataCache.data;
+        const frequencyColors = this.displayOptions?.frequencyColorLut;
         for (let row = 0; row < SPECTROGRAM_CELL_COUNT; row++) {
             const sourceRow = this.displayRowToCanonicalRow(row);
             for (let column = 0; column < SPECTROGRAM_HISTORY_WIDTH; column++) {
@@ -954,13 +1064,9 @@ class SpectrogramPlugin extends PluginBase {
                     column,
                     SPECTROGRAM_HISTORY_WIDTH
                 ));
-                const colorOffset = intensity * 3;
                 const pixelOffset =
                     (row * SPECTROGRAM_HISTORY_WIDTH + column) * 4;
-                pixels[pixelOffset] = this.spectrogramColorLut[colorOffset];
-                pixels[pixelOffset + 1] = this.spectrogramColorLut[colorOffset + 1];
-                pixels[pixelOffset + 2] = this.spectrogramColorLut[colorOffset + 2];
-                pixels[pixelOffset + 3] = 255;
+                this.writeColorPixel(pixels, pixelOffset, intensity, row, frequencyColors);
             }
         }
     }
@@ -1023,7 +1129,7 @@ class SpectrogramPlugin extends PluginBase {
     }
 
     drawKeyboard(ctx, width, height, gutter, dpr, labelFontSize) {
-        const background = (window.ThemePalette?.get('graph-bg-deep') ?? '')
+        const background = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '')
             .match(/[\d.]+/g)?.slice(0, 3).map(Number);
         if (!background || background.length !== 3) return;
         const light = background.every(channel => channel > 127);
@@ -1040,7 +1146,7 @@ class SpectrogramPlugin extends PluginBase {
         // A continuous white base keeps subpixel keys aligned without gaps.
         ctx.fillStyle = whiteColor;
         ctx.fillRect(edge, 0, gutter, height);
-        ctx.strokeStyle = (window.ThemePalette?.get('graph-label') ?? '');
+        ctx.strokeStyle = ((this.displayOptions?.themePalette ?? window.ThemePalette)?.get('graph-label') ?? '');
         ctx.lineWidth = dpr;
         for (const key of keys) {
             if (key.black || key.whiteStart <= 0 || key.whiteStart >= height) continue;
@@ -1075,27 +1181,42 @@ class SpectrogramPlugin extends PluginBase {
             const label = String(key.midi / 12 - 1);
             const center = (key.whiteStart + key.whiteEnd) / 2;
             if (center <= 0 || center >= height) continue;
-            ctx.strokeText(label, labelRight, center);
-            ctx.fillText(label, labelRight, center);
+            (this.displayOptions?.textContext ?? ctx).strokeText(label, labelRight, center);
+            (this.displayOptions?.textContext ?? ctx).fillText(label, labelRight, center);
         }
         ctx.restore();
     }
 
     drawKeyboardGrid(ctx, plotWidth, height, dpr) {
         ctx.lineWidth = dpr;
+        ctx.strokeStyle = this.displayOptions?.visualizerAxisLabels
+            ? ((this.displayOptions.themePalette ?? window.ThemePalette)?.get('graph-grid-strong') ?? SPECTROGRAM_KEYBOARD_GRID_COLOR)
+            : SPECTROGRAM_KEYBOARD_GRID_COLOR;
         for (const key of this.getKeyboardGeometry(height)) {
             const pitchClass = (key.midi % 12 + 12) % 12;
             if (pitchClass !== 0) continue;
-            ctx.strokeStyle = SPECTROGRAM_KEYBOARD_GRID_COLOR;
             ctx.beginPath();
             ctx.moveTo(0, key.end);
             ctx.lineTo(plotWidth, key.end);
-            ctx.stroke();
+            if (this.displayOptions?.showAxes !== false) ctx.stroke();
         }
     }
 
     drawGraph(now = performance.now()) {
+        if (this.displayOptions?.deferDraw) return;
         if (!this.canvasCtx || !this.imageDataCache || !this.tempCtx || !this.tempCanvas) return;
+
+        if (this.cl !== 'Heatmap' && !this.displayOptions?.colorLut) {
+            const palette = this.displayOptions?.themePalette ?? window.ThemePalette;
+            const background = palette?.get('graph-bg-deep')?.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+            const trace = palette?.get('graph-trace')?.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 255, 0];
+            if (`${background.join(',')}|${trace.join(',')}` !== this.colorThemeSignature) {
+                this.spectrogramColorLut = this.createSpectrogramColorLut();
+                if (this.dspSpectrogramActive) this.paintDspSpectrogramImage();
+                else this.paintLegacySpectrogramImage();
+                this.tempCtx.putImageData(this.imageDataCache, 0, 0);
+            }
+        }
 
         const ctx = this.canvasCtx;
         const targetWidth = this.canvas.width;  // Display canvas width
@@ -1103,13 +1224,15 @@ class SpectrogramPlugin extends PluginBase {
         const dpr = this.graphDpr || 1;
         const isNarrow = this.graphCssWidth < 500;
         const frequencyLabelFontSize = (isNarrow ? 11 : 12) * dpr;
-        const keyboardGutter = this.kb && targetWidth > 28 * dpr ? 28 * dpr : 0;
+        const keyboardDepth = 28 * (this.displayOptions?.preserveKeyboardAspect ? targetHeight / 480 : dpr);
+        const keyboardGutter = this.kb && targetWidth > keyboardDepth ? keyboardDepth : 0;
         const plotWidth = targetWidth - keyboardGutter;
         
         const background = this.spectrogramColorLut;
         const graphBackgroundColor = `rgb(${background[0]}, ${background[1]}, ${background[2]})`; // theme-allow: Spectrogram colormap background.
         ctx.fillStyle = graphBackgroundColor;
-        ctx.fillRect(0, 0, plotWidth, targetHeight);
+        if (this.displayOptions?.transparent) ctx.clearRect(0, 0, targetWidth, targetHeight);
+        else ctx.fillRect(0, 0, plotWidth, targetHeight);
         
         if (keyboardGutter) {
             ctx.save();
@@ -1121,51 +1244,60 @@ class SpectrogramPlugin extends PluginBase {
         this.scrollAnchorPending = false;
         const period = this.spectrogramColumnPeriod;
         const pixelsPerSecond = period > 0 ? plotWidth / (SPECTROGRAM_HISTORY_WIDTH * period) : 0;
-        if (displayTime !== null && period > 0) {
-            if (!this.dspSpectrogramActive) this.tempCtx.putImageData(this.imageDataCache, 0, 0);
-            const count = this.spectrogramColumnCount;
-            const start = this.dspSpectrogramActive
-                ? (this.spectrogramWriteColumn - count + SPECTROGRAM_HISTORY_WIDTH) % SPECTROGRAM_HISTORY_WIDTH
-                : SPECTROGRAM_HISTORY_WIDTH - count;
-            ctx.imageSmoothingEnabled = true;
-            // Consecutive analysis columns share one draw call (two at ring wrap).
-            // Keep missing analysis intervals empty instead of compressing time.
-            for (let index = 0; index < count - 1;) {
-                const column = (start + index) % SPECTROGRAM_HISTORY_WIDTH;
-                const time = this.spectrogramColumnTimes[column];
-                let run = 1;
-                const tolerance = Math.max(period * 0.001, Math.abs(time) * 2 ** -23);
-                while (index + run < count - 1 && column + run < SPECTROGRAM_HISTORY_WIDTH &&
-                    Math.abs(this.spectrogramColumnTimes[column + run] - time - run * period) <= tolerance) {
-                    run++;
-                }
-                const x = plotWidth + (time - period - displayTime) * pixelsPerSecond;
-                const width = run * period * pixelsPerSecond;
-                if (x < plotWidth && x + width > 0) {
-                    ctx.drawImage(this.tempCanvas, column, 0, run, SPECTROGRAM_CELL_COUNT,
-                        x, 0, width, targetHeight);
-                }
-                index += run;
-            }
-            // Hold the newest measured spectrum at the right edge until another
-            // column arrives, while the timestamped history scrolls underneath.
-            if (count > 0) {
-                const latestColumn = this.dspSpectrogramActive
-                    ? (this.spectrogramWriteColumn + SPECTROGRAM_HISTORY_WIDTH - 1) % SPECTROGRAM_HISTORY_WIDTH
-                    : SPECTROGRAM_HISTORY_WIDTH - 1;
-                const width = (period + displayTime - this.prevTime) * pixelsPerSecond;
-                ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(this.tempCanvas, latestColumn, 0, 1, SPECTROGRAM_CELL_COUNT,
-                    plotWidth - width, 0, width, targetHeight);
+        const drawHistory = ctx => {
+            if (displayTime !== null && period > 0) {
+                if (!this.dspSpectrogramActive) this.tempCtx.putImageData(this.imageDataCache, 0, 0);
+                const count = this.spectrogramColumnCount;
+                const start = this.dspSpectrogramActive
+                    ? (this.spectrogramWriteColumn - count + SPECTROGRAM_HISTORY_WIDTH) % SPECTROGRAM_HISTORY_WIDTH
+                    : SPECTROGRAM_HISTORY_WIDTH - count;
                 ctx.imageSmoothingEnabled = true;
+                // Consecutive analysis columns share one draw call (two at ring wrap).
+                // Keep missing analysis intervals empty instead of compressing time.
+                for (let index = 0; index < count - 1;) {
+                    const column = (start + index) % SPECTROGRAM_HISTORY_WIDTH;
+                    const time = this.spectrogramColumnTimes[column];
+                    let run = 1;
+                    const tolerance = Math.max(period * 0.001, Math.abs(time) * 2 ** -23);
+                    while (index + run < count - 1 && column + run < SPECTROGRAM_HISTORY_WIDTH &&
+                        Math.abs(this.spectrogramColumnTimes[column + run] - time - run * period) <= tolerance) {
+                        run++;
+                    }
+                    const x = plotWidth + (time - period - displayTime) * pixelsPerSecond;
+                    const width = run * period * pixelsPerSecond;
+                    if (x < plotWidth && x + width > 0) {
+                        ctx.drawImage(this.tempCanvas, column, 0, run, SPECTROGRAM_CELL_COUNT,
+                            x, 0, width, targetHeight);
+                    }
+                    index += run;
+                }
+                // Hold the newest measured spectrum at the right edge until another
+                // column arrives, while the timestamped history scrolls underneath.
+                if (count > 0) {
+                    const latestColumn = this.dspSpectrogramActive
+                        ? (this.spectrogramWriteColumn + SPECTROGRAM_HISTORY_WIDTH - 1) % SPECTROGRAM_HISTORY_WIDTH
+                        : SPECTROGRAM_HISTORY_WIDTH - 1;
+                    const width = (period + displayTime - this.prevTime) * pixelsPerSecond;
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(this.tempCanvas, latestColumn, 0, 1, SPECTROGRAM_CELL_COUNT,
+                        plotWidth - width, 0, width, targetHeight);
+                    ctx.imageSmoothingEnabled = true;
+                }
             }
-        }
+        };
+        if (this.displayOptions?.drawSignal) this.displayOptions.drawSignal(ctx, drawHistory, { width: plotWidth, height: targetHeight });
+        else drawHistory(ctx);
 
         const frequencyTicks = [];
+        const annotationPalette = this.displayOptions?.visualizerAxisLabels
+            ? (this.displayOptions.themePalette ?? window.ThemePalette) : null;
+        const frequencyLabelColor = annotationPalette?.get('graph-label') ?? SPECTROGRAM_LABEL_COLOR;
+        const gridColor = annotationPalette?.get('graph-grid-subtle') ?? SPECTROGRAM_GRID_COLOR;
+        const axisColor = annotationPalette?.get('text-primary') ?? SPECTROGRAM_AXIS_COLOR;
         if (keyboardGutter) {
             this.drawKeyboardGrid(ctx, plotWidth, targetHeight, dpr);
         } else {
-            ctx.strokeStyle = SPECTROGRAM_GRID_COLOR;
+            ctx.strokeStyle = gridColor;
             ctx.lineWidth = dpr; // Thinner than spectrum analyzer grid for less prominence
 
             // --- Dynamic Frequency Grid for Spectrogram Y-Axis ---
@@ -1188,7 +1320,7 @@ class SpectrogramPlugin extends PluginBase {
                 if (!gridFreqsToDraw.includes(maxDisplayFreq)) gridFreqsToDraw.push(maxDisplayFreq);
                 gridFreqsToDraw = [...new Set(gridFreqsToDraw)].sort((a,b) => a-b);
 
-                ctx.fillStyle = SPECTROGRAM_LABEL_COLOR;
+                ctx.fillStyle = frequencyLabelColor;
                 ctx.font = `${frequencyLabelFontSize}px Arial`; // Consistent font size
                 ctx.textAlign = 'right';
 
@@ -1202,7 +1334,7 @@ class SpectrogramPlugin extends PluginBase {
                     ctx.beginPath();
                     ctx.moveTo(0, yDrawPos);
                     ctx.lineTo(plotWidth, yDrawPos); // Full width grid line
-                    ctx.stroke();
+                    if (this.displayOptions?.showAxes !== false) ctx.stroke();
                 
                     // Draw label, avoid edges
                     if (yDrawPos > 15 * dpr && yDrawPos < targetHeight - 15 * dpr) {
@@ -1217,7 +1349,7 @@ class SpectrogramPlugin extends PluginBase {
         }
 
         // Draw 1-second markers
-        ctx.strokeStyle = SPECTROGRAM_GRID_COLOR;
+        ctx.strokeStyle = gridColor;
         ctx.lineWidth = 2 * dpr;
         const firstSecond = displayTime === null ? 1 : Math.max(0, Math.ceil(displayTime - period * SPECTROGRAM_HISTORY_WIDTH));
         const lastSecond = displayTime === null ? 0 : Math.floor(displayTime);
@@ -1226,30 +1358,30 @@ class SpectrogramPlugin extends PluginBase {
             ctx.beginPath();
             ctx.moveTo(x, targetHeight - (16 * dpr));
             ctx.lineTo(x, targetHeight);
-            ctx.stroke();
+            if (this.displayOptions?.showAxes !== false) ctx.stroke();
         }
 
         // Draw axis labels last so their background-colored outlines stay above the plot.
         ctx.save();
-        ctx.strokeStyle = graphBackgroundColor;
+        ctx.strokeStyle = annotationPalette?.get('graph-bg-deep') ?? graphBackgroundColor;
         ctx.lineWidth = 2 * dpr;
         ctx.lineJoin = 'round';
-        ctx.fillStyle = SPECTROGRAM_AXIS_COLOR; ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
-        ctx.strokeText('Time', plotWidth / 2, targetHeight - (8 * dpr));
-        ctx.fillText('Time', plotWidth / 2, targetHeight - (8 * dpr));
+        ctx.fillStyle = axisColor; ctx.font = `${(isNarrow ? 13 : 14) * dpr}px Arial`; ctx.textAlign = 'center';
+        if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).strokeText('Time', plotWidth / 2, targetHeight - (8 * dpr));
+        if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText('Time', plotWidth / 2, targetHeight - (8 * dpr));
         if (!keyboardGutter) {
             ctx.save();
             ctx.translate((isNarrow ? 18 : 20) * dpr, targetHeight / 2); ctx.rotate(-Math.PI / 2);
-            ctx.strokeText('Frequency (Hz)', 0, 0);
-            ctx.fillText('Frequency (Hz)', 0, 0);
+            if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).strokeText('Frequency (Hz)', 0, 0);
+            if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText('Frequency (Hz)', 0, 0);
             ctx.restore();
         }
-        ctx.fillStyle = SPECTROGRAM_LABEL_COLOR;
+        ctx.fillStyle = frequencyLabelColor;
         ctx.font = `${frequencyLabelFontSize}px Arial`;
         ctx.textAlign = 'right';
         for (const tick of frequencyTicks) {
-            ctx.strokeText(tick.text, tick.x, tick.y);
-            ctx.fillText(tick.text, tick.x, tick.y);
+            if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).strokeText(tick.text, tick.x, tick.y);
+            if (this.displayOptions?.showAxisNumbers !== false) (this.displayOptions?.textContext ?? ctx).fillText(tick.text, tick.x, tick.y);
         }
         ctx.restore();
         if (keyboardGutter) {

@@ -36,6 +36,7 @@ Process up to four Chrome or Edge tabs with separate effect pipelines, URL-based
 - Drag-and-drop interface for building effect chains
 - Expandable effect system with categorized effects
 - Live audio visualization
+- Customizable Visualizer layouts with animated graphs, artwork, and track details
 - Audio pipeline that can be modified in real-time
 - Offline audio file processing with current effect chain
 - Music Library for browsing local subfolders, metadata, and playlists
@@ -60,6 +61,7 @@ Before using EffeTune, you'll need to set up your audio routing. Here's how to c
    - Or select Open music file... from the File menu (desktop app only)
    - Or drag the music file into the window
 - For player-only use, set Input Device to None (music file player only) in Audio Configuration to avoid using a live audio input
+- Open the playback speed button next to Shuffle to show its popup. Choose one of the nine presets, or use the horizontal slider or number field to set a speed from 0.25x to 4x in 0.01x steps. Playback pitch is preserved.
 - In the desktop app, choose **View > Mini Player** (Ctrl/Cmd+Shift+M) or use the player’s mini-player button to keep playback controls in a compact window. The pin button keeps it above other windows.
 
 ### Streaming Service Setup
@@ -97,7 +99,7 @@ To use EffeTune with CD players, network players, or other physical sources:
 
 ### Application Settings
 
-Open **Settings > Config...** to choose **Language**, set **Startup view:**, and configure **Effect Pipeline at startup:**. **Startup view:** can be **Effect Pipeline (Default)** or **Music Library**. When you choose Music Library, use its list to select **Tracks**, **Albums**, **Artists**, **Genres**, **Subfolders**, **Folders**, or **Playlists** as the first library view. Use **Theme** to choose the app colors: Graphite (default), Paper, Midnight, Ember, or Mint.
+Open **Settings > Config...** to choose **Language**, set **Startup view:**, and configure **Effect Pipeline at startup:**. **Startup view:** can be **Effect Pipeline (Default)**, **Music Library**, or **Visualizer**. When you choose Music Library, use its list to select **Tracks**, **Albums**, **Artists**, **Genres**, **Subfolders**, **Folders**, or **Playlists** as the first library view. Use **Theme** to choose the app colors: Graphite (default), Paper, Midnight, Ember, or Mint.
 
 Supported desktop builds can also be controlled by OpenHome apps on the same local network. This is off by default; see [OpenHome Remote Control](docs/music-library.md#openhome-remote-control-desktop-app) for setup, network access, compatibility, and limitations.
 
@@ -159,7 +161,7 @@ The existing `.effetune_preset` file import, export, and sharing features contin
 
 ### Backing Up and Restoring Saved Data
 
-Open **Settings > Backup / Restore** to move saved pipeline presets, effect presets, impulse responses, and measurements between the web app, desktop app, and browser extension. Select individual items or whole categories. A preset automatically selects data that it needs; clearing required data also clears presets that depend on it.
+Open **Settings > Backup / Restore** to move saved pipeline presets, effect presets, impulse responses, and measurements between the web app, desktop app, and browser extension. Named Visualizer presets can also be backed up in the web and desktop apps; the current working layout is not included. Select individual items or whole categories. A preset automatically selects data that it needs; clearing required data also clears presets that depend on it.
 
 **Include measurement data** and **Include impulse response data** are on by default, making the backup self-contained. Turning either option off stores references for that type. Those references can be restored only when matching data already exists at the destination. Restored impulse responses go into EffeTune's managed **Impulse Response Library**. Existing identical data is reused, while a different item with the same name is added under a numbered name. The current pipeline, volume, selected preset, device settings, and extension URL rules are not changed.
 
@@ -287,9 +289,13 @@ Saved measurements with impulse-response data show a normalized **Impulse Respon
 
 To inspect the active pipeline's Frequency, Phase, Min Group Delay, Excess Group Delay, and Impulse responses—including up to four selected outputs and optional saved speaker responses—see the [Pipeline Analyzer guide](docs/pipeline-analyzer.md).
 
+### Visualizer
+
+Open **Visualizer** from the PC header, the mobile **Player** tab, or the desktop **View** menu. Choose a built-in layout or select **Edit** to arrange audio graphs, artwork, and track information. Changes take effect immediately and return at the next launch; use the preset dialog to save a named copy. Hover over or tap the display and select **⛶** to fill the app window. See the [Visualizer guide](docs/visualizer.md) for editing, effects, and display options.
+
 ### Gapless Playback
 
-**Gapless Playback** is on by default and can be changed in **Audio Configuration**. When it is on, compatible local tracks play without a gap; support is limited by the file format and the current browser or app environment. Unsupported formats and some mobile environments automatically use a memory-safe fallback, so a short gap may still occur. Turning it off prioritizes lower memory use and stability, and may add a short gap between tracks. Changing the setting does not interrupt the current track.
+**Gapless Playback** is on by default and can be changed in **Audio Configuration**. When it is on, compatible local tracks play without a gap; support is limited by the file format and the current browser or app environment. Unsupported formats and some mobile environments automatically use a memory-safe fallback, so a short gap may still occur. Turning it off prioritizes lower memory use and stability, and may add a short gap between tracks. Changing the setting does not interrupt the current track. Gapless playback is unavailable while playback speed is not 1x; changing speed during a track that was playing gaplessly restarts it from the same position with a brief interruption.
 
 ## Common Effect Combinations
 
@@ -328,9 +334,10 @@ If the problem persists, report it through [GitHub Issues](https://github.com/Fr
 
 ## Available Effects
 
-| Category | Effect | Description | Documentation |
-|-----------|--------|-------------|---------------|
-| Analyzer  | Level Meter | Displays audio level with peak hold | [Details](docs/plugins/analyzer.md#level-meter) |
+  | Category | Effect | Description | Documentation |
+  |-----------|--------|-------------|---------------|
+  | Analyzer  | Chroma Spiral | Shows frequency components by note and octave on a spiral | [Details](docs/plugins/analyzer.md#chroma-spiral) |
+  | Analyzer  | Level Meter | Displays audio level with peak hold | [Details](docs/plugins/analyzer.md#level-meter) |
 | Analyzer  | Note Spectrogram | Shows estimated pitches over time as a scrolling piano roll | [Details](docs/plugins/analyzer.md#note-spectrogram) |
 | Analyzer  | Oscilloscope | Real-time waveform visualization | [Details](docs/plugins/analyzer.md#oscilloscope) |
 | Analyzer  | Pitch Meter | Tracks one fundamental pitch and its tuning over time | [Details](docs/plugins/analyzer.md#pitch-meter) |

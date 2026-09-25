@@ -1,0 +1,65 @@
+---
+title: "Guia do Visualizer - EffeTune"
+description: "Organize gráficos animados, capa do álbum e informações da faixa."
+lang: pt
+---
+
+# Visualizer
+
+O Visualizer mostra o áudio processado pelo EffeTune em gráficos que você pode combinar com a capa e os dados da faixa. Mudar a aparência não altera o som.
+
+## Abrir e ampliar
+
+No computador, abra **Visualizer** pelo cabeçalho; no celular, pela aba **Player**; no aplicativo desktop, também pelo menu **Visualizar > Visualizer**. Você pode escolhê-lo como tela inicial em **Configuração...**. Os presets incluídos são agrupados nas proporções 16:9, 21:9, 4:3, 1:1 e 9:16. Selecionar um deles substitui o layout atual. Os gráficos mostram o sinal após os efeitos, imediatamente antes da saída de áudio.
+
+Cada proporção oferece oito designs, totalizando 40 layouts. **Stereo Workbench** compara os canais esquerdo e direito, enquanto **Phase & Level** destaca a posição estéreo e os níveis. **Frequency Timeline** e **Transient Lab** ajudam a observar como o conteúdo de frequência muda; **Harmonic Atlas** e **Practice Roll** mostram a atividade das notas detectadas. **Album Cinema** e **Pulse Geometry** privilegiam a experiência visual.
+
+Passe o cursor ou toque na imagem para revelar **⛶**. O botão preenche a janela mantendo as proporções; as bordas podem ser cortadas. Pressione **⛶** novamente, **Esc** ou Voltar no celular para sair. No aplicativo desktop, ao entrar no Mini Player com o Visualizer aberto, a imagem aparece acima dos controles de reprodução.
+
+## Editar o layout
+
+Selecione **Edit**. As mudanças aparecem imediatamente e são restauradas na próxima abertura do EffeTune. Para guardar uma cópia com nome, use **Salvar** no diálogo de presets; editar não substitui um preset salvo.
+
+No modo Edit, o painel esquerdo reúne as configurações gerais, a lista de itens e **Qualidade**. A tela fica no centro, e os controles do item selecionado à direita.
+
+- Escolha a proporção, a cor de fundo ou uma imagem de fundo; imagens grandes são reduzidas na importação. Adicione **Oscilloscope**, **Spectrum**, **Spectrogram**, **Stereo**, **Level Meter**, **Notes**, **Chroma Spiral**, **Artwork**, **Title**, **Album** ou **Artist**. Arraste para mover e use os cantos para redimensionar. A grade ajuda a alinhar; os controles de frente/trás mudam a ordem de sobreposição. Selecione um item e pressione Ctrl+D (Cmd+D no Mac) para duplicá-lo com um deslocamento de uma célula da grade, ou arraste-o com Alt para criar e posicionar uma cópia.
+- Em **Cores do tema**, altere a cor base e o preenchimento suave do gráfico, as grades fina e principal, os rótulos, os títulos dos eixos e as marcas do medidor deste layout sem mudar a paleta do sinal. As cores que você não alterar usam as do tema escuro padrão, independentemente do tema atual do EffeTune. Use **Usar cores padrão** para restaurar as cores iniciais.
+- Escolha o canal de áudio de um gráfico. O padrão usa as saídas 1–2; um canal individual aparece nos dois lados, exceto no Level Meter, que mostra uma só barra. Também é possível inverter os eixos horizontal e vertical.
+- Em **Modo de cor**, **Cor sólida** é a opção inicial e tem seu próprio seletor. Ao adicionar um item, a cor sólida inicial usa a cor de desenho do tema escuro padrão. **Gradiente** permite mover os pontos de cor ou escolher entre 23 presets. **Hue** muda suas cores com o tempo e **Scroll** desloca o gradiente; ajuste a velocidade de cada um. A troca de modo preserva a cor sólida e as configurações do gradiente.
+- Ajuste cada gráfico em **Itens**. Em **Title**, **Album** e **Artist**, defina separadamente o tamanho do texto, a fonte, o alinhamento, **Negrito** e **Itálico**. Se a fonte escolhida não estiver disponível no dispositivo ou navegador, outra fonte será usada. A capa pode ter cantos arredondados. Os controles dos gráficos são explicados a seguir.
+
+## Ler e ajustar os gráficos
+
+**Spectrum** mostra o nível por frequência e os picos recentes, que diminuem aos poucos. **Orientação** organiza as frequências da esquerda para a direita em **Horizontal** (padrão), ou dos graves embaixo aos agudos em cima em **Vertical**; o teclado passa para a esquerda e os níveis mais altos se estendem para a direita. **Exibição** alterna entre **Linha** e **Barra**. Em **Barra**, **Quantizar** (ativado por padrão) ajusta a altura das barras a blocos inteiros e mostra o pico em um bloco, sem alterar os níveis medidos. Mais **Pontos** distinguem frequências próximas, mas tornam a resposta mais lenta. **Escala de frequência** oferece **Log**, **Log (HQ)** para analisar os graves com mais detalhe e **Linear**, que reserva espaços iguais para intervalos iguais de frequência. Uma **Faixa em dB** mais negativa revela sons mais baixos. **Teclado** acrescenta uma referência de notas; o teclado e as guias começam desativados. **Eixos e grade** e **Rótulos e valores dos eixos** mudam apenas as guias.
+
+**Spectrogram** coloca as frequências na vertical e desloca as novas medições ao longo do tempo. As faixas mais fortes se destacam na paleta escolhida. **Pontos**, **Escala de frequência**, **Faixa em dB**, **Teclado** e os controles dos eixos têm a mesma função que em Spectrum. O valor inicial é **Log (HQ)** com 4096 pontos. Aumentar os pontos revela mais detalhes, mas demora mais para refletir mudanças no som.
+
+**Stereo** mostra juntos os canais esquerdo e direito. O traço e o contorno dos picos indicam amplitude e nível; os indicadores de correlação e balanço mostram a semelhança entre os canais e o lado mais forte. **Janela** define quanto áudio recente aparece, de 10 a 1000 ms. Uma janela curta acompanha transientes; uma longa dá uma imagem mais estável. Os controles dos eixos exibem ou ocultam as guias. **Correlação** e **Equilíbrio** mostram ou ocultam cada indicador separadamente.
+
+**Level Meter** mostra cada canal numa barra de −96 a 0 dB por padrão. **Faixa em dB** define o limite inferior entre −144 e −48 dB; o padrão é −96 dB. **Orientação** muda as barras de **Horizontal** (padrão) para **Vertical**. Uma linha fina mantém o pico recente por um segundo, e **OVERLOAD** avisa sobre saturação por cinco segundos. **Eixos e grade** controla as linhas em dB; **Rótulos e valores dos eixos** controla seus valores. **Valores de nível** mostra separadamente as leituras de pico mantidas. As três opções começam desligadas, mas **OVERLOAD** continua visível. As barras oferecem **Cor sólida**, **Gradiente** e **Mapa de calor**.
+
+**Oscilloscope** traça a forma de onda capturada do canal selecionado ao longo do tempo. O eixo horizontal mostra o tempo em milissegundos e o vertical, a amplitude. **Tempo de exibição** define o intervalo entre 1 e 100 ms (10 ms por padrão): um intervalo curto revela mudanças breves e um longo mostra mais da onda. **Modo de disparo** usa **Automático** por padrão e atualiza o traço mesmo sem disparo; **Normal** mantém o último traço até o sinal cruzar o **Nível de disparo** na direção escolhida em **Borda de disparo**. O nível define o ponto entre −1 e 1 (0 padrão); a borda pode ser **Ascendente** (padrão) ou **Descendente**. **Tempo de espera** define o mínimo entre disparos: 0,1 a 10 ms (0,1 ms padrão). **Nível de exibição** define a escala entre −96 e 0 dB (0 padrão); valores menores ampliam as formas de onda de baixa amplitude. **Deslocamento vertical** move a onda entre −1 e 1 (0 padrão); valores positivos a movem para cima e negativos para baixo. **Eixos e grade** e **Rótulos e valores dos eixos** exibem guias e rótulos; ambos começam desativados. Se o traço não estabilizar, use um som repetitivo e ajuste o nível e a direção do disparo. É uma referência visual, não uma medição exata.
+
+Em Spectrum, Spectrogram e Stereo, **Ganho de entrada** altera somente o sinal enviado ao gráfico, de −24 a +24 dB; a reprodução não muda. Comece em 0 dB. Aumente para examinar um sinal baixo ou diminua se o gráfico ficar preso perto do limite superior.
+
+**Notes** mostra as alturas detectadas ao longo do tempo. **Resolução de altura** escolhe **1/12 de oitava** para linhas de semitons ou **Alta (1/60 de oitava)** para mais detalhe. **Layout** muda a direção do histórico e **Intervalo de tempo** mostra de 1 a 10 segundos. **Volume** acrescenta o nível das notas à confiança da detecção. **Nota mais grave** e **Nota mais aguda** delimitam a faixa analisada; **Limite de notas simultâneas** define quantas notas candidatas são consideradas de uma vez. Se aparecerem notas indesejadas, estreite a faixa ou reduza o limite. **Teclado** mostra as teclas do piano. O teclado e as guias começam desativados e podem ser ligados separadamente. Com **Gradiente**, **Faixa completa** distribui as cores por todas as alturas visíveis e **Uma oitava** as repete por nota.
+
+**Chroma Spiral** organiza as notas detectadas em espiral, com uma volta por oitava. **Exibição** alterna entre **Dots** e **Fill**; **Oitava mais baixa** e **Oitava mais alta** delimitam a faixa. **Inclinação de frequência** muda a ênfase entre frequências, **Faixa de nível** regula a visibilidade das notas baixas e **Limite inferior de exibição** oculta as mais fracas.
+
+Spectrum e Chroma Spiral oferecem **Cores das notas** fixas e **Mapa de calor** em **Modo de cor**. Spectrogram oferece **Mapa de calor** e Notes oferece **Cores das notas**. As doze cores das notas se repetem a cada oitava sem animação; Spectrum mistura as cores entre notas. Na exibição **Barra** do Spectrum, cada barra usa uma única cor conforme a frequência do seu centro. O mapa de calor mostra sons mais fortes com cores mais brilhantes e deixa as áreas fracas transparentes em vez de preenchê-las de preto. Stereo e os itens de texto oferecem apenas Cor sólida e Gradiente.
+
+## Animação e efeitos
+
+Adicione efeitos aos itens ou ao fundo e mude a ordem. **Intensidade** regula a intensidade. **Opacity** controla a transparência e, com animação, pode criar piscadas. **Glow**, **Outline** e **Blur** destacam ou suavizam as formas. **Trail** deixa rastros; **Trail Feedback** muda o tamanho, gira e desloca os rastros. **Scale Pulse** altera o tamanho, **Symmetry** repete a imagem, **Shake** a sacode e **Particles** acrescenta pontos em movimento. **Ken Burns** move lentamente a capa ou a imagem de fundo; **Flash** ilumina o fundo.
+
+No **Trail Feedback**, **Ângulo de rotação (°)** (de −3° a +3°) define como cada rastro repetido gira: valores positivos giram no sentido horário, negativos no anti-horário e 0° interrompe a rotação. **Deslocamento horizontal** move o rastro para a direita com valores positivos e para a esquerda com negativos; **Deslocamento vertical** o move para baixo ou para cima da mesma forma. Combine os dois para criar movimento diagonal. Cada controle vai de −1% a +1% da largura ou altura do item; 0% mantém o eixo parado. **Zoom** altera o tamanho de cada rastro repetido de −2% a +2% por etapa: valores positivos ampliam, negativos reduzem e 0% mantém o tamanho. O valor inicial é +2%. **Intensidade** também afeta o zoom, a rotação e o deslocamento.
+
+Cada efeito pode ficar constante, variar com **Time** ou reagir ao **Level** geral ou ao **Bass**. **Profundidade** controla a reação e **Velocidade**, a velocidade da variação temporal. Comece com um efeito leve, por exemplo Glow no Spectrum, e depois experimente Scale Pulse ligado ao Bass na capa. Se a animação ficar lenta, reduza os efeitos ou a qualidade; **Auto** ajusta a qualidade.
+
+## Presets, backup e sincronização
+
+No diálogo de presets, você pode salvar, carregar, renomear e excluir layouts com nome. Os presets incluídos continuam disponíveis. **Backup / Restaurar** inclui os presets de Visualizer salvos e suas imagens de fundo, mas não o layout atual sem nome. Links de compartilhamento do Effect Pipeline não incluem layouts do Visualizer.
+
+Em **Configuração**, ative **Sincronizar elementos visuais com o áudio** para alinhar a imagem ao som; o EffeTune pode atrasar o áudio. Se os gráficos não aparecerem, abra **Configuração de Áudio** e confira se **Usar processamento de áudio WebAssembly** está ativado e se o áudio está passando pelo EffeTune.
+
+No aplicativo para computador, **Usar aceleração por hardware** vem ativado por padrão. Se a janela piscar ou parar de atualizar, desative a opção em **Configurações > Configuração...** e reinicie o EffeTune. Se os problemas de exibição se repetirem, o EffeTune desativa a opção e reinicia automaticamente. Para tentar novamente, ative-a e reinicie o aplicativo.

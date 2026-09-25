@@ -114,6 +114,8 @@ function subscribedPlugin(runtime, id = 37) {
 function installDrawingContext(plugin) {
   const fillRects = [];
   const pointRects = [];
+  const strokes = [];
+  let path = [];
   plugin.canvas = { width: 480, height: 480 };
   plugin.graphCssWidth = 480;
   plugin.graphDpr = 1;
@@ -126,11 +128,11 @@ function installDrawingContext(plugin) {
     lineWidth: 1,
     imageSmoothingEnabled: true,
     fillRect(...args) { fillRects.push(args); },
-    beginPath() {},
-    moveTo() {},
-    lineTo() {},
+    beginPath() { path = []; },
+    moveTo(...args) { path.push(['moveTo', ...args]); },
+    lineTo(...args) { path.push(['lineTo', ...args]); },
     closePath() {},
-    stroke() {},
+    stroke() { strokes.push(path.slice()); },
     fill() {},
     rect(...args) { pointRects.push(args); },
     fillText() {},
@@ -139,7 +141,7 @@ function installDrawingContext(plugin) {
     rotate() {},
     restore() {}
   };
-  return { fillRects, pointRects };
+  return { fillRects, pointRects, strokes };
 }
 
 test('Stereo Meter synchronously copies v2 sample deltas into its one-second ring', () => {
@@ -236,6 +238,53 @@ test('Stereo Meter draws full-resolution age-graded samples and keeps payload st
   assert.ok(plugin.smoothedPeaks[90] > 0);
   assert.ok(fillRects.some(call => call[0] === 0 && call[1] === 240 && call[2] === 16));
   assert.ok(fillRects.some(call => call[0] === 240 && call[1] === 464 && call[2] === 80));
+});
+
+test('Stereo Meter gain enlarges only the diamond signal and survives parameter updates', () => {
+  const runtime = loadStereoMeter();
+  const plugin = new runtime.StereoMeterPlugin();
+  const { fillRects, pointRects, strokes } = installDrawingContext(plugin);
+  const xBuffer = new Float32Array(16);
+  const yBuffer = new Float32Array(16);
+  const peakBuffer = new Float32Array(360);
+  xBuffer[0] = 0.25;
+  yBuffer[0] = 0.5;
+  peakBuffer[0] = 1;
+  plugin.sampleRate = 100;
+  plugin.windowTime = 0.01;
+  plugin.currentMeasurements = { xBuffer, yBuffer, peakBuffer, currentPosition: 1 };
+  plugin.dspStereoFieldSnapshot = { correlation: 0.5, balance: 6 };
+
+  const draw = () => {
+    fillRects.length = 0;
+    pointRects.length = 0;
+    strokes.length = 0;
+    plugin.drawMeter();
+    return {
+      point: pointRects[0].slice(0, 2),
+      peak: strokes[3][0].slice(1),
+      bars: fillRects.map(rect => rect.slice())
+    };
+  };
+
+  assert.equal(plugin.getParameters().gn, 0);
+  const normal = draw();
+  plugin.setParameters({ gn: 12 });
+  assert.equal(plugin.getParameters().gn, 12);
+  const enlarged = draw();
+  const scale = 10 ** (12 / 20);
+  assert.ok(Math.abs((enlarged.point[0] + 0.5 - 240) - (normal.point[0] + 0.5 - 240) * scale) < 1e-6);
+  assert.ok(Math.abs((enlarged.point[1] + 0.5 - 240) - (normal.point[1] + 0.5 - 240) * scale) < 1e-6);
+  assert.ok(Math.abs((enlarged.peak[0] - 240) - (normal.peak[0] - 240) * scale) < 1e-6);
+  assert.deepEqual(enlarged.bars, normal.bars);
+  assert.equal(xBuffer[0], 0.25);
+  assert.equal(yBuffer[0], 0.5);
+  assert.equal(peakBuffer[0], 1);
+
+  plugin.setParameters({ gn: 99 });
+  assert.equal(plugin.getParameters().gn, 24);
+  plugin.setParameters({ gn: -1 });
+  assert.equal(plugin.getParameters().gn, 0);
 });
 
 test('Stereo Meter caches opaque trace colors fading into the current graph background', () => {

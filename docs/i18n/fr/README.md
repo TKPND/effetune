@@ -34,6 +34,7 @@ Aucun mythe audiophile, juste de la science pure.
 - Interface glisser-déposer pour construire des chaînes d'effets
 - Système d'effets extensible avec des effets catégorisés
 - Visualisation audio en direct
+- Dispositions Visualizer avec graphiques animés, pochette et informations du morceau
 - Pipeline audio pouvant être modifié en temps réel
 - Traitement de fichiers audio hors ligne avec la chaîne d'effets actuelle
 - Bibliothèque musicale pour parcourir les sous-dossiers locaux, les métadonnées et les listes de lecture
@@ -54,6 +55,7 @@ Avant d'utiliser EffeTune, vous devez configurer votre routage audio. Voici comm
    - Ou sélectionnez **Ouvrir un fichier musical...** depuis le menu **Fichier** (application de bureau uniquement)
    - Ou faites glisser le fichier musical dans la fenêtre
 - Pour une utilisation limitée au lecteur, sélectionnez Aucun (lecteur de fichiers musicaux uniquement) comme périphérique d'entrée dans Configuration audio afin de ne pas utiliser d'entrée audio en direct
+- Cliquez sur le bouton de vitesse à côté de Shuffle pour ouvrir la fenêtre contextuelle. Choisissez l’un des neuf préréglages ou utilisez le curseur horizontal ou le champ numérique pour régler la vitesse de 0,25x à 4x par incréments de 0,01x. La hauteur du son est conservée.
 
 ### Configuration des services de streaming
 
@@ -90,7 +92,7 @@ Pour utiliser EffeTune avec des lecteurs CD, lecteurs réseau ou autres sources 
 
 ### Paramètres de l'application
 
-Ouvrez **Paramètres > Configuration...** pour choisir la langue, la vue au démarrage et le comportement du pipeline d'effets au démarrage. **Vue au démarrage :** peut être réglée sur **Effect Pipeline (par défaut)** ou **Bibliothèque musicale**. Si vous choisissez **Bibliothèque musicale**, utilisez la liste juste à côté pour choisir la section qui s'affichera en premier : **Morceaux**, **Albums**, **Artistes**, **Genres**, **Sous-dossiers**, **Dossiers** ou **Listes de lecture**. Dans **Thème**, choisissez les couleurs de l’application : Graphite (par défaut), Paper, Midnight, Ember ou Mint.
+Ouvrez **Paramètres > Configuration...** pour choisir la langue, la vue au démarrage et le comportement du pipeline d'effets au démarrage. **Vue au démarrage :** peut être réglée sur **Effect Pipeline (par défaut)**, **Bibliothèque musicale** ou **Visualizer**. Si vous choisissez **Bibliothèque musicale**, utilisez la liste juste à côté pour choisir la section qui s'affichera en premier : **Morceaux**, **Albums**, **Artistes**, **Genres**, **Sous-dossiers**, **Dossiers** ou **Listes de lecture**. Dans **Thème**, choisissez les couleurs de l’application : Graphite (par défaut), Paper, Midnight, Ember ou Mint.
 
 Les versions de bureau compatibles peuvent aussi être pilotées par des applications OpenHome sur le même réseau local. Cette fonction est désactivée par défaut ; consultez [Télécommande OpenHome](music-library.md#télécommande-openhome-application-de-bureau) pour la configuration, l'accès réseau, la compatibilité et les limites.
 
@@ -108,6 +110,10 @@ Dans les dispositions ordinateur et mobile, lorsqu’une recherche de morceaux o
 Les navigateurs Chromium sur ordinateur peuvent conserver l'accès aux dossiers musicaux sélectionnés entre les sessions. Dans Safari, Firefox, les navigateurs mobiles et les autres environnements sans accès persistant aux dossiers, sélectionnez de nouveau le dossier ou les fichiers après chaque rechargement ; EffeTune les rattache au catalogue existant.
 
 Les grandes collections sont chargées progressivement depuis le stockage ; la vitesse d'analyse et de chargement dépend de l'appareil, de la collection et de la mémoire disponible. Un défilement très rapide peut afficher brièvement des lignes vides pendant le chargement des morceaux suivants, surtout avec un stockage lent.
+
+### Afficher le son avec Visualizer
+
+Ouvrez **Visualizer** depuis l’en-tête, l’onglet mobile **Lecteur** ou le menu de bureau **Affichage**. Choisissez une disposition intégrée ou utilisez **Edit** pour placer graphiques, pochette et informations du morceau. Les modifications sont immédiates et retrouvées au prochain lancement ; enregistrez une copie nommée dans la boîte des préréglages. Consultez le [guide Visualizer](visualizer.md).
 
 ### Construction de votre chaîne d'effets
 
@@ -152,6 +158,8 @@ L’importation, l’exportation et le partage de fichiers `.effetune_preset` re
 ### Sauvegarder et restaurer les données enregistrées
 
 Ouvrez **Settings > Sauvegarde / Restauration** pour transférer les préréglages de chaîne et d’effets, les réponses impulsionnelles et les mesures entre l’application web, l’application de bureau et l’extension. Sélectionnez des éléments ou des catégories entières. Choisir un préréglage sélectionne aussi les données requises ; désélectionner ces données retire également les préréglages qui en dépendent.
+
+Les sauvegardes web et de bureau comprennent aussi les préréglages Visualizer nommés et leurs images de fond, mais pas la disposition courante.
 
 **Inclure les données de mesure** et **Inclure les réponses impulsionnelles** sont activés par défaut. Si vous désactivez une option, seules les références sont enregistrées et les mêmes données doivent déjà exister à destination. Les réponses sont restaurées dans **Impulse Response Library**. Les données identiques sont réutilisées et un élément différent portant le même nom reçoit un numéro. La chaîne active, le volume, le préréglage sélectionné, les périphériques et les règles d’URL ne sont pas modifiés.
 
@@ -281,7 +289,7 @@ Pour examiner la fréquence, la phase, le retard de groupe minimal, le retard de
 
 ### Lecture sans interruption
 
-**Lecture sans interruption** est activée par défaut et peut être modifiée dans **Configuration audio**. Lorsqu’elle est activée, les morceaux locaux compatibles s’enchaînent sans silence ; la prise en charge dépend du format du fichier et du navigateur ou de l’application utilisés. Les formats non pris en charge et certains environnements mobiles passent automatiquement à un mode de secours économe en mémoire, si bien qu’un bref silence peut tout de même se produire. La désactiver privilégie une consommation de mémoire réduite et la stabilité, avec un bref silence possible entre les morceaux. Ce changement n’interrompt pas le morceau en cours.
+**Lecture sans interruption** est activée par défaut et peut être modifiée dans **Configuration audio**. Lorsqu’elle est activée, les morceaux locaux compatibles s’enchaînent sans silence ; la prise en charge dépend du format du fichier et du navigateur ou de l’application utilisés. Les formats non pris en charge et certains environnements mobiles passent automatiquement à un mode de secours économe en mémoire, si bien qu’un bref silence peut tout de même se produire. La désactiver privilégie une consommation de mémoire réduite et la stabilité, avec un bref silence possible entre les morceaux. Ce changement n’interrompt pas le morceau en cours. La lecture sans interruption est indisponible lorsque la vitesse n’est pas réglée sur 1x. Si vous changez la vitesse pendant un morceau lu sans interruption, la lecture reprend à la même position après une brève coupure.
 
 ## Combinaisons d'effets courantes
 

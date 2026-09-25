@@ -155,6 +155,7 @@ function createMenuState() {
     'menu.edit': { label: 'Edit X' },
     'edit.undo': { label: 'Undo X', enabled: false },
     'menu.view': { label: 'View X' },
+    'view.visualizer': { label: 'Visualizer X', enabled: false },
     'view.pipelineAnalyzer': { label: 'Analyzer X', checked: true },
     'menu.settings': { label: 'Settings X' },
     'menu.help': { label: 'Help X' },
@@ -785,8 +786,10 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
     const translatedMenu = electron.Menu.getApplicationMenu();
     assert.equal(translatedMenu.template[2].submenu[6].accelerator, 'CommandOrControl+E');
     assert.equal(translatedMenu.template[2].submenu[7].accelerator, 'CommandOrControl+L');
-    assert.equal(translatedMenu.template[2].submenu[8].type, 'checkbox');
-    assert.equal(translatedMenu.template[2].submenu[8].checked, true);
+    assert.equal(translatedMenu.template[2].submenu[8].accelerator, 'CommandOrControl+Shift+V');
+    assert.equal(translatedMenu.template[2].submenu[8].enabled, false);
+    assert.equal(translatedMenu.template[2].submenu[9].type, 'checkbox');
+    assert.equal(translatedMenu.template[2].submenu[9].checked, true);
     assert.equal(translatedMenu.getMenuItemById('file.save').label, 'Save X');
     assert.equal(translatedMenu.getMenuItemById('file.save').enabled, false);
     assert.equal(translatedMenu.getMenuItemById('file.saveAs').label, 'Save As...');
@@ -821,7 +824,7 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
           submenu: [
             'view.reload', 'separator', 'view.resetZoom', 'view.zoomIn',
             'view.zoomOut', 'separator', 'view.effectPipeline',
-            'view.musicLibrary', 'view.pipelineAnalyzer', 'separator',
+            'view.musicLibrary', 'view.visualizer', 'view.pipelineAnalyzer', 'separator',
             'toggle-fullscreen', 'view.miniPlayer'
           ]
         },
@@ -861,7 +864,7 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
       'edit.delete', 'edit.selectAll',
       'menu.view',
       'view.reload', 'view.resetZoom', 'view.zoomIn', 'view.zoomOut',
-      'view.effectPipeline', 'view.musicLibrary', 'view.pipelineAnalyzer',
+      'view.effectPipeline', 'view.musicLibrary', 'view.visualizer', 'view.pipelineAnalyzer',
       'toggle-fullscreen', 'view.miniPlayer',
       'menu.settings',
       'settings.config', 'settings.audioDevices', 'settings.performanceBenchmark',
@@ -885,11 +888,16 @@ test('IPC handlers manage stable-ID menu state, tray presets, and default menu c
     const defaultMenu = electron.Menu.getApplicationMenu();
     assert.equal(defaultMenu.template[2].submenu[6].accelerator, 'CommandOrControl+E');
     assert.equal(defaultMenu.template[2].submenu[7].accelerator, 'CommandOrControl+L');
-    assert.equal(defaultMenu.template[2].submenu[8].type, 'checkbox');
-    assert.equal(defaultMenu.template[2].submenu[8].checked, false);
+    assert.equal(defaultMenu.template[2].submenu[8].accelerator, 'CommandOrControl+Shift+V');
+    assert.equal(defaultMenu.template[2].submenu[9].type, 'checkbox');
+    assert.equal(defaultMenu.template[2].submenu[9].checked, false);
     assert.equal(defaultMenu.getMenuItemById('settings.audioDevices').label, 'Audio Configuration...');
     clickMenu(defaultMenu);
     await Promise.resolve();
+    assert.deepEqual(
+      calls.find(call => call[0] === 'webContents.send' && call[1] === 'open-visualizer-view'),
+      ['webContents.send', 'open-visualizer-view']
+    );
 
     assert.deepEqual(await handlers.get('navigate-to-main')(), { success: true });
     assert.deepEqual(handlers.get('update-tray-menu')({}, { items: ['A'] }), { success: true });

@@ -39,8 +39,10 @@ export async function showConfigDialog(isElectron, currentConfig) {
   };
   if ('theme' in config) config.theme = normalizeThemeId(config.theme);
   config.language = normalizeLanguagePreference(config.language || AUTO_LANGUAGE_PREFERENCE);
-  config.startupView = config.startupView === 'library' ? 'library' : 'effects';
+  config.startupView = ['library', 'visualizer'].includes(config.startupView) ? config.startupView : 'effects';
   config.libraryStartupView = normalizeMusicLibraryStartupView(config.libraryStartupView);
+  config.spectrumOverlayQuality = config.spectrumOverlayQuality === 'hq' ? 'hq' : 'normal';
+  config.spectrumOverlayPeakHold = config.spectrumOverlayPeakHold === true;
   let powerSavingSettings = normalizePowerSettings(config.powerSaving);
   config.powerSaving = { ...powerSavingSettings };
   let offlineOutputSettings = normalizeOfflineOutputSettings(config.offlineOutput);
@@ -87,6 +89,13 @@ export async function showConfigDialog(isElectron, currentConfig) {
           <input type="checkbox" id="check-updates" ${config.checkForUpdatesOnStartup !== false ? 'checked' : ''}>
           <label for="check-updates" id="config-check-updates-label"></label>
         </div>
+      </div>
+      <div class="device-section">
+        <div class="checkbox-container">
+          <input type="checkbox" id="hardware-acceleration" aria-describedby="hardware-acceleration-help" ${config.hardwareAcceleration !== false ? 'checked' : ''}>
+          <label for="hardware-acceleration" id="hardware-acceleration-label"></label>
+        </div>
+        <div class="power-mode-help" id="hardware-acceleration-help"></div>
       </div>
       <div class="device-section" id="openhome-section">
         <label class="section-label" id="openhome-title"></label>
@@ -195,6 +204,17 @@ export async function showConfigDialog(isElectron, currentConfig) {
             </div>
             <div class="power-mode-help" id="visual-sync-help"></div>
           </div>
+          <div class="device-section" role="group" aria-labelledby="spectrum-overlay-title">
+            <div class="section-label" id="spectrum-overlay-title"></div>
+            <div class="spectrum-overlay-row">
+              <label for="spectrum-overlay-quality" id="spectrum-overlay-quality-label"></label>
+              <select id="spectrum-overlay-quality" class="config-select"></select>
+            </div>
+            <div class="spectrum-overlay-row">
+              <label for="spectrum-overlay-display" id="spectrum-overlay-display-label"></label>
+              <select id="spectrum-overlay-display" class="config-select"></select>
+            </div>
+          </div>
           <div class="device-section">
             <label class="section-label" id="config-startup-view-label"></label>
             <div class="radio-container">
@@ -205,6 +225,10 @@ export async function showConfigDialog(isElectron, currentConfig) {
               <input type="radio" name="startup-view" id="startup-view-library" value="library" ${config.startupView === 'library' ? 'checked' : ''}>
               <label for="startup-view-library" id="config-startup-view-library-label"></label>
               <select id="library-startup-view-select" class="config-select" aria-labelledby="config-startup-view-library-label" ${config.startupView === 'library' ? '' : 'disabled'}></select>
+            </div>
+            <div class="radio-container">
+              <input type="radio" name="startup-view" id="startup-view-visualizer" value="visualizer" ${config.startupView === 'visualizer' ? 'checked' : ''}>
+              <label for="startup-view-visualizer" id="config-startup-view-visualizer-label"></label>
             </div>
           </div>
           <div class="device-section">
@@ -319,14 +343,19 @@ export async function showConfigDialog(isElectron, currentConfig) {
     .offline-output-row[hidden] {
       display: none;
     }
-    .offline-output-row {
+    .offline-output-row,
+    .spectrum-overlay-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(120px, 1fr);
       align-items: center;
       gap: 10px;
       margin-bottom: 9px;
     }
-    .offline-output-row .config-select {
+    .spectrum-overlay-row:last-child {
+      margin-bottom: 0;
+    }
+    .offline-output-row .config-select,
+    .spectrum-overlay-row .config-select {
       width: 100%;
     }
     .offline-output-help {
@@ -549,6 +578,15 @@ export async function showConfigDialog(isElectron, currentConfig) {
   function renderThemeOptions() {
     replaceOptions(document.getElementById('theme-select'), THEME_PRESETS.map(preset => preset.id),
       normalizeThemeId(config.theme), id => getThemePreset(id).label);
+  }
+
+  function renderSpectrumOverlayOptions() {
+    replaceOptions(document.getElementById('spectrum-overlay-quality'),
+      ['normal', 'hq'], config.spectrumOverlayQuality,
+      value => t(`dialog.config.spectrumOverlay.quality.${value}`));
+    replaceOptions(document.getElementById('spectrum-overlay-display'),
+      ['instant', 'peakHold'], config.spectrumOverlayPeakHold ? 'peakHold' : 'instant',
+      value => t(`dialog.config.spectrumOverlay.display.${value}`));
   }
 
   function renderPresetOptions() {
@@ -830,6 +868,10 @@ export async function showConfigDialog(isElectron, currentConfig) {
     if (trayLabel) trayLabel.textContent = t('dialog.config.minimizeToTray');
     const checkUpdatesLabel = document.getElementById('config-check-updates-label');
     if (checkUpdatesLabel) checkUpdatesLabel.textContent = t('dialog.config.checkForUpdatesOnStartup');
+    const hardwareAccelerationLabel = document.getElementById('hardware-acceleration-label');
+    if (hardwareAccelerationLabel) hardwareAccelerationLabel.textContent = t('dialog.config.hardwareAcceleration');
+    const hardwareAccelerationHelp = document.getElementById('hardware-acceleration-help');
+    if (hardwareAccelerationHelp) hardwareAccelerationHelp.textContent = t('dialog.config.hardwareAccelerationHelp');
     const openHomeTitle = document.getElementById('openhome-title');
     if (openHomeTitle) openHomeTitle.textContent = t('dialog.config.openHome.title');
     const openHomeEnabledLabel = document.getElementById('openhome-enabled-label');
@@ -849,9 +891,14 @@ export async function showConfigDialog(isElectron, currentConfig) {
     document.getElementById('visual-sync-label').textContent = t('dialog.config.visualSync.label');
     document.getElementById('visual-sync-help').textContent = t('dialog.config.visualSync.help');
     renderThemeOptions();
+    document.getElementById('spectrum-overlay-title').textContent = t('dialog.config.spectrumOverlay.title');
+    document.getElementById('spectrum-overlay-quality-label').textContent = t('dialog.config.spectrumOverlay.quality');
+    document.getElementById('spectrum-overlay-display-label').textContent = t('dialog.config.spectrumOverlay.display');
+    renderSpectrumOverlayOptions();
     document.getElementById('config-startup-view-label').textContent = t('dialog.config.startupView');
     document.getElementById('config-startup-view-effects-label').textContent = t('dialog.config.startupView.effects');
     document.getElementById('config-startup-view-library-label').textContent = t('dialog.config.startupView.library');
+    document.getElementById('config-startup-view-visualizer-label').textContent = t('dialog.config.startupView.visualizer');
     document.getElementById('config-pipeline-label').textContent = t('dialog.config.pipeline');
     document.getElementById('config-pipeline-default-label').textContent = t('dialog.config.pipeline.default');
     document.getElementById('config-pipeline-last-label').textContent = t('dialog.config.pipeline.last');
@@ -921,14 +968,18 @@ export async function showConfigDialog(isElectron, currentConfig) {
     if (tray) tray.checked = Boolean(config.minimizeToTray);
     const checkUpdates = document.getElementById('check-updates');
     if (checkUpdates) checkUpdates.checked = config.checkForUpdatesOnStartup !== false;
+    const hardwareAcceleration = document.getElementById('hardware-acceleration');
+    if (hardwareAcceleration) hardwareAcceleration.checked = config.hardwareAcceleration !== false;
     const visualSync = document.getElementById('visual-sync');
     if (visualSync) visualSync.checked = isVisualSyncEnabled(config);
 
-    const startupView = config.startupView === 'library' ? 'library' : 'effects';
+    const startupView = ['library', 'visualizer'].includes(config.startupView) ? config.startupView : 'effects';
     const startupEffects = document.getElementById('startup-view-effects');
     const startupLibrary = document.getElementById('startup-view-library');
     if (startupEffects) startupEffects.checked = startupView === 'effects';
     if (startupLibrary) startupLibrary.checked = startupView === 'library';
+    const startupVisualizer = document.getElementById('startup-view-visualizer');
+    if (startupVisualizer) startupVisualizer.checked = startupView === 'visualizer';
     const libraryStartupView = document.getElementById('library-startup-view-select');
     if (libraryStartupView) {
       libraryStartupView.value = normalizeMusicLibraryStartupView(config.libraryStartupView);
@@ -950,6 +1001,7 @@ export async function showConfigDialog(isElectron, currentConfig) {
     renderLanguageOptions();
     renderThemeOptions();
     renderOfflineOutputControls();
+    renderSpectrumOverlayOptions();
   }
 
   let configSaveSequence = 0;
@@ -1080,12 +1132,28 @@ export async function showConfigDialog(isElectron, currentConfig) {
       await save({ checkForUpdatesOnStartup: e.target.checked });
     });
   }
+  const hardwareAcceleration = document.getElementById('hardware-acceleration');
+  if (hardwareAcceleration) {
+    hardwareAcceleration.addEventListener('change', async e => {
+      await save({ hardwareAcceleration: e.target.checked });
+    });
+  }
   document.getElementById('visual-sync')?.addEventListener('change', async e => {
     const enabled = e.target.checked;
     const updateSequence = ++visualSyncUpdateSequence;
     if (!await save({ visualSync: enabled })) return;
     if (updateSequence !== visualSyncUpdateSequence) return;
     await window.audioManager?.setVisualSyncEnabled?.(enabled);
+  });
+  document.getElementById('spectrum-overlay-quality')?.addEventListener('change', async e => {
+    const quality = e.target.value === 'hq' ? 'hq' : 'normal';
+    if (!await save({ spectrumOverlayQuality: quality })) return;
+    window.SpectrumOverlay?.setSettings?.({ quality, peakHold: config.spectrumOverlayPeakHold });
+  });
+  document.getElementById('spectrum-overlay-display')?.addEventListener('change', async e => {
+    const peakHold = e.target.value === 'peakHold';
+    if (!await save({ spectrumOverlayPeakHold: peakHold })) return;
+    window.SpectrumOverlay?.setSettings?.({ quality: config.spectrumOverlayQuality, peakHold });
   });
   const openHomeEnabled = document.getElementById('openhome-enabled');
   openHomeEnabled?.addEventListener('change', async e => {
@@ -1133,10 +1201,11 @@ export async function showConfigDialog(isElectron, currentConfig) {
   });
   [
     document.getElementById('startup-view-effects'),
-    document.getElementById('startup-view-library')
+    document.getElementById('startup-view-library'),
+    document.getElementById('startup-view-visualizer')
   ].filter(Boolean).forEach(el => {
     el.addEventListener('change', async () => {
-      const startupView = el.value === 'library' ? 'library' : 'effects';
+      const startupView = ['library', 'visualizer'].includes(el.value) ? el.value : 'effects';
       if (await save({ startupView })) syncConfigControls();
     });
   });

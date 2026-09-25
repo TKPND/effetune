@@ -2519,6 +2519,7 @@ function createOrder(sort, direction) {
 }
 
 function trackOrderColumn(field) {
+  if (field === 'pathSort') return `CAST(RTRIM((SELECT COALESCE(root.path, root.display_name, '') FROM folders root WHERE root.id = t.folder_id), '${path.sep}') || '${path.sep}' || REPLACE(t.relative_path, '/', '${path.sep}') AS BLOB)`;
   const columns = {
     sortTitle: 'sort_title',
     sortAlbumArtist: 'sort_album_artist',
@@ -2534,7 +2535,8 @@ function trackOrderColumn(field) {
 }
 
 function trackFieldExpression(field) {
-  return field.column.startsWith('COALESCE(') ? field.column : `t.${field.column}`;
+  return field.column.startsWith('COALESCE(') || field.column.startsWith('CAST(')
+    ? field.column : `t.${field.column}`;
 }
 
 function createOrderBySql(order, reverse) {
@@ -2590,6 +2592,8 @@ function createTrackPageSelection(order) {
   return [
     't.track_uid AS trackUid',
     't.folder_id AS folderId',
+    't.relative_path AS relativePath',
+    `(SELECT COALESCE(root.path, root.display_name, '') FROM folders root WHERE root.id = t.folder_id) AS rootPath`,
     `t.folder_id || char(0) || t.relative_path AS physicalSourceKey`,
     't.source_kind AS sourceKind',
     't.entry_key AS entryKey',
@@ -2617,6 +2621,11 @@ function createTrackPageSelection(order) {
 }
 
 function normalizePageRow(row) {
+  if (row.rootPath !== undefined && row.relativePath !== undefined) {
+    row.path = path.join(row.rootPath, ...row.relativePath.split('/'));
+    delete row.rootPath;
+    delete row.relativePath;
+  }
   return {
     ...row,
     startFrame: row.startFrame == null ? null : Number(row.startFrame),
@@ -2629,7 +2638,7 @@ function stripOrderFields(row) {
   const clean = { ...row };
   delete clean.entityKind;
   for (const field of [
-    'sortTitle', 'sortAlbumArtist', 'sortAlbum', 'sortGenre', 'discSort', 'trackSort', 'durationSort'
+    'sortTitle', 'pathSort', 'sortAlbumArtist', 'sortAlbum', 'sortGenre', 'discSort', 'trackSort', 'durationSort'
   ]) delete clean[field];
   return clean;
 }

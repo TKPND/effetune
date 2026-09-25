@@ -43,9 +43,9 @@ Shows estimated fundamental pitches (F0s) in a selectable range from A0 to C8 in
 - **Horizontal** places the keyboard at the bottom, with low notes on the left and high notes on the right. New sound appears just above the keyboard, and history scrolls upward.
 - Lines at each C mark octave boundaries.
 - Pitch rows corresponding to black piano keys use a nearly black gray background so they remain distinguishable when no note is detected.
-- **Normal** uses the theme’s graph trace color; **Note Colors** uses a different color for each note, repeated across octaves. Both show darker guide lines between E and F.
+- **Normal** uses the theme’s graph trace color; **Note Colors** uses a different color for each note, repeated across octaves. The guide lines between E and F remain visible in both modes.
 - **1/12 Octave** shows one row per semitone. **High (1/60 Octave)** divides each semitone into five rows so that small pitch movement is easier to follow; colors are blended between neighboring notes.
-- Color follows the model’s confidence from 0 (background color) to 1 (full color), including weak candidates without a display threshold. This score indicates how strongly the model supports a pitch; it is not a calibrated probability.
+- Color strength follows the model’s confidence, including weak candidates without a display threshold. Confidence indicates how strongly the model supports a pitch; it is not a calibrated probability.
 - With **Volume** on, each detected pitch becomes a bar whose opaque core thickness shows its frequency-corrected relative volume, from 1/60 octave at the bottom of the scale to 1/12 octave at the top. A fade extends 1/120 octave beyond each side of that core, adding 1/60 octave to the total footprint. **Pitch Resolution** changes the bar’s center position, not its core thickness.
 - At the keyboard edge, a soft-edged semicircle extends into the graph and shows the current volume. It responds immediately to increases and falls at 20 dB per second; there is no separate visible peak hold.
 - The volume scale covers 24 dB. Its top follows the louder of a recent reference used to stabilize the history scale (over about one second) and -36 dB, so quieter material remains readable without making louder passages fill the display continuously. This reference is separate from the current-volume semicircle.
@@ -68,7 +68,7 @@ Shows estimated fundamental pitches (F0s) in a selectable range from A0 to C8 in
   - **1/12 Octave** (default): one row per semitone, using the strongest estimate within that note.
   - **High (1/60 Octave)**: five rows per semitone for finer pitch movement.
 - **Layout** - Selects **Horizontal** (default) or **Vertical**. Switching layout preserves the existing history.
-- **Volume** - Shows relative volume in bar thickness and semicircle meters. It is on by default; turning it off keeps the original confidence-only rows.
+- **Volume** - Shows relative volume in bar thickness and semicircle meters. It is on by default; turning it off shows confidence as row intensity.
 - **Time Span** (1 to 10 s) - Sets how much time the piano roll shows
   - Shorter values make timing changes easier to see
   - Longer values show a longer musical passage at once

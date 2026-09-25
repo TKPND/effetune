@@ -522,6 +522,9 @@ export class UIManager {
         }
 
         const previous = this.miniPlayerMode;
+        const visualizerAspect = enabled && document.body.classList.contains('view-visualizer')
+            ? this.visualizerView?.layout.aspect : undefined;
+        if (visualizerAspect) this.visualizerView.prepareMiniPlayer();
         this.miniPlayerMode = enabled;
         document.body?.classList?.toggle('layout-mini-player', enabled);
         this.audioPlayer?.ui?.setMiniMode?.(enabled);
@@ -530,7 +533,8 @@ export class UIManager {
         try {
             await api.setMiniPlayerMode({
                 enabled,
-                alwaysOnTop: this.miniPlayerAlwaysOnTop
+                alwaysOnTop: this.miniPlayerAlwaysOnTop,
+                ...(visualizerAspect ? { visualizerAspect } : {})
             });
             return true;
         } catch (error) {
@@ -817,6 +821,8 @@ export class UIManager {
         const state = this.getPipelineState();
         this.savePipelineStateToLocalStorage(state);
         const newURL = new URL(window.location.href);
+        const reflectsLocalPipeline = !newURL.searchParams.has('p') ||
+            window.history.state?.effetuneReflectedPipeline === newURL.searchParams.get('p');
         newURL.searchParams.set('p', state);
 
         // Clear any existing timeout
@@ -830,7 +836,10 @@ export class UIManager {
         // Set a new timeout
         this._updateURLTimeout = setTimeout(() => {
             // Apply the latest URL
-            window.history.replaceState({}, '', this._latestURL);
+            const historyState = { ...window.history.state };
+            if (reflectsLocalPipeline) historyState.effetuneReflectedPipeline = this._latestURL.searchParams.get('p');
+            else delete historyState.effetuneReflectedPipeline;
+            window.history.replaceState(historyState, '', this._latestURL);
             this._updateURLTimeout = null;
         }, 100); // Throttle to once every 100ms
     }
@@ -1733,7 +1742,7 @@ export class UIManager {
                 if (!player.ui.container) player.ui.createPlayerUI();
                 await player.loadTrack(player.stateManager.getCurrentTrackIndex());
             }
-            this.mobileNav?.setView('player');
+            if (this.mobileNav?.getCurrentView?.() !== 'visualizer') this.mobileNav?.setView('player');
             return true;
         } catch (error) {
             if (generation !== this.playbackSelectionGeneration || error?.name === 'AbortError') return false;
@@ -1763,8 +1772,10 @@ export class UIManager {
     initOpenLibraryButton() {
         this.effectPipelineButton = document.getElementById('effectPipelineButton');
         this.openLibraryButton = document.getElementById('openLibraryButton');
+        this.visualizerButton = document.getElementById('visualizerButton');
+        this.visualizerButton?.addEventListener('click', () => this.showVisualizerView());
         this.effectPipelineButton?.addEventListener('click', (event) => {
-            if (!document.body.classList.contains('view-library')) return;
+            if (!document.body.classList.contains('view-library') && !document.body.classList.contains('view-visualizer')) return;
             this.showEffectPipelineView({
                 returnFocus: event.currentTarget
             });
@@ -1780,6 +1791,7 @@ export class UIManager {
         if (window.electronAPI?.onIPC) {
             window.electronAPI.onIPC('open-library-view', () => this.showLibraryView());
             window.electronAPI.onIPC('open-effect-pipeline-view', () => this.showEffectPipelineView());
+            window.electronAPI.onIPC('open-visualizer-view', () => this.showVisualizerView());
             window.electronAPI.onIPC('add-music-folder', async () => {
                 try {
                     await this.showLibraryView({ focusSearch: false });
@@ -1982,7 +1994,7 @@ export class UIManager {
         root.hidden = false;
         if (this.libraryView?.root) this.libraryView.root.hidden = true;
         document.body?.classList?.add('view-library');
-        this.updateViewSwitchButtons(true);
+        this.updateViewSwitchButtons('library');
         this.mobileNav?.setView?.('library', { fromLibraryView: true });
         return true;
     }
@@ -2110,6 +2122,7 @@ export class UIManager {
     }
 
     async showLibraryView(options = {}, context = {}) {
+        this.visualizerOpenRevision = (this.visualizerOpenRevision || 0) + 1;
         if ((this.miniPlayerMode || this.miniPlayerTargetMode) && !await this.setMiniPlayerMode(false)) return false;
         const ensureOptions = { skipRecoveryWait: options.skipRecoveryWait === true };
         if (context.insideRecoveryQueue === true) ensureOptions.insideRecoveryQueue = true;
@@ -2117,6 +2130,7 @@ export class UIManager {
         if (options.isCurrentRequest?.() === false) {
             return false;
         }
+        this.visualizerView?.hide();
         if (!this.libraryView) {
             if (options.initialView !== undefined) {
                 const deferredOptions = { ...options, isCurrentRequest: undefined };
@@ -2144,7 +2158,7 @@ export class UIManager {
         }
         const rendered = this.libraryView.show(showOptions);
         if (options.initialView !== undefined) this.libraryDeferredStartupOptions = null;
-        this.updateViewSwitchButtons(true);
+        this.updateViewSwitchButtons('library');
         this.mobileNav?.setView?.('library', { fromLibraryView: true });
         await rendered;
         return true;
@@ -2171,10 +2185,10 @@ export class UIManager {
         });
         this.hideLibraryRecoveryShell();
         document.body?.classList?.remove('view-library');
-        this.updateViewSwitchButtons(false);
     }
 
     showEffectPipelineView(options = {}) {
+        this.visualizerOpenRevision = (this.visualizerOpenRevision || 0) + 1;
         if (this.miniPlayerMode || this.miniPlayerTargetMode) {
             return this.setMiniPlayerMode(false).then(restored =>
                 restored ? this.showEffectPipelineView(options) : false);
@@ -2182,16 +2196,49 @@ export class UIManager {
         if (document.body.classList.contains('view-library') && this.libraryView?.hasActiveDialog?.()) {
             return false;
         }
+        this.visualizerView?.hide();
         this.hideLibraryView({
             ...options,
             returnFocus: options.returnFocus || options.opener
         });
         this.mobileNav?.setView?.('effects', { fromLibraryView: true });
-        this.updateViewSwitchButtons(false);
+        this.updateViewSwitchButtons('effects');
         return true;
     }
 
-    updateViewSwitchButtons(isLibraryVisible = document.body?.classList.contains('view-library')) {
+    async showVisualizerView() {
+        const revision = this.visualizerOpenRevision = (this.visualizerOpenRevision || 0) + 1;
+        if (this.isDoubleBlindActive()) {
+            this.showTransientMessage('visualizer.dbtUnavailable');
+            return false;
+        }
+        if ((this.miniPlayerMode || this.miniPlayerTargetMode) && !await this.setMiniPlayerMode(false)) return false;
+        if (document.body.classList.contains('view-library') && this.libraryView?.hasActiveDialog?.()) return false;
+        if (!this.visualizerView) {
+            this.visualizerModulePromise ||= import('./visualizer/visualizer-view.js');
+            const { VisualizerView } = await this.visualizerModulePromise;
+            this.visualizerView ||= new VisualizerView(this);
+        }
+        await this.visualizerView.initialized;
+        if (revision !== this.visualizerOpenRevision || this.isDoubleBlindActive()) return false;
+        this.visualizerView.previousMobileView = this.mobileNav?.getCurrentView() || 'player';
+        this.hideLibraryView({ restoreFocus: false });
+        this.visualizerView.show();
+        this.updateViewSwitchButtons('visualizer');
+        this.mobileNav?.applyViewState('visualizer', { fromLibraryView: true });
+        this.visualizerView.updateVisibility();
+        return true;
+    }
+
+    hideVisualizerView(options = {}) {
+        this.visualizerOpenRevision = (this.visualizerOpenRevision || 0) + 1;
+        this.visualizerView?.hide(options);
+        this.updateViewSwitchButtons('effects');
+    }
+
+    updateViewSwitchButtons(view = document.body?.classList.contains('view-visualizer') ? 'visualizer' : document.body?.classList.contains('view-library') ? 'library' : 'effects') {
+        document.body?.classList?.toggle('view-visualizer', view === 'visualizer');
+        if (view === 'visualizer') document.body?.classList?.remove('view-library', 'view-effects');
         const setButtonState = (button, active) => {
             if (!button) return;
             if (active) {
@@ -2201,8 +2248,10 @@ export class UIManager {
             }
             button.setAttribute?.('aria-pressed', active ? 'true' : 'false');
         };
-        setButtonState(this.effectPipelineButton, !isLibraryVisible);
-        setButtonState(this.openLibraryButton, Boolean(isLibraryVisible));
+        setButtonState(this.effectPipelineButton, view === 'effects');
+        setButtonState(this.openLibraryButton, view === 'library');
+        setButtonState(this.visualizerButton, view === 'visualizer');
+        if (this.visualizerButton) this.visualizerButton.disabled = this.isDoubleBlindActive();
     }
 
     async toggleLibraryView(options = {}) {
@@ -2228,11 +2277,15 @@ export class UIManager {
     isEffectPipelineHidden() {
         const classList = document.body?.classList;
         return Boolean(classList?.contains('view-library') ||
+            classList?.contains('view-visualizer') ||
             (classList?.contains('layout-mobile') && classList?.contains('view-player')) ||
             this.isDoubleBlindActive());
     }
 
     updateEffectPipelineVisibility() {
+        if (this.isDoubleBlindActive() && document.body?.classList.contains('view-visualizer')) this.hideVisualizerView();
+        if (this.visualizerButton) this.visualizerButton.disabled = this.isDoubleBlindActive();
+        this.visualizerView?.updateVisibility();
         const hidden = this.isEffectPipelineHidden();
         if (hidden === this.effectPipelineHidden) return;
         this.effectPipelineHidden = hidden;

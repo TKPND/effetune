@@ -99,6 +99,7 @@ const channelImplementation = Object.freeze({
 });
 
 export const PUBLIC_EFFECT_TYPES = Object.freeze([
+  'ChromaSpiral',
   'LevelMeter',
   'NoteSpectrogram',
   'Oscilloscope',
@@ -207,6 +208,7 @@ export const PUBLIC_EFFECT_TYPES = Object.freeze([
   'StereoBlend'
 ]);
 export const FROZEN_PARAM_DIRECTORIES = Object.freeze({
+  ChromaSpiralPlugin: 'dsp/plugins/analyzer/chroma_spiral',
   LevelMeterPlugin: 'dsp/plugins/analyzer/level_meter',
   NoteSpectrogramPlugin: 'dsp/plugins/analyzer/note_spectrogram',
   OscilloscopePlugin: 'dsp/plugins/analyzer/oscilloscope',

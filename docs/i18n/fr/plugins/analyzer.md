@@ -1,6 +1,6 @@
 ---
 title: "Plugins d'analyse - EffeTune"
-description: "Plugins de visualisation audio, dont Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer et Stereo Meter."
+description: "Plugins de visualisation audio, dont Chroma Spiral, Level Meter, Note Spectrogram, Oscilloscope, Pitch Meter, Spectrogram, Spectrum Analyzer et Stereo Meter."
 lang: fr
 ---
 
@@ -10,6 +10,7 @@ Une collection de plugins qui vous permettent de visualiser votre musique de man
 
 ## Liste des plugins
 
+- [Chroma Spiral](#chroma-spiral) - Place les composantes fréquentielles sur une spirale de notes et d'octaves
 - [Level Meter](#level-meter) - Affiche le niveau du signal numérique et les risques de clipping
 - [Note Spectrogram](#note-spectrogram) - Affiche les hauteurs estimées au fil du temps sous forme de piano roll
 - [Oscilloscope](#oscilloscope) - Affiche la visualisation de la forme d'onde en temps réel
@@ -17,6 +18,36 @@ Une collection de plugins qui vous permettent de visualiser votre musique de man
 - [Spectrogram](#spectrogram) - Crée de magnifiques motifs visuels à partir de votre musique
 - [Spectrum Analyzer](#spectrum-analyzer) - Affiche les différentes fréquences de votre musique
 - [Stereo Meter](#stereo-meter) - Visualise l'équilibre stéréo et la corrélation entre canaux
+
+## Chroma Spiral
+
+Montre à quelles notes et octaves correspondent les composantes fréquentielles de la musique, sans modifier le son. Utilisez-le pour voir des harmoniques qui se superposent, comparer la tessiture d'une voix et d'une basse ou observer l'étendue d'un instrument.
+
+### Guide d'utilisation
+
+- Tenez une note et regardez sa position ainsi que celles de ses harmoniques. Une seule note peut éclairer plusieurs noms de notes : ce ne sont pas forcément des notes jouées séparément.
+- Suivez un accord ou une mélodie pour voir évoluer les positions actives. L'affichage peut suggérer une tonalité, mais ne nomme ni accord ni tonalité.
+- Pour observer l'accordage, regardez si un point lumineux ou le bord d'une zone colorée se trouve entre deux repères de notes. Pour lire en cents l'écart d'une fondamentale, utilisez Pitch Meter.
+- Appuyez sur le graphique avec la souris, un doigt ou un stylet pour entendre une onde sinusoïdale à la position choisie sur la spirale. Faites glisser pour changer la hauteur ; relâchez ou annulez le geste pour arrêter le son. Cet aperçu fonctionne avec tous les choix de **Color**.
+
+### Paramètres
+
+- **Color** - Choisit la représentation du spectre. Le même guide en spirale reste visible à l'arrière-plan avec chaque choix, même pendant le silence.
+  - **Normal** (par défaut) : montre chaque cellule de fréquence sous forme de point dans la couleur du tracé du thème. Sa luminosité suit le niveau de la cellule et sa surface augmente proportionnellement à ce niveau, ce qui rend les fréquences faibles plus faciles à voir. Au niveau maximal, le rayon du point atteint la moitié de l'écart avec le tour suivant.
+  - **Normal 2** : colore depuis la position de chaque fréquence sur la spirale jusqu'à son niveau dans la couleur du tracé, sans tracer de contour des données.
+  - **Note Colors** : montre les mêmes points que Normal, mais avec une couleur différente pour chaque note, répétée d'une octave à l'autre.
+- **Lowest Octave** (1 à 8 ; valeur initiale : 1) - Définit l'octave intérieure. Augmentez-la pour vous concentrer sur les sons aigus.
+- **Highest Octave** (1 à 9 ; valeur initiale : 7) - Définit l'octave extérieure. Diminuez-la pour vous concentrer sur les graves et les médiums. Les deux limites restent dans l'ordre.
+- **Frequency Tilt** (de -6 à +6 dB/oct par pas de 0,5 ; valeur initiale : +3) - Ajuste le niveau affiché des fréquences au-dessus de 100 Hz sans modifier le son. Les valeurs positives mettent les hautes fréquences en avant, les valeurs négatives les atténuent à l'écran. À 0, aucune correction selon la fréquence n'est appliquée.
+- **Level Range** (de 6 à 96 dB par pas de 1 dB ; valeur initiale : 24) - Définit la largeur de la plage d'affichage mobile. Réduisez-la pour accentuer les écarts de niveau ou élargissez-la pour voir les composantes plus faibles à côté des plus fortes.
+- **Display Floor** (de -120 à -24 dB par pas de 1 dB ; valeur initiale : -60) - Définit jusqu'où la plage mobile peut descendre dans les passages calmes. Abaissez-le pour permettre l'affichage de composantes plus faibles dans le **Level Range** choisi. La plage suit aussi les pics récents : ce réglage ne garantit donc pas que chaque composante faible sera visible.
+
+### Lire la visualisation
+
+- Un tour représente une octave. C se trouve en haut et les notes suivent le sens horaire ; les tours intérieurs sont plus graves. Les repères C indiquent les numéros d'octave.
+- Dans **Normal** et **Note Colors**, les points plus lumineux et plus grands signalent des composantes plus fortes à leur position, y compris entre les notes. Dans **Normal 2**, la zone colorée s'étend davantage vers l'extérieur là où les composantes sont plus fortes ; son bord extérieur montre l'évolution du spectre sans trait distinct.
+- La luminosité et la surface des points, ainsi que l'étendue de la zone colorée, indiquent une intensité relative, pas un niveau absolu : l'échelle suit les pics récents.
+- Dans le grave, les notes proches se distinguent moins bien et l'affichage réagit plus lentement ; elles peuvent se confondre.
 
 ## Level Meter
 
@@ -63,7 +94,7 @@ Affiche les fréquences fondamentales (F0) estimées de A0 à C8 dans un piano r
   - **1/12 Octave** (par défaut) : une ligne par demi-ton, avec l’estimation la plus forte de cette note.
   - **High (1/60 Octave)** : cinq lignes par demi-ton pour afficher des variations de hauteur plus fines.
 - **Layout** - Choisit **Horizontal** (par défaut) ou **Vertical**. L’historique est conservé lors du changement de disposition.
-- **Volume** - Affiche le volume relatif par l’épaisseur des barres et des indicateurs en demi-cercle. Il est activé par défaut ; le désactiver conserve les lignes d’origine fondées uniquement sur la confiance.
+- **Volume** - Affiche le volume relatif par l’épaisseur des barres et des indicateurs en demi-cercle. Il est activé par défaut ; lorsqu’il est désactivé, l’intensité des lignes traduit la confiance.
 - **Time Span** (de 1 à 10 s) - Définit la durée affichée dans le piano roll
   - Une valeur courte facilite l'observation des changements de rythme
   - Une valeur longue affiche une portion musicale plus étendue
@@ -125,6 +156,7 @@ Suit une fréquence fondamentale (F0) à la fois dans un piano roll défilant su
 ### Paramètres
 
 - **Layout** - Sélectionne **Horizontal** (par défaut) ou **Vertical**.
+- **Color** - Change la couleur de la ligne sans modifier la détection de hauteur. **Normal** (par défaut) reprend la couleur du graphique du thème ; **Heatmap** indique le volume sur la même échelle de 24 dB que Note Spectrogram ; **Note Colors** suit la hauteur entre les couleurs des notes.
 - **Reference A4** (400 à 480 Hz) - Règle la référence d'accord utilisée pour le nom des notes et l'écart en cents. Valeur par défaut : 440 Hz.
 - **Lowest Note** - Définit la limite basse de la plage affichée et analysée. Valeur par défaut : C2. Le réglage minimal est A0.
 - **Highest Note** - Définit la limite haute de la plage affichée et analysée. Valeur par défaut : C7. Le réglage maximal est C8.
@@ -154,6 +186,7 @@ Le graphique défile de droite à gauche à vitesse constante, avec un repère c
 - Différents instruments créent des motifs uniques
 
 ### Paramètres
+- **Color** - **Normal** utilise la couleur du graphique du thème et s’éclaircit avec l’intensité des fréquences. **Heatmap** (par défaut) conserve l’échelle multicolore d’origine. Le changement recolore l’historique existant.
 - **DB Range** - Intensité des couleurs (-144dB à -48dB)
   - Nombres plus bas : Voir plus de détails subtils
   - Nombres plus hauts : Se concentrer sur les sons principaux
@@ -173,8 +206,8 @@ Crée un affichage visuel en temps réel des fréquences de votre musique, des b
 - La gauche montre les basses fréquences (batterie, basse)
 - Le milieu montre les fréquences principales (voix, guitares, piano)
 - La droite montre les hautes fréquences (cymbales, brillance, air)
-- La ligne vert foncé montre le son actuel
-- La ligne vert clair suit les pics récents et descend progressivement lorsqu’ils s’estompent
+- La ligne épaisse représente le son actuel
+- La ligne fine suit les crêtes récentes et descend progressivement lorsqu’elles s’estompent
 - Dans l'affichage **Bar**, chaque barre indique le niveau le plus élevé dans une partie de largeur égale de l'affichage. **Log** et **Log (HQ)** utilisent des largeurs d'octave égales ; **Linear** utilise des largeurs de fréquence égales.
 - Le fin repère au-dessus d'une barre indique son pic récent et descend progressivement.
 - Les pics plus hauts indiquent une présence plus forte de ces fréquences
@@ -187,6 +220,7 @@ Crée un affichage visuel en temps réel des fréquences de votre musique, des b
 - Mix complet : Comment toutes les fréquences fonctionnent ensemble
 
 ### Paramètres
+- **Color** - **Normal** (par défaut) conserve les couleurs du graphique du thème. **Heatmap** éclaircit les niveaux élevés et **Note Colors** suit les couleurs des notes sur l’axe des fréquences. Le choix s’applique à **Line** et à **Bar**. Avec **Bar** et **Note Colors**, chaque barre et son repère de crête prennent une seule couleur déterminée par la fréquence centrale de la bande.
 - **DB Range** - Sensibilité de l'affichage (-144dB à -48dB)
   - Nombres plus bas : Voir plus de détails subtils
   - Nombres plus hauts : Se concentrer sur les sons principaux
@@ -254,6 +288,7 @@ Un outil de visualisation fascinant qui vous permet de voir comment votre musiqu
   - Valeurs basses : Voir les changements musicaux rapides
   - Valeurs hautes : Voir les motifs sonores globaux
   - Par défaut : 100 ms convient bien à la plupart des musiques
+- **Gain** (0 à 24 dB ; valeur par défaut : 0 dB) - Agrandit uniquement les points et la courbe des crêtes dans le losange. Augmentez la valeur pour mieux voir les motifs des passages à faible niveau. Le son et les indications de corrélation et d'équilibre restent inchangés.
 
 ### Profiter de Votre Musique
 1. **Observez Différents Styles**

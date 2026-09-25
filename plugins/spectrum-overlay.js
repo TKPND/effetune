@@ -12,6 +12,7 @@
     const MODE_COMPARE = 'compare';
     const instances = new Map();
     const sessionModes = new Map();
+    let settings = { quality: 'normal', peakHold: false };
 
     const targets = new Map([
         'BandPassFilterPlugin', 'CombFilterPlugin', 'FifteenBandGEQPlugin',
@@ -132,10 +133,7 @@
             this.retryTimer = null;
             this.canvas = null;
             this.axisTitle = null;
-            this.pending = null;
-            this.pendingFrames = [];
-            this.inputLevels = null;
-            this.levels = null;
+            this._resetAnalysis();
             this.differenceX = null;
             this.differenceBeforeY = null;
             this.differenceAfterY = null;
@@ -177,8 +175,22 @@
 
         _post(type, enabled) {
             const message = { type, pluginId: this.plugin.id, enabled };
-            if (type === 'setSpectrumTap' && enabled) message.mode = this.mode;
+            if (type === 'setSpectrumTap' && enabled) {
+                message.mode = this.mode;
+                message.quality = settings.quality;
+            }
             this.node?.port.postMessage(message);
+        }
+
+        _resetAnalysis() {
+            this.pending = null;
+            this.pendingFrames = [];
+            this.inputLevels = null;
+            this.levels = null;
+            this.inputPeaks = null;
+            this.peaks = null;
+            this.lastPeakTime = null;
+            this.validCellCount = 0;
         }
 
         _ensureNode() {
@@ -188,8 +200,7 @@
             this.node?.port.removeEventListener('message', this.onMessage);
             if (this.active) this._post('setSpectrumTap', false);
             this.active = false;
-            this.pending = null;
-            this.pendingFrames = [];
+            this._resetAnalysis();
             this.node = node;
             if (this.enabled && node) {
                 node.port.addEventListener('message', this.onMessage);
@@ -207,10 +218,7 @@
             if (this.enabled) sessionModes.set(this.plugin.id, mode);
             else sessionModes.delete(this.plugin.id);
             this._updateButton();
-            this.pending = null;
-            this.pendingFrames = [];
-            this.inputLevels = null;
-            this.levels = null;
+            this._resetAnalysis();
             if (mode !== MODE_COMPARE) this._releaseDifferenceWorkspace();
             if (this.enabled) {
                 if (!wasEnabled) this._createCanvas();
@@ -321,7 +329,8 @@
         onSpectrumMessage(data) {
             if (!this.active || data.type !== 'spectrumOverlay' ||
                 data.spectrumPluginId !== this.plugin.id ||
-                (data.mode && data.mode !== this.mode)) return;
+                (data.mode && data.mode !== this.mode) ||
+                (data.quality || 'normal') !== settings.quality) return;
             const hub = window.dspTelemetryHub;
             if (this.visualSyncEpoch !== hub?.visualSyncEpoch) {
                 this.pendingFrames = [];
@@ -350,12 +359,32 @@
                 this.pending = entry.data;
                 this.lastReceived = performance.now();
             }
+            const peakNow = performance.now();
+            const decay = this.lastPeakTime === null ? 0 : 20 * (peakNow - this.lastPeakTime) / 1000;
+            this.lastPeakTime = peakNow;
+            if (settings.peakHold) {
+                if (this.inputPeaks) this._fade(this.inputPeaks, decay);
+                if (this.peaks) this._fade(this.peaks, decay);
+            }
             if (this.pending) {
-                const { inputBuffer, outputBuffer, buffer, bufferPosition, sampleRate } = this.pending;
-                this.inputLevels = inputBuffer
-                    ? analyze(inputBuffer, bufferPosition, sampleRate)
-                    : null;
-                this.levels = analyze(outputBuffer || buffer, bufferPosition, sampleRate);
+                const { inputBuffer, outputBuffer, buffer, bufferPosition, sampleRate,
+                    inputSpectrum, outputSpectrum } = this.pending;
+                if (settings.quality === 'hq') {
+                    this.inputLevels = inputSpectrum?.current ?? null;
+                    this.levels = outputSpectrum.current;
+                    this.validCellCount = outputSpectrum.validCellCount;
+                    if (settings.peakHold) {
+                        this.inputPeaks = inputSpectrum?.peaks ?? null;
+                        this.peaks = outputSpectrum.peaks;
+                    }
+                } else {
+                    this.inputLevels = inputBuffer ? analyze(inputBuffer, bufferPosition, sampleRate) : null;
+                    this.levels = analyze(outputBuffer || buffer, bufferPosition, sampleRate);
+                    if (settings.peakHold) {
+                        this.inputPeaks = this._holdPeaks(this.inputLevels, this.inputPeaks);
+                        this.peaks = this._holdPeaks(this.levels, this.peaks);
+                    }
+                }
                 this.sampleRate = sampleRate;
                 this.pending = null;
             }
@@ -372,20 +401,38 @@
                 if (this.inputLevels) this._fade(this.inputLevels);
                 this._fade(this.levels);
             }
-            if (this.mode === MODE_COMPARE && this.inputLevels) {
-                this._drawDifference(ctx, this.inputLevels, this.levels);
-                this._drawSpectrum(ctx, this.levels, (window.ThemePalette?.get('graph-overlay-compare') ?? ''));
+            const levels = settings.peakHold ? this.peaks : this.levels;
+            const inputLevels = settings.peakHold ? this.inputPeaks : this.inputLevels;
+            if (this.mode === MODE_COMPARE && inputLevels) {
+                this._drawDifference(ctx, inputLevels, levels);
+                this._drawSpectrum(ctx, levels, (window.ThemePalette?.get('graph-overlay-compare') ?? ''));
             } else {
-                this._drawSpectrum(ctx, this.levels, (window.ThemePalette?.get('graph-overlay-after') ?? ''));
+                this._drawSpectrum(ctx, levels, (window.ThemePalette?.get('graph-overlay-after') ?? ''));
             }
             this._drawScale(ctx);
         }
 
-        _fade(levels) {
+        _holdPeaks(levels, peaks) {
+            if (!levels) return null;
+            if (!peaks || peaks.length !== levels.length) peaks = new Float32Array(levels.length).fill(NUMERIC_FLOOR_DB);
             for (let i = 0; i < levels.length; i++) {
-                const faded = levels[i] - 4;
+                const level = levels[i] > 0 ? 0 : levels[i];
+                if (level > peaks[i]) peaks[i] = level;
+            }
+            return peaks;
+        }
+
+        _fade(levels, decay = 4) {
+            for (let i = 0; i < levels.length; i++) {
+                const faded = levels[i] - decay;
                 levels[i] = faded < NUMERIC_FLOOR_DB ? NUMERIC_FLOOR_DB : faded;
             }
+        }
+
+        _frequencyAt(index) {
+            return settings.quality === 'hq'
+                ? (index === 2047 ? 40000 : 20 * Math.exp(index * Math.log(2000) / 2047))
+                : index * this.sampleRate / FFT_SIZE;
         }
 
         _drawSpectrum(ctx, levels, strokeStyle) {
@@ -395,8 +442,10 @@
             const logRange = Math.log10(maxFreq) - logMin;
             ctx.beginPath();
             let started = false;
-            for (let i = 1; i < levels.length; i++) {
-                const frequency = i * this.sampleRate / FFT_SIZE;
+            const first = settings.quality === 'hq' ? 0 : 1;
+            const end = settings.quality === 'hq' ? this.validCellCount : levels.length;
+            for (let i = first; i < end; i++) {
+                const frequency = this._frequencyAt(i);
                 if (frequency < minFreq) continue;
                 if (frequency > maxFreq) break;
                 const x = width * (Math.log10(frequency) - logMin) / logRange;
@@ -404,8 +453,8 @@
                 const y = height * level / DYNAMIC_RANGE_DB;
                 if (!started) {
                     let startLevel = level;
-                    if (i > 1 && frequency > minFreq) {
-                        const previousFrequency = (i - 1) * this.sampleRate / FFT_SIZE;
+                    if (i > first && frequency > minFreq) {
+                        const previousFrequency = this._frequencyAt(i - 1);
                         const previousLevel = levels[i - 1] > 0 ? 0 : levels[i - 1];
                         const fraction = (logMin - Math.log10(previousFrequency)) /
                             (Math.log10(frequency) - Math.log10(previousFrequency));
@@ -440,8 +489,10 @@
             const logMin = Math.log10(minFreq);
             const logRange = Math.log10(maxFreq) - logMin;
             let count = 0;
-            for (let i = 1; i < length; i++) {
-                const frequency = i * this.sampleRate / FFT_SIZE;
+            const first = settings.quality === 'hq' ? 0 : 1;
+            const end = settings.quality === 'hq' ? this.validCellCount : length;
+            for (let i = first; i < end; i++) {
+                const frequency = this._frequencyAt(i);
                 if (frequency < minFreq) continue;
                 if (frequency > maxFreq) break;
                 const beforeLevel = beforeLevels[i] > 0 ? 0 : beforeLevels[i];
@@ -449,8 +500,8 @@
                 if (count === 0) {
                     let startBefore = beforeLevel;
                     let startAfter = afterLevel;
-                    if (i > 1 && frequency > minFreq) {
-                        const previousFrequency = (i - 1) * this.sampleRate / FFT_SIZE;
+                    if (i > first && frequency > minFreq) {
+                        const previousFrequency = this._frequencyAt(i - 1);
                         const fraction = (logMin - Math.log10(previousFrequency)) /
                             (Math.log10(frequency) - Math.log10(previousFrequency));
                         const previousBefore = beforeLevels[i - 1] > 0 ? 0 : beforeLevels[i - 1];
@@ -573,10 +624,7 @@
             this.canvas = null;
             this.axisTitle?.remove();
             this.axisTitle = null;
-            this.pending = null;
-            this.pendingFrames = [];
-            this.inputLevels = null;
-            this.levels = null;
+            this._resetAnalysis();
             this._releaseDifferenceWorkspace();
             this.visible = true;
         }
@@ -598,7 +646,24 @@
     window.SpectrumOverlay = {
         TARGETS: targets,
         analyze,
+        get quality() { return settings.quality; },
+        setSettings({ quality = settings.quality, peakHold = settings.peakHold } = {}) {
+            quality = quality === 'hq' ? 'hq' : 'normal';
+            peakHold = peakHold === true;
+            if (quality === settings.quality && peakHold === settings.peakHold) return;
+            const qualityChanged = quality !== settings.quality;
+            settings = { quality, peakHold };
+            for (const instance of instances.values()) {
+                instance._resetAnalysis();
+                if (qualityChanged && instance.active) instance._post('setSpectrumTap', true);
+            }
+            if (qualityChanged) window.audioManager?._scheduleVisualSyncUpdate?.();
+        },
         attach(plugin, uiRoot) {
+            if (window.appConfig) this.setSettings({
+                quality: window.appConfig.spectrumOverlayQuality,
+                peakHold: window.appConfig.spectrumOverlayPeakHold
+            });
             window.FrequencyAxis.pruneDetached(instances);
             instances.get(plugin.id)?.dispose();
             const target = targets.get(plugin.constructor.name);

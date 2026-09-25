@@ -11,6 +11,16 @@ class IRReverbAssets(TypedDict):
 EFFECT_METADATA: dict[str, object]
 _EFFECT_IMPLEMENTATION: dict[str, dict[str, object]]
 
+class ChromaSpiral(Effect):
+    effect_type: Literal["ChromaSpiral"]
+    def __init__(
+        self,
+        *,
+        id: str | None = ...,
+        enabled: bool = ...,
+        channel: EffectChannel = ...,
+    ) -> None: ...
+
 class LevelMeter(Effect):
     effect_type: Literal["LevelMeter"]
     def __init__(

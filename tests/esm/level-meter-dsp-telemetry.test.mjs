@@ -461,3 +461,79 @@ test('LevelMeter keeps steady levels stable and freezes across repeated effect a
   }
   plugin.cleanup();
 });
+
+test('LevelMeter Visualizer display separates signal from guides and preserves readouts', () => {
+  const runtime = loadLevelMeter();
+  const plugin = Object.create(runtime.LevelMeterPlugin.prototype);
+  plugin.initializeDisplayState();
+  plugin.enabled = plugin._sectionEnabled = true;
+  const signalFills = [], mainFills = [], labels = [];
+  let gridLines = 0;
+  const main = {
+    clearRect() { mainFills.length = 0; labels.length = 0; gridLines = 0; },
+    fillRect(...args) { mainFills.push(args); },
+    beginPath() {}, moveTo() {}, lineTo() {}, stroke() { gridLines++; },
+    save() {}, restore() {}, measureText() { return { width: 60 }; }
+  };
+  const signal = { fillRect(...args) { signalFills.push({ style: this.fillStyle, args }); } };
+  const canvas = { width: 600, height: 60, getContext: () => main };
+  plugin.ctx = main;
+  plugin.initializeDisplayCanvas(canvas);
+  plugin.displayOptions = {
+    transparent: true, showAxes: false, showAxisNumbers: false,
+    showLevelValues: false, channel: null, orientation: 'horizontal',
+    themePalette: { get: role => `stub:${role}` },
+    drawSignal(_context, draw) { draw(signal); },
+    textContext: { fillText(text) { labels.push(text); } },
+    traceStyle: () => '#123456'
+  };
+  runtime.setNow(1000);
+  plugin.handleDspLevelTelemetry(makeLevelFrame({ peaks: [0.5], clipFlags: 1 }).frame);
+  plugin.updateMeter(1000);
+  assert.equal(signalFills.length, 2);
+  assert.deepEqual(signalFills.map(fill => fill.style), ['#123456', 'stub:text-primary']);
+  assert.equal(gridLines, 0);
+  assert.deepEqual(labels, ['OVERLOAD']);
+  assert.equal(mainFills.length, 1); // The warning badge, never the graph background.
+
+  signalFills.length = 0;
+  plugin.displayOptions.showAxisNumbers = true;
+  plugin.updateMeter(1000);
+  assert.equal(gridLines, 0);
+  assert.ok(labels.includes('-84'));
+  assert.equal(labels.some(label => label.includes('dB')), false);
+  plugin.displayOptions.showLevelValues = true;
+  plugin.displayOptions.channel = 'L';
+  plugin.handleDspLevelTelemetry(makeLevelFrame({ peaks: [0.5, 0.5], clipFlags: 1 }).frame);
+  signalFills.length = 0;
+  plugin.updateMeter(1000);
+  assert.ok(labels.includes('L -6.0 dB'));
+  assert.equal(signalFills.length, 2, 'A selected single channel has one bar and peak marker');
+  for (const selected of ['R', '3']) {
+    plugin.displayOptions.channel = selected;
+    signalFills.length = 0;
+    plugin.updateMeter(1000);
+    assert.equal(signalFills.length, 2, `${selected} is one channel`);
+    assert.ok(labels.includes(`${selected} -6.0 dB`));
+  }
+  plugin.displayOptions.channel = 'L';
+  plugin.displayOptions.showAxes = true;
+  canvas.width = 300;
+  plugin.updateMeter(1000);
+  assert.ok(gridLines > 0);
+  assert.equal(plugin.canvasWidth, 300);
+  plugin.displayOptions.orientation = 'vertical';
+  canvas.height = 120;
+  signalFills.length = 0;
+  plugin.updateMeter(1000);
+  assert.equal(plugin.canvasHeight, 120);
+  assert.equal(signalFills.length, 2);
+  assert.ok(signalFills[0].args[1] > 0 && signalFills[0].args[3] > 0,
+    'Vertical bar grows upward from the canvas bottom');
+  assert.ok(labels.includes('L -6.0 dB'));
+  plugin.displayOptions.orientation = 'horizontal';
+  plugin.displayOptions.channel = null;
+  signalFills.length = 0;
+  plugin.updateMeter(1000);
+  assert.equal(signalFills.length, 4, 'Both channels return after horizontal selection');
+});

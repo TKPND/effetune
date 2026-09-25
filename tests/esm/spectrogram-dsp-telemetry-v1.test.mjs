@@ -258,11 +258,11 @@ test('Spectrogram persists frequency scale and reprojects canonical history imme
       (canonicalFrequency - minFrequency) / (maxFrequency - minFrequency)
   );
   const legacyPixelOffset = legacyDisplayRow * historyWidth * 4;
-  assert.ok(plugin.imageDataCache.data[legacyPixelOffset] > 0);
+  assert.ok(plugin.imageDataCache.data[legacyPixelOffset + 1] > 0);
   assert.equal(plugin.spectrogramBuffer[20 * historyWidth], -12);
   plugin.setFrequencyScale('log');
   assert.equal(plugin.getParameters().sc, 'log');
-  assert.ok(plugin.imageDataCache.data[20 * historyWidth * 4] > 0);
+  assert.ok(plugin.imageDataCache.data[20 * historyWidth * 4 + 1] > 0);
 });
 
 test('Spectrogram synchronously copies v1 columns without running a main-thread FFT', () => {
@@ -335,6 +335,7 @@ test('Spectrogram ring paints one physical column and draws wrapped history chro
 test('Spectrogram color LUT freezes the legacy seven-stop gradient', () => {
   const runtime = loadSpectrogram();
   const plugin = new runtime.SpectrogramPlugin();
+  assert.equal(plugin.getParameters().cl, 'Heatmap');
   const expectedRgbaByIntensity = new Map([
     [0, [0, 0, 0, 255]],
     [42, [0, 0, 190, 255]],
@@ -350,6 +351,34 @@ test('Spectrogram color LUT freezes the legacy seven-stop gradient', () => {
       expectedRgba
     );
   }
+});
+
+test('Spectrogram recolors retained intensity with Normal and Heatmap only', () => {
+  const runtime = loadSpectrogram();
+  runtime.windowRef.ThemePalette = { get: role => role === 'graph-bg-deep'
+    ? 'rgb(10, 20, 30)' : 'rgb(110, 120, 130)' };
+  const plugin = new runtime.SpectrogramPlugin();
+  installCanvasStubs(plugin);
+  plugin.setColor('Normal');
+  plugin.dspSpectrogramActive = true;
+  const row = 128;
+  const intensity = 128;
+  plugin.spectrogramIntensityBuffer[row * 1024] = intensity;
+  plugin.paintDspSpectrogramImage();
+  const offset = row * 1024 * 4;
+  const color = () => Array.from(plugin.imageDataCache.data.slice(offset, offset + 3));
+  const normalColor = color();
+  assert.deepEqual(normalColor, [60, 70, 80]);
+  plugin.setColor('Heatmap');
+  assert.deepEqual(color(), Array.from(plugin.constructor.getHeatmapLuts().rgb.slice(384, 387)));
+  plugin.setColor('Rainbow');
+  assert.equal(plugin.getParameters().cl, 'Heatmap');
+  plugin.setColor('Normal');
+  assert.deepEqual(color(), normalColor);
+  assert.equal(plugin.spectrogramIntensityBuffer[row * 1024], intensity);
+  assert.equal(plugin.getParameters().cl, 'Normal');
+  plugin.reset();
+  assert.equal(plugin.cl, 'Heatmap');
 });
 
 test('Spectrogram scrolls by elapsed render time between deliveries and aligns fresh data', () => {
@@ -696,6 +725,7 @@ test('Spectrogram plot uses one fixed black-background palette before history is
   const runtime = loadSpectrogram();
   runtime.windowRef.ThemePalette = { get: name => palettes[activeTheme][name] ?? '' };
   const plugin = new runtime.SpectrogramPlugin();
+  plugin.setColor('Heatmap');
   const { drawCalls, operations, fillCalls, strokeCalls } = installCanvasStubs(plugin);
   plugin.canvas.width = 512;
   plugin.canvas.height = 256;

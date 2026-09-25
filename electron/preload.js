@@ -195,6 +195,7 @@ const ALLOWED_IPC_LISTENER_CHANNELS = new Set([
   'open-effect-pipeline-view',
   'open-frequency-response-measurement',
   'open-library-view',
+  'open-visualizer-view',
   'reload-with-pipeline-state',
   'request-tray-menu-update',
   'rescan-library',

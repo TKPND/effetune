@@ -112,6 +112,28 @@ test('Electron and Web catalogs expose the scan-folder track-count command', () 
   }
 });
 
+test('Web file paths sort and page from the registered folder name', async t => {
+  await openWebTestCatalog(t, 'effetune-web-file-path-');
+  seedWebTestFolder();
+  dispatchWebSqliteCommand('upsertTracks', { tracks: [
+    createWebTestTrack('z', 'Z/Last.flac'),
+    createWebTestTrack('a', 'A/First.flac'),
+    createWebTestTrack('m', 'M/Middle.flac')
+  ] });
+  const request = { query: '', sort: 'path', direction: 'asc', limit: 1 };
+  const first = dispatchWebSqliteCommand('queryTracks', request);
+  const second = dispatchWebSqliteCommand('queryTracks', {
+    ...request, contextToken: first.contextToken, cursor: first.nextCursor
+  });
+  const third = dispatchWebSqliteCommand('queryTracks', {
+    ...request, contextToken: first.contextToken, cursor: second.nextCursor
+  });
+  assert.deepEqual([first, second, third].map(page => page.rows[0].path), [
+    'Music/A/First.flac', 'Music/M/Middle.flac', 'Music/Z/Last.flac'
+  ]);
+  assert.equal(third.nextCursor, null);
+});
+
 test('Web folder directory browsing keeps physical hierarchy counts and direct-track scopes exact', async t => {
   const { database, close } = await openWebTestCatalog(t, 'effetune-web-directory-tree-');
   seedWebTestFolder();

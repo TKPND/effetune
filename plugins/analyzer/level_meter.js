@@ -5,30 +5,7 @@ const LEVEL_METER_MAX_TELEMETRY_CHANNELS = 16;
 class LevelMeterPlugin extends PluginBase {
     constructor() {
         super('Level Meter', 'Displays audio level with peak hold');
-        this.lv = [];     // lv: Levels (formerly levels) - Range: -144 to 0 dB
-        this.pl = [];     // pl: Peak Levels (formerly peakLevels) - Range: -144 to 0 dB
-        this.ph = [];       // ph: Peak Hold Times (formerly peakHoldTimes)
-        this.raw = [];      // Latest accepted raw levels, used as the display floor
-        this.ol = false;                      // ol: Overload (formerly overload)
-        this.ot = 0;                          // ot: Overload Time (formerly overloadTime)
-        this.OVERLOAD_DISPLAY_TIME = 5.0; // seconds
-        this.PEAK_HOLD_TIME = 1.0; // seconds
-        this.FALL_RATE = 20; // dB per second
-        this.lastProcessTime = performance.now() / 1000;
-        this.lastMeterUpdateTime = 0;
-        this.METER_UPDATE_INTERVAL = 16; // Match with plugin-base.js
-        this.DISPLAY_EXTRAPOLATION_LIMIT = 1 / 60;
-        this.displayReceiptTime = this.lastProcessTime;
-        this.displayFrozen = false;
-        this.displayFrozenExtrapolation = 0;
-        this.observer = null;
-        this.resizeGraphDisposer = null;
-        this.graphDpr = 1;
-        this.graphCssWidth = 1024;
-        this._dspTelemetryHub = null;
-        this._dspTelemetryTapId = null;
-        this._dspTelemetryUnsubscribe = null;
-        this._boundDspLevelTelemetry = frame => this.handleDspLevelTelemetry(frame);
+        this.initializeDisplayState();
 
         // Register processor function that measures audio levels over 1/60 second window
         this.registerProcessor(`
@@ -107,6 +84,33 @@ class LevelMeterPlugin extends PluginBase {
             
             return data;
         `);
+    }
+
+    initializeDisplayState() {
+        this.lv = [];     // lv: Levels (formerly levels) - Range: -144 to 0 dB
+        this.pl = [];     // pl: Peak Levels (formerly peakLevels) - Range: -144 to 0 dB
+        this.ph = [];       // ph: Peak Hold Times (formerly peakHoldTimes)
+        this.raw = [];      // Latest accepted raw levels, used as the display floor
+        this.ol = false;                      // ol: Overload (formerly overload)
+        this.ot = 0;                          // ot: Overload Time (formerly overloadTime)
+        this.OVERLOAD_DISPLAY_TIME = 5.0; // seconds
+        this.PEAK_HOLD_TIME = 1.0; // seconds
+        this.FALL_RATE = 20; // dB per second
+        this.lastProcessTime = performance.now() / 1000;
+        this.lastMeterUpdateTime = 0;
+        this.METER_UPDATE_INTERVAL = 16; // Match with plugin-base.js
+        this.DISPLAY_EXTRAPOLATION_LIMIT = 1 / 60;
+        this.displayReceiptTime = this.lastProcessTime;
+        this.displayFrozen = false;
+        this.displayFrozenExtrapolation = 0;
+        this.observer = null;
+        this.resizeGraphDisposer = null;
+        this.graphDpr = 1;
+        this.graphCssWidth = 1024;
+        this._dspTelemetryHub = null;
+        this._dspTelemetryTapId = null;
+        this._dspTelemetryUnsubscribe = null;
+        this._boundDspLevelTelemetry = frame => this.handleDspLevelTelemetry(frame);
     }
 
     // Get current parameters
@@ -376,13 +380,9 @@ class LevelMeterPlugin extends PluginBase {
         container.appendChild(overloadIndicator);
 
         // Store UI elements for updates
-        this.foregroundCanvas = foregroundCanvas;
+        this.initializeDisplayCanvas(foregroundCanvas);
         this.backgroundCanvas = backgroundCanvas;
         this.overloadIndicator = overloadIndicator;
-        this.canvasWidth = foregroundCanvas.width || 1024;
-        this.canvasHeight = foregroundCanvas.height || 64;
-        this.dbRange = 96;
-        this.dbStart = -96;
         graph.resize();
 
         if (this.observer == null) {
@@ -393,35 +393,64 @@ class LevelMeterPlugin extends PluginBase {
         return container;
     }
 
-    drawStaticBackground() {
-        if (!this.backgroundCanvas) return;
+    initializeDisplayCanvas(canvas) {
+        this.foregroundCanvas = canvas;
+        this.canvasWidth = canvas.width || 1024;
+        this.canvasHeight = canvas.height || 64;
+        this.dbRange = 96;
+        this.dbStart = -96;
+    }
 
-        const bgCtx = this.backgroundCanvas.getContext('2d');
-        const width = this.backgroundCanvas.width;
-        const height = this.backgroundCanvas.height;
+    drawStaticBackground() {
+        const canvas = this.backgroundCanvas || (this.displayOptions && this.foregroundCanvas);
+        if (!canvas) return;
+
+        const bgCtx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
         const dpr = this.graphDpr || 1;
-        const isNarrow = this.graphCssWidth < 500;
+        const vertical = this.displayOptions?.orientation === 'vertical';
+        const isNarrow = (vertical ? height / dpr : this.graphCssWidth) < 500;
         const gridStep = isNarrow ? 6 : 3;
         const labelStep = isNarrow ? 24 : 12;
+        const options = this.displayOptions;
+        const showAxes = options?.showAxes !== false;
+        const showNumbers = options?.showAxisNumbers !== false;
 
-        bgCtx.clearRect(0, 0, width, height);
+        if (this.backgroundCanvas) bgCtx.clearRect(0, 0, width, height);
+        if (!showAxes && !showNumbers) return;
 
-        bgCtx.strokeStyle = (window.ThemePalette?.get('graph-grid-soft') ?? '');
+        const palette = options?.themePalette ?? window.ThemePalette;
+        bgCtx.strokeStyle = (palette?.get('graph-grid-soft') ?? '');
         bgCtx.lineWidth = dpr;
-        bgCtx.fillStyle = (window.ThemePalette?.get('graph-label-soft') ?? '');
-        bgCtx.font = `${10 * dpr}px Arial`;
-        bgCtx.textAlign = 'center';
-        bgCtx.textBaseline = 'alphabetic';
-        for (let db = this.dbStart; db <= 0; db += gridStep) {
-            const x = width * (db - this.dbStart) / this.dbRange;
+        bgCtx.fillStyle = (palette?.get(options?.visualizerAxisLabels ? 'graph-label' : 'graph-label-soft') ?? '');
+        bgCtx.font = `${(options?.visualizerAxisLabels ? (isNarrow ? 11 : 12) : 10) * dpr}px Arial`;
+        bgCtx.textAlign = vertical ? 'left' : 'center';
+        bgCtx.textBaseline = vertical ? 'middle' : 'alphabetic';
+        for (let db = Math.ceil(this.dbStart / gridStep) * gridStep; db <= 0; db += gridStep) {
+            const position = (db - this.dbStart) / this.dbRange;
+            const x = width * position;
+            const y = height * (1 - position);
 
-            bgCtx.beginPath();
-            bgCtx.moveTo(x, 0);
-            bgCtx.lineTo(x, height);
-            bgCtx.stroke();
+            if (showAxes) {
+                bgCtx.beginPath();
+                bgCtx.moveTo(vertical ? 0 : x, vertical ? y : 0);
+                bgCtx.lineTo(vertical ? width : x, vertical ? y : height);
+                bgCtx.stroke();
+            }
 
-            if (db % labelStep === 0 && db !== 0 && db !== this.dbStart) {
-                bgCtx.fillText(db.toString(), x, height - (2 * dpr));
+            if (showNumbers && db % labelStep === 0 && db !== 0 && db !== this.dbStart) {
+                const text = db.toString(), textX = vertical ? 2 * dpr : x;
+                const textY = vertical ? y : height - (2 * dpr);
+                if (options?.visualizerAxisLabels) {
+                    bgCtx.save();
+                    bgCtx.strokeStyle = palette?.get('graph-bg-deep') ?? '';
+                    bgCtx.lineWidth = 2 * dpr;
+                    bgCtx.lineJoin = 'round';
+                    (options.textContext ?? bgCtx).strokeText(text, textX, textY);
+                    bgCtx.restore();
+                }
+                (options?.textContext ?? bgCtx).fillText(text, textX, textY);
             }
         }
     }
@@ -490,46 +519,55 @@ class LevelMeterPlugin extends PluginBase {
     // Update meter display
     updateMeter(now = performance.now()) {
         if (!this.foregroundCanvas) return;
-        
+        if (this.displayOptions) {
+            this.canvasWidth = this.foregroundCanvas.width;
+            this.canvasHeight = this.foregroundCanvas.height;
+        }
+
         const ctx = this.foregroundCanvas.getContext('2d');
         ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-        ctx.fillStyle = (window.ThemePalette?.get('graph-bg-deep') ?? '');
-        ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+        const options = this.displayOptions;
+        if (!options?.transparent) {
+            ctx.fillStyle = ((options?.themePalette ?? window.ThemePalette)?.get('graph-bg-deep') ?? '');
+            ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+        }
 
         // Skip drawing if disabled or no channels yet
-        if (!this.enabled || this.lv.length === 0) return;
+        if (!this.enabled || this.lv.length === 0) {
+            if (options) this.drawStaticBackground();
+            return;
+        }
 
-        // Draw each channel
-        const numDrawableChannels = this.lv.length; // Use the actual number of channels
+        // A selected mono source is duplicated into the two-channel DSP scratch buffer.
+        // Its two telemetry values describe the same channel, so display it once.
+        const channel = options?.channel;
+        const singleChannel = channel === 'L' || channel === 'R' ||
+            (typeof channel === 'string' && /^([1-9]|1[0-6])$/.test(channel));
+        const channelLabels = !options ? null : singleChannel ? [channel] : channel == null
+            ? ['L', 'R']
+            : [channel.slice(0, channel.length / 2), channel.slice(channel.length / 2)];
+        const numDrawableChannels = singleChannel ? 1 : this.lv.length;
         const elapsed = now / 1000 - this.displayReceiptTime;
         const extrapolation = this.displayFrozen ? this.displayFrozenExtrapolation :
             (elapsed > 0 ? (elapsed < this.DISPLAY_EXTRAPOLATION_LIMIT ? elapsed : this.DISPLAY_EXTRAPOLATION_LIMIT) : 0);
         if (!this.displayFrozen) this.displayFrozenExtrapolation = extrapolation;
         const renderTime = this.lastProcessTime + extrapolation;
         const dpr = this.graphDpr || 1;
+        const vertical = options?.orientation === 'vertical';
         const channelGap = numDrawableChannels > 1 ? 2 * dpr : 0;
-        const channelHeight = numDrawableChannels > 0 ? (this.canvasHeight / numDrawableChannels) - channelGap : 0; // Calculate height per channel, add padding if more than one channel
+        const channelSpan = (vertical ? this.canvasWidth : this.canvasHeight) / numDrawableChannels;
+        const channelSize = channelSpan - channelGap;
 
         for (let channel = 0; channel < numDrawableChannels; channel++) {
-            const y = channel * (this.canvasHeight / numDrawableChannels); // Calculate y position based on number of channels
-
-            // Create gradient for this channel
-            const gradient = ctx.createLinearGradient(0, y, this.canvasWidth, y);
-            gradient.addColorStop(0, '#008000'); // theme-allow: Fixed signal-level or self-painted colormap color.
-            gradient.addColorStop(((-12) - this.dbStart) / this.dbRange, '#008000'); // theme-allow: Fixed signal-level or self-painted colormap color.
-            gradient.addColorStop(((-12) - this.dbStart) / this.dbRange, '#808000'); // theme-allow: Fixed signal-level or self-painted colormap color.
-            gradient.addColorStop(((-6) - this.dbStart) / this.dbRange, '#808000'); // theme-allow: Fixed signal-level or self-painted colormap color.
-            gradient.addColorStop(((-6) - this.dbStart) / this.dbRange, '#800000'); // theme-allow: Fixed signal-level or self-painted colormap color.
-            gradient.addColorStop(1, '#800000'); // theme-allow: Fixed signal-level or self-painted colormap color.
+            const start = channel * channelSpan;
 
             // Draw level meter
             const fallingLevel = this.lv[channel] - this.FALL_RATE * extrapolation;
             const projectedLevel = this.raw[channel] > fallingLevel ? this.raw[channel] : fallingLevel;
             const level = projectedLevel < -144 ? -144 : projectedLevel;
-            const rawLevelWidth = this.canvasWidth * (level - this.dbStart) / this.dbRange;
-            const levelWidth = rawLevelWidth < 0 ? 0 : rawLevelWidth;
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, y + dpr, levelWidth, channelHeight);
+            const rawLevelLength = (vertical ? this.canvasHeight : this.canvasWidth) *
+                (level - this.dbStart) / this.dbRange;
+            const levelLength = rawLevelLength < 0 ? 0 : rawLevelLength;
 
             // Draw peak hold
             let peakLevel = this.pl[channel];
@@ -542,24 +580,68 @@ class LevelMeterPlugin extends PluginBase {
             } else if (peakLevel < level) {
                 peakLevel = level;
             }
-            const peakX = this.canvasWidth * (peakLevel - this.dbStart) / this.dbRange;
-            ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? '');
-            ctx.fillRect(peakX - dpr, y + dpr, 2 * dpr, channelHeight);
+            const peakPosition = (vertical ? this.canvasHeight : this.canvasWidth) *
+                (peakLevel - this.dbStart) / this.dbRange;
+            const drawSignal = target => {
+                let style = options?.traceStyle?.(target, start,
+                    vertical ? this.canvasHeight : this.canvasWidth, channelSize);
+                if (!style) {
+                    const gradient = vertical
+                        ? target.createLinearGradient(0, this.canvasHeight, 0, 0)
+                        : target.createLinearGradient(0, start, this.canvasWidth, start);
+                    gradient.addColorStop(0, '#008000'); // theme-allow: Fixed signal-level or self-painted colormap color.
+                    gradient.addColorStop(((-12) - this.dbStart) / this.dbRange, '#008000'); // theme-allow: Fixed signal-level or self-painted colormap color.
+                    gradient.addColorStop(((-12) - this.dbStart) / this.dbRange, '#808000'); // theme-allow: Fixed signal-level or self-painted colormap color.
+                    gradient.addColorStop(((-6) - this.dbStart) / this.dbRange, '#808000'); // theme-allow: Fixed signal-level or self-painted colormap color.
+                    gradient.addColorStop(((-6) - this.dbStart) / this.dbRange, '#800000'); // theme-allow: Fixed signal-level or self-painted colormap color.
+                    gradient.addColorStop(1, '#800000'); // theme-allow: Fixed signal-level or self-painted colormap color.
+                    style = gradient;
+                }
+                target.fillStyle = style;
+                if (vertical) target.fillRect(start + dpr, this.canvasHeight - levelLength, channelSize, levelLength);
+                else target.fillRect(0, start + dpr, levelLength, channelSize);
+                target.fillStyle = (options?.themePalette ?? window.ThemePalette)?.get('text-primary') ?? '';
+                if (vertical) target.fillRect(start + dpr, this.canvasHeight - peakPosition - dpr,
+                    channelSize, 2 * dpr);
+                else target.fillRect(peakPosition - dpr, start + dpr, 2 * dpr, channelSize);
+            };
+            if (options?.drawSignal) options.drawSignal(ctx, drawSignal);
+            else drawSignal(ctx);
 
             // Display peak level value
-            if (numDrawableChannels <= 4) { // Only show text for 4 or fewer channels
-                ctx.fillStyle = (window.ThemePalette?.get('text-primary') ?? '');
+            if (numDrawableChannels <= 4 && (!options || options.showLevelValues !== false)) {
+                ctx.fillStyle = (options?.themePalette ?? window.ThemePalette)?.get('text-primary') ?? '';
                 ctx.font = `${12 * dpr}px Arial`;
-                ctx.textAlign = 'right';
-                ctx.textBaseline = 'middle';
-                const peakText = peakLevel.toFixed(1) + ' dB';
-                // Adjust text position based on channel height
-                ctx.fillText(peakText, this.canvasWidth - (10 * dpr), y + channelHeight / 2 + (numDrawableChannels === 1 ? 0 : dpr));
+                ctx.textAlign = vertical ? 'center' : 'right';
+                ctx.textBaseline = vertical ? 'top' : 'middle';
+                const peakText = (channelLabels ? `${channelLabels[channel]} ` : '') + peakLevel.toFixed(1) + ' dB';
+                const textX = vertical ? start + channelSize / 2 : this.canvasWidth - (10 * dpr);
+                const textY = vertical ? 2 * dpr : start + channelSize / 2 + (numDrawableChannels === 1 ? 0 : dpr);
+                if (options?.drawLevelValue) options.drawLevelValue(ctx, peakText, textX, textY);
+                else (options?.textContext ?? ctx).fillText(peakText, textX, textY);
             }
         }
 
         // Update overload indicator
-        this.overloadIndicator.style.display = this.ol ? 'block' : 'none';
+        if (options) {
+            this.drawStaticBackground();
+            if (this.ol) {
+                const label = 'OVERLOAD';
+                ctx.save();
+                ctx.font = `bold ${12 * dpr}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.globalAlpha = Math.floor(now / 250) % 2 ? 0.5 : 1;
+                const badgeWidth = ctx.measureText(label).width + 16 * dpr;
+                const badgeHeight = 20 * dpr;
+                ctx.fillStyle = window.getComputedStyle?.(this.foregroundCanvas)?.getPropertyValue('--et-danger').trim() || '#b91c1c';
+                ctx.fillRect((this.canvasWidth - badgeWidth) / 2, (this.canvasHeight - badgeHeight) / 2,
+                    badgeWidth, badgeHeight);
+                ctx.fillStyle = window.getComputedStyle?.(this.foregroundCanvas)?.getPropertyValue('--et-on-status').trim() || '#ffffff';
+                (options.textContext ?? ctx).fillText(label, this.canvasWidth / 2, this.canvasHeight / 2);
+                ctx.restore();
+            }
+        } else this.overloadIndicator.style.display = this.ol ? 'block' : 'none';
     }
 }
 

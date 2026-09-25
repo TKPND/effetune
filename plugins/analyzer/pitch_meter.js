@@ -11,6 +11,11 @@ const PITCH_METER_COLUMN_PERIOD = PITCH_METER_TIME_SPAN_SECONDS / PITCH_METER_HI
 const PITCH_METER_KEY_GUTTER_CSS_PX = 45;
 const PITCH_METER_BLACK_KEY_DEPTH_CSS_PX = 28;
 const PITCH_METER_LAYOUTS = ['Vertical', 'Horizontal'];
+const PITCH_METER_COLORS = [
+    { value: 'Normal', label: 'Normal' },
+    { value: 'Heatmap', label: 'Heatmap' },
+    { value: 'Rainbow', label: 'Note Colors' }
+];
 const PITCH_METER_BLACK_KEY_CLASSES = new Set([1, 3, 6, 8, 10]);
 const PITCH_METER_WHITE_KEY_CLASSES = [0, 2, 4, 5, 7, 9, 11];
 const PITCH_METER_WHITE_KEY_MIDIS = Array.from(
@@ -40,16 +45,21 @@ class PitchMeterPlugin extends PluginBase {
         this.mn = PITCH_METER_DEFAULT_MIN_MIDI;
         this.mx = PITCH_METER_DEFAULT_MAX_MIDI;
         this.ly = 'Horizontal';
+        this.cl = 'Normal';
 
         this.pitchHistory = new Float32Array(PITCH_METER_HISTORY_WIDTH);
         this.confidenceHistory = new Float32Array(PITCH_METER_HISTORY_WIDTH);
+        this.volumeHistory = new Float32Array(PITCH_METER_HISTORY_WIDTH);
         this.voicedHistory = new Uint8Array(PITCH_METER_HISTORY_WIDTH);
         this.writeColumn = 0;
         this.columnPhase = 0;
         this.lastFrameIndex = null;
         this.lastPitchMidi = 0;
         this.lastConfidence = 0;
+        this.lastVolume = 0;
         this.lastVoiced = false;
+        this.levelReference = window.NoteSpectrogramPlugin.levelFloor;
+        this.levelReferenceHold = 0;
         this.activeGeneration = null;
         this.generationFence = null;
         this.timeFence = null;
@@ -78,6 +88,7 @@ class PitchMeterPlugin extends PluginBase {
         this.mn = PITCH_METER_DEFAULT_MIN_MIDI;
         this.mx = PITCH_METER_DEFAULT_MAX_MIDI;
         this.ly = 'Horizontal';
+        this.cl = 'Normal';
         this.beginTelemetryEpoch();
         this.updateParameters();
     }
@@ -90,7 +101,8 @@ class PitchMeterPlugin extends PluginBase {
             rf: this.rf,
             mn: this.mn,
             mx: this.mx,
-            ly: this.ly
+            ly: this.ly,
+            cl: this.cl
         };
     }
 
@@ -102,6 +114,10 @@ class PitchMeterPlugin extends PluginBase {
         }
         if (PITCH_METER_LAYOUTS.includes(params.ly) && params.ly !== this.ly) {
             this.ly = params.ly;
+            this.drawGraph();
+        }
+        if (PITCH_METER_COLORS.some(option => option.value === params.cl) && params.cl !== this.cl) {
+            this.cl = params.cl;
             this.drawGraph();
         }
         const previousMinMidi = this.mn;
@@ -239,13 +255,17 @@ class PitchMeterPlugin extends PluginBase {
     clearHistory() {
         this.pitchHistory.fill(0);
         this.confidenceHistory.fill(0);
+        this.volumeHistory.fill(0);
         this.voicedHistory.fill(0);
         this.writeColumn = 0;
         this.columnPhase = 0;
         this.lastFrameIndex = null;
         this.lastPitchMidi = 0;
         this.lastConfidence = 0;
+        this.lastVolume = 0;
         this.lastVoiced = false;
+        this.levelReference = window.NoteSpectrogramPlugin.levelFloor;
+        this.levelReferenceHold = 0;
         this.currentNote = '';
         this.currentCents = '';
     }
@@ -264,10 +284,17 @@ class PitchMeterPlugin extends PluginBase {
             this.clearHistory();
             advance = 1;
         }
+        const notePlugin = window.NoteSpectrogramPlugin;
+        const framePeak = snapshot.voiced && snapshot.confidence >= 0.5
+            ? snapshot.levelDb : notePlugin.levelFloor;
+        notePlugin.updateLevelReference(this, framePeak,
+            (this.lastFrameIndex === null ? 1 : delta) * snapshot.hopSeconds);
+        const volume = snapshot.voiced
+            ? notePlugin.normalizedLevel(snapshot.levelDb, this.levelReference) : 0;
         if (advance === 0) {
             const column = (this.writeColumn + PITCH_METER_HISTORY_WIDTH - 1) %
                 PITCH_METER_HISTORY_WIDTH;
-            this.storeHistoryColumn(column, snapshot.midi, snapshot.confidence, snapshot.voiced);
+            this.storeHistoryColumn(column, snapshot.midi, snapshot.confidence, snapshot.voiced, volume);
         } else {
             const interpolate = delta === 1 && this.lastVoiced && snapshot.voiced;
             for (let offset = 0; offset < advance; offset++) {
@@ -279,21 +306,25 @@ class PitchMeterPlugin extends PluginBase {
                 const confidence = interpolate
                     ? this.lastConfidence + (snapshot.confidence - this.lastConfidence) * fraction
                     : snapshot.confidence;
+                const level = interpolate
+                    ? this.lastVolume + (volume - this.lastVolume) * fraction : volume;
                 const voiced = interpolate || (offset === advance - 1 && snapshot.voiced);
-                this.storeHistoryColumn(column, midi, confidence, voiced);
+                this.storeHistoryColumn(column, midi, confidence, voiced, level);
             }
             this.writeColumn = (this.writeColumn + advance) % PITCH_METER_HISTORY_WIDTH;
         }
         this.lastFrameIndex = snapshot.frameIndex;
         this.lastPitchMidi = snapshot.midi;
         this.lastConfidence = snapshot.confidence;
+        this.lastVolume = volume;
         this.lastVoiced = snapshot.voiced;
         return true;
     }
 
-    storeHistoryColumn(column, midi, confidence, voiced) {
+    storeHistoryColumn(column, midi, confidence, voiced, volume = 0) {
         this.pitchHistory[column] = voiced ? midi : 0;
         this.confidenceHistory[column] = voiced ? confidence : 0;
+        this.volumeHistory[column] = voiced ? volume : 0;
         this.voicedHistory[column] = voiced ? 1 : 0;
     }
 
@@ -376,6 +407,10 @@ class PitchMeterPlugin extends PluginBase {
         this.resizeGraphDisposer = null;
         const container = document.createElement('div');
         container.className = 'plugin-parameter-ui';
+        container.appendChild(this.createRadioGroup(
+            'Color', PITCH_METER_COLORS, this.cl,
+            value => this.setParameters({ cl: value }), 'cl'
+        ));
         container.appendChild(this.createRadioGroup(
             'Layout', PITCH_METER_LAYOUTS, this.ly,
             value => this.setParameters({ ly: value }), 'ly'
@@ -474,6 +509,14 @@ class PitchMeterPlugin extends PluginBase {
             strongGrid: read('graph-grid-strong'),
             subtleGrid: read('graph-grid-subtle')
         };
+    }
+
+    _lineColor(midi, volume, palette) {
+        if (this.cl === 'Normal') return palette.trace;
+        const color = this.cl === 'Heatmap'
+            ? window.SpectrogramPlugin?.getHeatmapLuts().rgbColors[Math.round(volume * 255)]
+            : window.NoteSpectrogramPlugin.noteColor(midi);
+        return color ? `rgb(${Array.from(color, Math.round).join(', ')})` : palette.trace; // theme-allow: Shared heatmap or note colormap for the selected display mode.
     }
 
     drawGraph() {
@@ -579,7 +622,8 @@ class PitchMeterPlugin extends PluginBase {
                 midi < this.mn - 0.5 || midi > this.mx + 0.5) {
                 continue;
             }
-            context.strokeStyle = palette.trace;
+            const volume = (this.volumeHistory[previousColumn] + this.volumeHistory[column]) * 0.5;
+            context.strokeStyle = this._lineColor((previousMidi + midi) * 0.5, volume, palette);
             context.globalAlpha = 0.2 + 0.8 * (
                 this.confidenceHistory[previousColumn] + this.confidenceHistory[column]
             ) * 0.5;

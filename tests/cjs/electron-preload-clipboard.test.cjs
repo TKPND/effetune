@@ -399,6 +399,8 @@ test('preload exposes listener registration wrappers', () => {
   });
   api.onIPC('request-tray-menu-update', (...args) => calls.push(['onIPC', args]));
   harness.listeners.get('request-tray-menu-update')({}, 'a', 'b');
+  api.onIPC('open-visualizer-view', () => calls.push(['onVisualizerView']));
+  harness.listeners.get('open-visualizer-view')({});
   assert.throws(
     () => api.onIPC('custom-channel', () => {}),
     /not allowed/
@@ -441,6 +443,7 @@ test('preload exposes listener registration wrappers', () => {
     ['onFolderRemovalEvent', {
       folderId: 'folder-one', phase: 'removing', deleted: 3, total: 10
     }],
-    ['onIPC', ['a', 'b']]
+    ['onIPC', ['a', 'b']],
+    ['onVisualizerView']
   ]);
 });

@@ -213,6 +213,27 @@ test('resumeAudioContext handles power controller resume rejection without unhan
   }
 });
 
+test('MobileNav preserves Visualizer on layout reapplication and leaves on explicit navigation', async () => {
+  const documentRef = createDocument();
+  documentRef.body.classList.add('view-player', 'view-visualizer');
+  const nav = Object.assign(Object.create(MobileNav.prototype), {
+    nav: null,
+    uiManager: {
+      hideVisualizerView() { documentRef.body.classList.remove('view-visualizer'); },
+      hideLibraryView() {}
+    },
+    closePluginList() {}, updateAudioResumePrompt() {}
+  });
+  await withGlobals({ document: documentRef }, () => {
+    nav.applyViewState('visualizer', { fromLibraryView: true });
+    assert.equal(nav.getCurrentView(), 'visualizer');
+    assert.equal(documentRef.body.classList.contains('view-player'), true);
+    nav.setView('effects');
+    assert.equal(nav.getCurrentView(), 'effects');
+    assert.equal(documentRef.body.classList.contains('view-visualizer'), false);
+  });
+});
+
 test('MobileNav restores the previous tab when library initialization fails', async () => {
   const documentRef = createDocument();
   documentRef.body.classList.add('view-player');
