@@ -14,9 +14,9 @@ const uiTest = process.env.EFFETUNE_RUN_PIPELINE_ANALYZER_UI_TEST === '1'
 
 uiTest('places one accessible Analyzer button directly after Share with dedicated spacing', () => {
   const html = fs.readFileSync(new URL('../../effetune.html', import.meta.url), 'utf8');
-  const analyzerCss = fs.readFileSync(new URL('../../pipeline-analyzer.css', import.meta.url), 'utf8');
-  const sharedCss = fs.readFileSync(new URL('../../effetune.css', import.meta.url), 'utf8');
-  const mobileCss = fs.readFileSync(new URL('../../effetune-mobile.css', import.meta.url), 'utf8');
+  const analyzerCss = fs.readFileSync(new URL('../../css/pipeline-analyzer.css', import.meta.url), 'utf8');
+  const sharedCss = fs.readFileSync(new URL('../../css/effetune.css', import.meta.url), 'utf8');
+  const mobileCss = fs.readFileSync(new URL('../../css/effetune-mobile.css', import.meta.url), 'utf8');
   const uiSource = fs.readFileSync(new URL('../../js/pipeline-analyzer/ui.js', import.meta.url), 'utf8');
   const uiManagerSource = fs.readFileSync(new URL('../../js/ui-manager.js', import.meta.url), 'utf8');
 
@@ -25,7 +25,7 @@ uiTest('places one accessible Analyzer button directly after Share with dedicate
   assert.match(html, /id="pipelinePresetButton"[\s\S]*?id="undoButton"[\s\S]*?id="redoButton"[\s\S]*?id="cutButton"[\s\S]*?id="copyButton"[\s\S]*?id="pasteButton"[\s\S]*?id="shareButton"[\s\S]*?id="pipelineAnalyzerButton"[\s\S]*?id="decreaseColumnsButton"[\s\S]*?id="increaseColumnsButton"/);
   assert.equal(html.match(/class="pipeline-toolbar-group"/g)?.length, 6);
   assert.match(html, /id="pipelineAnalyzerButton"[^>]*aria-controls="pipelineAnalyzerPanel"[^>]*aria-expanded="false"[^>]*aria-pressed="false"/);
-  // The analyzer stylesheet loads lazily, so always-visible toolbar chrome is styled in effetune.css.
+  // The analyzer stylesheet loads lazily, so always-visible toolbar chrome is styled in css/effetune.css.
   assert.match(sharedCss, /\.pipeline-analyzer-button\s*\{[^}]*margin-left:\s*5px;/s);
   assert.match(sharedCss, /\.pipeline-preset-button,\s*\.share-button,\s*\.pipeline-analyzer-button\s*\{[^}]*height:\s*24px;[^}]*padding:\s*4px 8px;/s);
   assert.doesNotMatch(analyzerCss, /\.pipeline-preset-button/);

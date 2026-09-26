@@ -195,8 +195,8 @@ const cjsCoverageIncludes = collectCoverageIncludeArgs(path.join(repoRoot, 'elec
   exclude: ['electron/main.js']
 });
 const esmCoverageIncludes = collectCoverageIncludeArgs(path.join(repoRoot, 'js'), {
-  // The Worker entry/runtime and its OPFS SQLite repository/OO1 bridge execute
-  // only in a browser Worker; their contracts belong to browser verification.
+  // The Worker entry/runtime, shared catalog core, and OPFS SQLite repository/OO1
+  // bridge have Worker contracts covered by browser and Electron verification.
   // The rolling PCM decoder Worker entry is partially exercised from Node by the
   // protocol test, but its Worker runtime contract is covered by the browser and
   // Electron tests and the Node portion cannot reach the 90% thresholds.
@@ -205,6 +205,7 @@ const esmCoverageIncludes = collectCoverageIncludeArgs(path.join(repoRoot, 'js')
     'js/library/repository/web-catalog-repository.js',
     'js/library/repository/web-catalog-worker.js',
     'js/library/repository/web-sqlite-runtime.js',
+    'js/library/repository/catalog-runtime-core.js',
     'js/ui/audio-player/rolling-pcm-worker-entry.js'
   ]
 });

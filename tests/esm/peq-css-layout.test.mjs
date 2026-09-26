@@ -17,7 +17,7 @@ function getRule(css, selector) {
 }
 
 test('inset SVG response graphs expose shared frequency and level axis titles', () => {
-  const appCss = readCss('../../effetune.css');
+  const appCss = readCss('../../css/effetune.css');
   assert.match(
     appCss,
     /\.plugin-parameter-ui \.graph-axis-titled::after \{\s*content:\s*attr\(data-x-axis-title\);[\s\S]*bottom:\s*2px;/
@@ -67,7 +67,7 @@ test('inset SVG response graphs expose shared frequency and level axis titles', 
 });
 
 test('PEQ graph handles share the 15Band gradient and active colors', () => {
-  const css = readCss('../../effetune.css');
+  const css = readCss('../../css/effetune.css');
   const normalRule = getRule(
     css,
     '.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker'
@@ -99,7 +99,7 @@ test('PEQ graph handles share the 15Band gradient and active colors', () => {
 });
 
 test('Room EQ keeps Additional EQ filter types aligned with its parameter fields on desktop', () => {
-  const sharedCss = readCss('../../effetune.css');
+  const sharedCss = readCss('../../css/effetune.css');
   assert.match(sharedCss, /body:not\(\.layout-mobile\) :is\([^{}]*\.room-eq-additional-eq-filter-type,[^{}]*\) \{[^}]*box-sizing: border-box;[^}]*height: 26px;[^}]*min-height: 26px;/s);
   const css = readCss('../../plugins/eq/room_eq.css');
 
@@ -150,7 +150,7 @@ test('5Band PEQ and Room EQ wrap mobile bands before their controls overflow', (
 });
 
 test('Room EQ keeps its inset plot size over the generic mobile SVG rule', () => {
-  const mobileCss = readCss('../../effetune-mobile.css');
+  const mobileCss = readCss('../../css/effetune-mobile.css');
   const roomEqCss = readCss('../../plugins/eq/room_eq.css');
 
   assert.match(

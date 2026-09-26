@@ -19,7 +19,7 @@ export const THEME_COLOR_ROLES = Object.freeze([
     'graph-bg-deep', 'graph-base-soft', 'graph-grid-subtle', 'graph-grid-soft', 'graph-grid-strong',
     'graph-label', 'text-primary', 'graph-trace-tertiary'
 ]);
-// Graphite defaults from effetune-theme.css; the soft grid retains its 20% alpha.
+// Graphite defaults from css/effetune-theme.css; the soft grid retains its 20% alpha.
 export const DEFAULT_THEME_COLORS = Object.freeze({
     'graph-bg-deep': '#000000', 'graph-base-soft': '#232323', // theme-allow: Fixed Visualizer Graphite defaults.
     'graph-grid-subtle': '#323233', 'graph-grid-soft': '#f6f8fb33', // theme-allow: Fixed Visualizer Graphite defaults.

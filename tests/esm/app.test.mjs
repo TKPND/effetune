@@ -29,7 +29,14 @@ function createElement(document, tagName) {
     nextSibling: null,
     children: [],
     listeners: new Map(),
+    attributes: new Map(),
     style: {},
+    setAttribute(name, value) {
+      this.attributes.set(name, String(value));
+    },
+    getAttribute(name) {
+      return this.attributes.get(name) ?? null;
+    },
     appendChild(child) {
       child.parentNode = this;
       this.children.push(child);
@@ -1933,8 +1940,11 @@ test('update notification offers installer download only on supported Electron b
   }, { documentRef: document, windowRef });
   assert.equal(notification.children.length, 2);
   assert.equal(notification.children[0].textContent, 'Version 2.10.0');
-  assert.equal(notification.children[1].textContent, 'Localized download');
-  assert.equal(notification.children[1].title, 'Localized restart notice');
+  assert.equal(notification.children[1].textContent, '');
+  assert.match(notification.children[1].innerHTML, /<svg\b[^>]*aria-hidden="true"/);
+  assert.equal(notification.children[1].title, 'Localized download\nLocalized restart notice');
+  assert.equal(notification.children[1].getAttribute('aria-label'), 'Localized download');
+  assert.equal(notification.children[1].getAttribute('aria-description'), 'Localized restart notice');
 
   notification.children[0].click();
   assert.deepEqual(calls[0], ['openExternal', 'https://example.test/release']);
@@ -1943,13 +1953,17 @@ test('update notification offers installer download only on supported Electron b
   downloadButton.click();
   downloadButton.click();
   assert.equal(downloadButton.disabled, true);
-  assert.equal(downloadButton.textContent, 'Localized downloading');
+  assert.equal(downloadButton.textContent, '');
+  assert.equal(downloadButton.title, 'Localized downloading');
+  assert.equal(downloadButton.getAttribute('aria-label'), 'Localized downloading');
   assert.equal(calls.filter(call => call[0] === 'downloadUpdate').length, 1);
 
   finishDownload({ success: false });
   await flushMicrotasks();
   assert.equal(downloadButton.disabled, false);
-  assert.equal(downloadButton.textContent, 'Localized download');
+  assert.equal(downloadButton.textContent, '');
+  assert.equal(downloadButton.title, 'Localized download\nLocalized restart notice');
+  assert.equal(downloadButton.getAttribute('aria-label'), 'Localized download');
   assert.deepEqual(calls.at(-1), ['setError', 'ui.updateDownloadFailed', true]);
 });
 

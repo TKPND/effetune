@@ -295,13 +295,13 @@ class ChromaSpiralPlugin extends PluginBase {
         const dpr = this.graphDpr;
         const fontSize = 12 * dpr;
         const { outer, inner, pitch, midiLow, midiEnd } = this.getSpiralGeometry(width, height, dpr);
-        if (outer <= 0) return;
         const palette = name => (this.displayOptions?.themePalette ?? window.ThemePalette)?.get(name) ?? '';
         if (this.displayOptions?.transparent) ctx.clearRect(0, 0, width, height);
         else {
             ctx.fillStyle = palette('graph-bg-deep');
             ctx.fillRect(0, 0, width, height);
         }
+        if (outer <= inner) return;
         ctx.save();
         ctx.translate(width / 2, height / 2);
         ctx.lineWidth = dpr;

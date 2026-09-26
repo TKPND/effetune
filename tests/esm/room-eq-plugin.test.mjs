@@ -2336,7 +2336,7 @@ test('Room EQ restores the remembered tab and swaps panels on click', () => {
 });
 
 test('Room EQ groups its parameter rows into five workflow tabs', async () => {
-    const sharedCss = await fs.readFile(path.join(repoRoot, 'effetune.css'), 'utf8');
+    const sharedCss = await fs.readFile(path.join(repoRoot, 'css/effetune.css'), 'utf8');
     const { Plugin } = loadPlugin();
     const plugin = new Plugin();
     assert.equal(plugin._selectedTab, 'measurement');

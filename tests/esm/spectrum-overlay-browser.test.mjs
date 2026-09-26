@@ -60,11 +60,11 @@ async function loadCssInApplicationOrder(page) {
     .filter(line => line.includes('| css'))
     .map(line => line.trim().split(':', 1)[0]);
   for (const path of [
-    'effetune-theme.css',
-    'effetune.css',
-    'effetune-mobile.css',
-    'effetune-library.css',
-    'pipeline-analyzer.css',
+    'css/effetune-theme.css',
+    'css/effetune.css',
+    'css/effetune-mobile.css',
+    'css/effetune-library.css',
+    'css/pipeline-analyzer.css',
     'plugins/spectrum-overlay.css',
     ...pluginCss.map(path => `plugins/${path}.css`)
   ]) {

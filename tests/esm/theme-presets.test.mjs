@@ -9,7 +9,7 @@ import {
 } from '../../js/theme-registry.mjs';
 
 const read = relativePath => fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8');
-const themeCss = read('../../effetune-theme.css');
+const themeCss = read('../../css/effetune-theme.css');
 
 const THEME_KEYS = [
   '--et-base',
@@ -147,8 +147,8 @@ function contrast(left, right) {
 
 test('theme definitions load before consumers and contain the complete token foundation', () => {
   assert.match(firstStatement(themeCss), /^:root\s*\{/);
-  assert.match(firstStatement(read('../../effetune.css')), /^@import url\("effetune-theme\.css"\);/);
-  assert.match(firstStatement(read('../../features/measurement/styles.css')), /^@import url\("\.\.\/\.\.\/effetune-theme\.css"\);/);
+  assert.match(firstStatement(read('../../css/effetune.css')), /^@import url\("effetune-theme\.css"\);/);
+  assert.match(firstStatement(read('../../features/measurement/styles.css')), /^@import url\("\.\.\/\.\.\/css\/effetune-theme\.css"\);/);
 
   const rootBody = ruleBody(themeCss, ':root');
   const root = declarations(rootBody);

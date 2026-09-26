@@ -1,3 +1,4 @@
+import { LIBRARY_STYLESHEET, PIPELINE_ANALYZER_STYLESHEET } from './utils/app-stylesheets.js';
 import { normalizeThemeId, getThemePreset } from './theme-registry.mjs';
 import { PluginListManager } from './ui/plugin-list-manager.js';
 import { PipelineManager } from './ui/pipeline-manager.js';
@@ -79,7 +80,7 @@ function loadAudioPlayerClass() {
 
 function loadLibraryFeatureModules() {
     if (!libraryFeatureModulesPromise) {
-        loadStylesheet('effetune-library.css');
+        loadStylesheet(LIBRARY_STYLESHEET);
         libraryFeatureModulesPromise = Promise.all([
             import('./library/library-manager-v2.js'),
             import('./ui/library/library-view.js'),
@@ -115,7 +116,7 @@ function loadWebPlaybackResolvers() {
 
 function loadPipelineAnalyzerModules() {
     if (!pipelineAnalyzerModulesPromise) {
-        loadStylesheet('pipeline-analyzer.css');
+        loadStylesheet(PIPELINE_ANALYZER_STYLESHEET);
         pipelineAnalyzerModulesPromise = Promise.all([
             import('./pipeline-analyzer/controller.js'),
             import('./pipeline-analyzer/ui.js')
@@ -1987,7 +1988,7 @@ export class UIManager {
     showLibraryRecoveryShell() {
         // The shell is displayed without loading the library feature modules, so the
         // stylesheet they normally pull in has to be requested here as well.
-        loadStylesheet('effetune-library.css');
+        loadStylesheet(LIBRARY_STYLESHEET);
         const root = this.ensureLibraryRecoveryShell();
         if (!root) return false;
         this.renderLibraryRecoveryShell();

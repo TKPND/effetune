@@ -167,7 +167,26 @@ export class VisualizerView {
         const zoom = parseFloat(document.body.style.zoom) || 1;
         const [aw, ah] = this.layout.aspect.split(':').map(Number), aspect = aw / ah;
         const cover = this.expanded || document.body.classList.contains('layout-mini-player');
-        const availableWidth = rect.width / zoom, availableHeight = rect.height / zoom;
+        let stageRect = rect;
+        const hasGutters = this.stageHost.classList.contains('scroll-gutters');
+        if (this.editor.open && document.body.classList.contains('layout-mobile') && !cover) {
+            const gutter = 24;
+            // Compare the canvas at its unguttered size so the margin does not flip each frame.
+            const fullWidth = rect.width / zoom + (hasGutters ? gutter * 2 : 0);
+            const fullHeight = rect.height / zoom + (hasGutters ? gutter * 2 / aspect : 0);
+            const canvasHeight = Math.min(fullHeight, fullWidth / aspect);
+            const bottom = this.uiManager.mobileNav?.nav?.getBoundingClientRect().top ?? window.innerHeight;
+            const needsGutters = fullWidth - canvasHeight * aspect < gutter * 2 &&
+                rect.top + window.scrollY + (fullHeight + canvasHeight) * zoom / 2 >= bottom;
+            if (needsGutters !== hasGutters) {
+                this.stageHost.classList.toggle('scroll-gutters', needsGutters);
+                stageRect = this.stageHost.getBoundingClientRect();
+            }
+        } else if (hasGutters) {
+            this.stageHost.classList.remove('scroll-gutters');
+            stageRect = this.stageHost.getBoundingClientRect();
+        }
+        const availableWidth = stageRect.width / zoom, availableHeight = stageRect.height / zoom;
         const width = cover ? Math.max(availableWidth, availableHeight * aspect) : Math.min(availableWidth, availableHeight * aspect);
         const height = width / aspect;
         this.stage.style.width = `${Math.max(1, width)}px`; this.stage.style.height = `${Math.max(1, height)}px`;

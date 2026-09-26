@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-const appCss = fs.readFileSync(new URL('../../effetune.css', import.meta.url), 'utf8');
+const appCss = fs.readFileSync(new URL('../../css/effetune.css', import.meta.url), 'utf8');
 const combFilterCss = fs.readFileSync(new URL('../../plugins/eq/comb_filter.css', import.meta.url), 'utf8');
 
 test('radio choices wrap as intact, uniformly spaced control-height units', () => {

@@ -1,3 +1,4 @@
+import { LIBRARY_STYLESHEET } from '../../js/utils/app-stylesheets.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -107,7 +108,7 @@ test('effetune.html applies the Web library startup class before the app module 
   assert.equal(webLibrary.classes.has('view-library'), true);
   assert.deepEqual(webLibrary.calls, [['getItem', 'effetune_app_config']]);
   // Without the library stylesheet the class cannot hide the effect pipeline.
-  assert.deepEqual(webLibrary.stylesheets, ['effetune-library.css']);
+  assert.deepEqual(webLibrary.stylesheets, [LIBRARY_STYLESHEET]);
 
   assert.deepEqual(runEarlyStartupViewScript({ config: { startupView: 'effects' } }).stylesheets, []);
 

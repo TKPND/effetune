@@ -126,12 +126,12 @@ function createPrecacheFixture(t) {
 
   for (const relativePath of [
     'effetune.html',
-    'effetune.css',
-    'effetune-theme.css',
-    'effetune-mobile.css',
-    'effetune-library.css',
-    'pipeline-analyzer.css',
-    'user-data-backup.css',
+    'css/effetune.css',
+    'css/effetune-theme.css',
+    'css/effetune-mobile.css',
+    'css/effetune-library.css',
+    'css/pipeline-analyzer.css',
+    'css/user-data-backup.css',
     'manifest.json',
     'sw.js'
   ]) {
@@ -203,7 +203,7 @@ test('committed precache source matches the current precached assets', () => {
 
   assert.equal(committedSource, buildPrecacheSource().body);
   const urls = loadPrecacheUrls();
-  for (const file of ['effetune-theme.css', 'js/theme-boot.js', 'js/theme-registry.mjs', 'plugins/theme-palette.js']) {
+  for (const file of ['css/effetune-theme.css', 'js/theme-boot.js', 'js/theme-registry.mjs', 'plugins/theme-palette.js']) {
     assert.ok(urls.has('./' + file), file);
   }
 });
@@ -235,6 +235,18 @@ test('precache includes release WebAssembly DSP artifacts and omits debug builds
 
   assert.ok(urls.includes('plugins/dsp/effetune-dsp.wasm'));
   assert.equal(urls.includes('plugins/dsp/effetune-dsp.debug.wasm'), false);
+});
+
+test('precache ignores temporary image work files', t => {
+  const root = createPrecacheFixture(t);
+  const baseline = buildPrecacheSource({ root });
+
+  writeFixtureFile(root, 'images/_vizaudio_tmp/gen.js', 'console.log("temporary");\n');
+  writeFixtureFile(root, 'images/_vizaudio_tmp/cover.jpg', Buffer.from([1, 2, 3]));
+  const withTemporaryFiles = buildPrecacheSource({ root });
+
+  assert.deepEqual(withTemporaryFiles.urls, baseline.urls);
+  assert.equal(withTemporaryFiles.digest, baseline.digest);
 });
 
 test('precache cache version changes when precached asset content changes', t => {

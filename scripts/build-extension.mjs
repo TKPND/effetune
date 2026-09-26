@@ -94,8 +94,8 @@ export async function buildExtension() {
         ...(await walk('js/locales')),
         ...(await walk('presets')),
         'plugins/plugins.txt', 'plugins/dsp/effetune-dsp.wasm', 'plugins/dsp/effetune-dsp.simd.wasm',
-        'plugins/dsp/effetune-dsp.meta.json', 'effetune.css', 'effetune-theme.css', 'effetune-mobile.css', 'pipeline-analyzer.css',
-        'user-data-backup.css',
+        'plugins/dsp/effetune-dsp.meta.json', 'css/effetune.css', 'css/effetune-theme.css', 'css/effetune-mobile.css', 'css/pipeline-analyzer.css',
+        'css/user-data-backup.css',
         'images/icon_128x128.png', 'images/icon_192x192.png', 'images/icon_64x64.png', 'LICENSE'
     ];
     for (const filename of materials) files.set(filename, await fs.readFile(path.join(root, filename)));

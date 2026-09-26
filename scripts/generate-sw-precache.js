@@ -3,15 +3,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const defaultRoot = path.resolve(__dirname, '..');
-const includeRoots = ['js', 'plugins', 'images', 'presets'];
+const includeRoots = ['css', 'js', 'plugins', 'images', 'presets'];
 const explicit = [
   'effetune.html',
-  'effetune.css',
-  'effetune-theme.css',
-  'effetune-mobile.css',
-  'effetune-library.css',
-  'pipeline-analyzer.css',
-  'user-data-backup.css',
   'features/effetune-benchmark.js',
   'features/effetune-benchmark-score.js',
   'features/benchmark-score-reference.js',
@@ -27,6 +21,7 @@ const explicit = [
 const allowedExtensions = new Set(['.js', '.mjs', '.css', '.json', '.json5', '.png', '.ico', '.jpg', '.jpeg', '.svg', '.txt', '.wasm', '.effetune_preset']);
 const binaryExtensions = new Set(['.ico', '.jpeg', '.jpg', '.png', '.wasm']);
 const excludedPathPatterns = [
+  /^images\/_vizaudio_tmp\//,
   /^images\/screenshot(?:-[^/]+)?\.png$/,
   /^images\/ogp\.jpg$/,
   /^images\/video_thumbnail\.jpg$/,

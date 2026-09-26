@@ -12,7 +12,7 @@ const routingUrl = moduleUrl(read('../../js/ui/pipeline/pipeline-routing-dialog.
   .replace("'../standard-select.js'", JSON.stringify(selectUrl))
   .replace("'../motion.js'", JSON.stringify(motionUrl))
   .replace("'../../audio/plugin-execution-capabilities.js'", JSON.stringify(capabilitiesUrl)));
-const css = read('../../effetune-theme.css') + read('../../effetune.css')
+const css = read('../../css/effetune-theme.css') + read('../../css/effetune.css')
   .replace('@import url("effetune-theme.css");', '');
 
 test('settings and bus routing share themed selection and hover colors', async () => {

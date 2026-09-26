@@ -1,3 +1,4 @@
+import { LIBRARY_STYLESHEET } from './utils/app-stylesheets.js';
 import { PluginManager } from './plugin-manager.js';
 import { AudioManager } from './audio-manager.js';
 import { UIManager } from './ui-manager.js';
@@ -143,8 +144,6 @@ async function loadPipelineState(forceLoad = false) {
 // The path will be stored in window.pendingPresetFilePath for later use
 
 const isFirstLaunchPromise = Promise.resolve(false);
-
-const LIBRARY_STYLESHEET = 'effetune-library.css';
 
 function getStartupDocument(windowRef = window) {
     return windowRef.document || (typeof document !== 'undefined' ? document : null);

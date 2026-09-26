@@ -271,8 +271,8 @@ test('extension pages use external module scripts and the editor reuses pipeline
   ]);
   assert.match(popupHtml, /<base href="\.\.\/">/);
   assert.match(editorHtml, /src="extension\/editor\.js"/);
-  assert.match(editorHtml, /href="effetune-mobile\.css"/);
-  assert.match(editorHtml, /href="user-data-backup\.css"/);
+  assert.match(editorHtml, /href="css\/effetune-mobile\.css"/);
+  assert.match(editorHtml, /href="css\/user-data-backup\.css"/);
   assert.match(editorHtml, /id="editorBackupRestore"/);
   assert.match(editorJs, /openUserDataBackupDialog/);
   assert.match(editorJs, /import \{ PipelineManager \}/);

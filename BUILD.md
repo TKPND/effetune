@@ -573,7 +573,7 @@ The `build.files` array in `package.json` is an explicit allowlist of top-level 
 
 When adding a new top-level directory or root file that must ship with the app, add a matching entry to `build.files`. Otherwise the build will silently omit it.
 
-Root web assets such as `effetune-mobile.css`, `sw.js`, `sw-precache.js`, `manifest.json`, icons, screenshots, and vendor scripts must be included when they are required at runtime.
+Application stylesheets in `css/` and root web assets such as `sw.js`, `sw-precache.js`, `manifest.json`, icons, screenshots, and vendor scripts must be included when they are required at runtime.
 
 ## Troubleshooting
 

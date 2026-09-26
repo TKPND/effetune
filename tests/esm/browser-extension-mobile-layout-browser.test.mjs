@@ -4,9 +4,9 @@ import test from 'node:test';
 import { chromium } from 'playwright';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
-const css = read('../../effetune-theme.css') +
-  read('../../effetune.css').replace('@import url("effetune-theme.css");', '') +
-  read('../../effetune-mobile.css') +
+const css = read('../../css/effetune-theme.css') +
+  read('../../css/effetune.css').replace('@import url("effetune-theme.css");', '') +
+  read('../../css/effetune-mobile.css') +
   read('../../extension/editor.css');
 const layoutModeSource = read('../../js/ui/layout-mode-manager.js').replace('export class LayoutModeManager', 'class LayoutModeManager');
 const mobileShellSource = read('../../extension/mobile-shell.js').replace('export class ExtensionMobileShell', 'class ExtensionMobileShell');

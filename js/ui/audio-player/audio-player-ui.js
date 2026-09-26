@@ -6,6 +6,7 @@
 
 import { validateSelectionDescriptor } from '../../library/repository/selection-descriptor.js';
 import { updateRangeFill } from '../range-fill.js';
+import { escapeHtml } from '../../utils/escape-html.js';
 import {
   PLAYBACK_SPEED_MAX,
   PLAYBACK_SPEED_MIN,
@@ -1577,14 +1578,6 @@ export class AudioPlayerUI {
     };
     return fallback[key] || String(key).replace(/\{(\w+)\}/g, (_, name) => params[name] ?? '');
   }
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 function setElementClass(element, className, enabled) {

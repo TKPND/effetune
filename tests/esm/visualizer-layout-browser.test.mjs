@@ -4,9 +4,9 @@ import test from 'node:test';
 import { chromium } from 'playwright';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
-const css = read('../../effetune-theme.css') +
-    read('../../effetune.css').replace('@import url("effetune-theme.css");', '') +
-    read('../../effetune-mobile.css') + read('../../effetune-library.css');
+const css = read('../../css/effetune-theme.css') +
+    read('../../css/effetune.css').replace('@import url("effetune-theme.css");', '') +
+    read('../../css/effetune-mobile.css') + read('../../css/effetune-library.css');
 const viewSource = read('../../js/visualizer/visualizer-view.js')
     .replace(/^import .*;\r?\n/gm, '')
     .replace('export class VisualizerView', 'window.VisualizerView = class VisualizerView');
@@ -459,6 +459,128 @@ test('Visualizer fills the available width on first display and after leaving ex
             assert.equal(size.hostWidth, 1280);
             assert.ok(Math.abs(size.width - Math.max(size.hostWidth, size.hostHeight * 16 / 9)) < 1);
         }
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Mobile Visualizer expansion hides the bottom tabs and leaves its restore button reachable', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true });
+        await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
+            <body class="layout-mobile view-visualizer"><section id="visualizerView">
+                <div class="visualizer-toolbar">Edit</div><div class="visualizer-workspace">
+                    <div class="visualizer-stage-host show-controls"><button class="visualizer-expand">Restore</button></div>
+                </div></section><button class="mobile-plugin-fab">+</button>
+                <nav class="mobile-bottom-nav">Player Library Effects</nav></body>`);
+        await page.addStyleTag({ content: css });
+        await page.addScriptTag({ content: viewSource });
+        const result = await page.evaluate(() => {
+            const root = document.querySelector('#visualizerView');
+            const button = root.querySelector('.visualizer-expand');
+            const tabs = document.querySelector('.mobile-bottom-nav');
+            const fab = document.querySelector('.mobile-plugin-fab');
+            const view = Object.assign(Object.create(window.VisualizerView.prototype), {
+                expanded: false, historyDepth: 1, expandButton: button,
+                uiManager: { t: key => key }, setEditing() {}, showControls() {}
+            });
+            const visibleBefore = getComputedStyle(tabs).display !== 'none';
+            view.setExpanded(true, { fromHistory: true });
+            const bounds = button.getBoundingClientRect();
+            const exposed = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2) === button;
+            const hiddenExpanded = getComputedStyle(tabs).display === 'none';
+            view.setExpanded(false, { fromHistory: true });
+            return { visibleBefore, hiddenExpanded, exposed,
+                fabHidden: getComputedStyle(fab).display === 'none',
+                visibleRestored: getComputedStyle(tabs).display !== 'none' };
+        });
+        assert.deepEqual(result, { visibleBefore: true, hiddenExpanded: true, exposed: true,
+            fabHidden: true, visibleRestored: true });
+    } finally {
+        await browser.close();
+    }
+});
+
+test('Mobile Visualizer Edit keeps a touch scroll lane beside a tall canvas', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true });
+        await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
+            <body class="layout-mobile view-visualizer"><div class="title-container">EffeTune</div>
+            <div class="main-container"></div><section id="visualizerView" class="is-editing">
+                <div class="visualizer-toolbar">Edit</div><div class="visualizer-workspace">
+                    <aside class="visualizer-editor visualizer-editor-navigation"><div style="height:130px"></div></aside>
+                    <div class="visualizer-stage-host"><div class="visualizer-stage editing"><canvas></canvas></div></div>
+                    <aside class="visualizer-editor visualizer-editor-inspector"><div style="height:600px"></div></aside>
+                </div></section><nav class="mobile-bottom-nav">Player Library Effects</nav></body>`);
+        await page.addStyleTag({ content: css });
+        await page.addScriptTag({ content: viewSource });
+        const result = await page.evaluate(() => {
+            const root = document.querySelector('#visualizerView');
+            const host = root.querySelector('.visualizer-stage-host');
+            const stage = root.querySelector('.visualizer-stage');
+            const canvas = stage.querySelector('canvas');
+            const view = Object.assign(Object.create(window.VisualizerView.prototype), {
+                visible: true, layout: { aspect: '9:16' }, root, stageHost: host, stage, canvas,
+                status: {}, renderer: { quality: 0, draw() {} }, sources: { getStatus: () => 'ready' },
+                uiManager: { mobileNav: { nav: document.querySelector('.mobile-bottom-nav') } }, editor: { open: true }
+            });
+            window.testVisualizerView = view;
+            window.requestAnimationFrame = () => 1;
+            const measure = aspect => {
+                view.layout.aspect = aspect;
+                stage.style.aspectRatio = aspect.replace(':', '/');
+                for (let i = 0; i < 3; i++) view.frame(0);
+                const hostRect = host.getBoundingClientRect();
+                const stageRect = stage.getBoundingClientRect();
+                return { gutter: host.classList.contains('scroll-gutters'),
+                    left: stageRect.left, right: stageRect.right, hostLeft: hostRect.left, hostRight: hostRect.right,
+                    top: stageRect.top, bottom: stageRect.bottom };
+            };
+            const tall = measure('9:16');
+            const navTop = document.querySelector('.mobile-bottom-nav').getBoundingClientRect().top;
+            const laneX = tall.hostLeft - 12;
+            const laneY = Math.min(navTop - 30, tall.top + 180);
+            return { tall, navTop, laneX, laneY,
+                laneIsCanvas: stage.contains(document.elementFromPoint(laneX, laneY)),
+                bodyOverflow: getComputedStyle(document.body).overflowY,
+                scrollHeight: document.documentElement.scrollHeight };
+        });
+        assert.equal(result.tall.gutter, true, JSON.stringify(result));
+        assert.ok(result.tall.bottom >= result.navTop, JSON.stringify(result));
+        assert.ok(result.tall.hostLeft >= 24 && result.tall.hostRight <= 320 - 24, JSON.stringify(result));
+        assert.equal(result.laneIsCanvas, false);
+        assert.equal(result.bodyOverflow, 'visible');
+        assert.ok(result.scrollHeight > 568);
+        const session = await page.context().newCDPSession(page);
+        const x = result.laneX;
+        await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: result.laneY }] });
+        for (let y = result.laneY - 30; y >= 90; y -= 30) {
+            await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] });
+        }
+        await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await page.waitForTimeout(100);
+        const scrolled = await page.evaluate(() => {
+            window.testVisualizerView.frame(0);
+            return { distance: scrollY,
+                inspectorTop: document.querySelector('.visualizer-editor-inspector').getBoundingClientRect().top,
+                navTop: document.querySelector('.mobile-bottom-nav').getBoundingClientRect().top,
+                gutter: document.querySelector('.visualizer-stage-host').classList.contains('scroll-gutters') };
+        });
+        assert.ok(scrolled.distance > 0, JSON.stringify(scrolled));
+        assert.ok(scrolled.inspectorTop < scrolled.navTop, JSON.stringify(scrolled));
+        assert.equal(scrolled.gutter, true);
+        await page.setViewportSize({ width: 390, height: 640 });
+        const widened = await page.evaluate(() => {
+            for (let i = 0; i < 3; i++) window.testVisualizerView.frame(0);
+            const host = document.querySelector('.visualizer-stage-host');
+            const stage = host.querySelector('.visualizer-stage');
+            return { gutter: host.classList.contains('scroll-gutters'),
+                naturalMargin: stage.getBoundingClientRect().left - host.getBoundingClientRect().left };
+        });
+        assert.equal(widened.gutter, false, JSON.stringify(widened));
+        assert.ok(widened.naturalMargin >= 24, JSON.stringify(widened));
     } finally {
         await browser.close();
     }

@@ -248,8 +248,9 @@ export class MobileNav {
     }
 
     applyViewState(nextView, options = {}) {
-        if (nextView === 'visualizer') nextView = 'player';
-        document.body.classList.toggle('view-player', nextView === 'player');
+        const visualizer = nextView === 'visualizer';
+        if (visualizer) nextView = 'player';
+        document.body.classList.toggle('view-player', nextView === 'player' && !visualizer);
         document.body.classList.toggle('view-effects', nextView === 'effects');
         document.body.classList.toggle('view-library', nextView === 'library');
         this.nav?.querySelectorAll('button[data-view]').forEach(button => {

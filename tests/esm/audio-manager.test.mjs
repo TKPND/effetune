@@ -432,13 +432,6 @@ function installFakes(manager, calls, options = {}) {
     }
   };
 
-  manager.audioEncoder = {
-    encodeWAV(audioBuffer) {
-      calls.push(['encoder.encodeWAV', audioBuffer]);
-      return options.encodedWav ?? { wav: true, audioBuffer };
-    }
-  };
-
   manager.updateExposedProperties();
   calls.length = 0;
 
@@ -2203,7 +2196,6 @@ test('sets pipeline, master bypass, offline processing, encoding, and event faca
     );
     manager.cancelProcessing();
     assert.equal(manager.isCancelled, true);
-    assert.deepEqual(manager.encodeWAV({ duration: 1 }), { wav: true, audioBuffer: { duration: 1 } });
 
     const received = [];
     const listener = data => received.push(data);

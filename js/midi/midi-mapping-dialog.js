@@ -1,3 +1,4 @@
+import { LIBRARY_STYLESHEET } from '../utils/app-stylesheets.js';
 import {
   defaultAutomationAmount,
   defaultMapRange,
@@ -117,7 +118,7 @@ export class MidiMappingDialog {
 
   async open() {
     if (this.overlay) return this.overlay;
-    loadStylesheet('effetune-library.css', { documentRef: this.document });
+    loadStylesheet(LIBRARY_STYLESHEET, { documentRef: this.document });
     await this.manager.setDialogOpen(true);
     this.overlay = createElement(this.document, 'div', 'library-dialog-backdrop');
     const dialog = createElement(
